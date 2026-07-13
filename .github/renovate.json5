@@ -1,0 +1,242 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  enabled: false,  // set to true (or remove) to opt in to Renovate updates
+  extends: [
+    'config:best-practices',
+  ],
+  minimumReleaseAge: '3 days',
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/.*\\.ya?ml$/',
+      ],
+      matchStringsStrategy: 'recursive',
+      matchStrings: [
+        "uses: commitizen-tools/setup-cz@[a-f0-9]{40}[^\\n]*\\n(?:\\s+with:\\n(?:\\s+[^\\n]+\\n)*?)\\s+version: '[^'\\s]+'",
+        "\\n\\s+version: '(?<currentValue>[^'\\s]+)'",
+      ],
+      datasourceTemplate: 'pypi',
+      depNameTemplate: 'commitizen-tools/commitizen',
+      packageNameTemplate: 'commitizen',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'github\\.com/rhysd/actionlint/cmd/actionlint@(?<currentDigest>[a-f0-9]{40}) # (?<currentValue>v[^\\s]+)',
+      ],
+      autoReplaceStringTemplate: 'github.com/rhysd/actionlint/cmd/actionlint@{{{newDigest}}} # {{{newValue}}}',
+      datasourceTemplate: 'github-tags',
+      depNameTemplate: 'rhysd/actionlint',
+      versioningTemplate: 'semver',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'renovate@(?<currentValue>\\S+)',
+      ],
+      datasourceTemplate: 'npm',
+      depNameTemplate: 'renovatebot/renovate',
+      packageNameTemplate: 'renovate',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'markdownlint-cli2@(?<currentValue>\\S+)',
+      ],
+      datasourceTemplate: 'npm',
+      depNameTemplate: 'DavidAnson/markdownlint-cli2',
+      packageNameTemplate: 'markdownlint-cli2',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStringsStrategy: 'recursive',
+      matchStrings: [
+        "uses: reviewdog/action-setup@[a-f0-9]{40}[^\\n]*\\n(?:\\s+with:\\n(?:\\s+[^\\n]+\\n)*?)\\s+reviewdog_version: '[^'\\s]+'",
+        "\\n\\s+reviewdog_version: '(?<currentValue>[^'\\s]+)'",
+      ],
+      datasourceTemplate: 'github-releases',
+      depNameTemplate: 'reviewdog/reviewdog',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'json5@(?<currentValue>\\S+)',
+      ],
+      datasourceTemplate: 'npm',
+      depNameTemplate: 'json5/json5',
+      packageNameTemplate: 'json5',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStringsStrategy: 'recursive',
+      matchStrings: [
+        "uses: tombi-toml/setup-tombi@[a-f0-9]{40}[^\\n]*\\n(?:\\s+with:\\n(?:\\s+[^\\n]+\\n)*?)\\s+version: '[^'\\s]+'",
+        "\\n\\s+version: '(?<currentValue>[^'\\s]+)'",
+      ],
+      datasourceTemplate: 'github-releases',
+      depNameTemplate: 'tombi-toml/tombi',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStrings: [
+        'yamllint==(?<currentValue>[^"\\s]+)',
+      ],
+      datasourceTemplate: 'pypi',
+      depNameTemplate: 'adrienverge/yamllint',
+      packageNameTemplate: 'yamllint',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/ci\\.ya?ml$/',
+      ],
+      matchStringsStrategy: 'recursive',
+      matchStrings: [
+        "uses: j178/prek-action@[a-f0-9]{40}[^\\n]*\\n(?:\\s+with:\\n(?:\\s+[^\\n]+\\n)*?)\\s+prek-version: '[^'\\s]+'",
+        "\\n\\s+prek-version: '(?<currentValue>[^'\\s]+)'",
+      ],
+      datasourceTemplate: 'github-releases',
+      depNameTemplate: 'j178/prek',
+    },
+  ],
+  packageRules: [
+    {
+      matchManagers: [
+        'github-actions',
+      ],
+      matchDepTypes: [
+        'action',
+      ],
+      allowedVersions: '/^v?\\d+\\.\\d+\\.\\d+$/',
+    },
+    {
+      matchDepNames: [
+        'commitizen-tools/commitizen',
+      ],
+      groupName: 'commitizen',
+    },
+    {
+      matchDepNames: [
+        'DavidAnson/markdownlint-cli2',
+      ],
+      groupName: 'markdownlint-cli2',
+    },
+    {
+      matchDepNames: [
+        'tombi-toml/setup-tombi',
+        'tombi-toml/tombi',
+        'tombi-toml/tombi-pre-commit',
+      ],
+      groupName: 'tombi',
+    },
+    {
+      matchDepNames: [
+        'crate-ci/typos',
+      ],
+      groupName: 'typos',
+    },
+    {
+      matchDepNames: [
+        'adrienverge/yamllint',
+      ],
+      groupName: 'yamllint',
+    },
+    {
+      matchDepNames: [
+        'ghcr.io/zizmorcore/zizmor',
+      ],
+      minimumReleaseAge: '4 days',
+    },
+    {
+      matchFileNames: [
+        '.github/workflows/**',
+      ],
+      addLabels: [
+        'ci :gear:',
+      ],
+    },
+    {
+      matchManagers: [
+        'pre-commit',
+      ],
+      addLabels: [
+        'pre-commit :hook:',
+      ],
+    },
+    {
+      matchFileNames: [
+        '.github/workflows/**',
+      ],
+      matchUpdateTypes: [
+        'patch',
+      ],
+      // automerge: true,
+    },
+    {
+      matchDepNames: [
+        'renovatebot/renovate',
+      ],
+      matchFileNames: [
+        '.github/workflows/ci.yaml',
+        '.github/workflows/ci.yml',
+      ],
+      extends: [
+        'schedule:weekly',
+      ],
+    },
+    {
+      matchDepNames: [
+        'renovatebot/renovate',
+      ],
+      matchFileNames: [
+        '.github/workflows/ci.yaml',
+        '.github/workflows/ci.yml',
+      ],
+      matchUpdateTypes: [
+        'minor',
+      ],
+      // automerge: true,
+    },
+    {
+      matchManagers: [
+        'pre-commit',
+      ],
+      matchUpdateTypes: [
+        'patch',
+      ],
+      // automerge: true,
+    },
+  ],
+  'git-submodules': {
+    enabled: true,
+  },
+  'pre-commit': {
+    enabled: true,
+  },
+  labels: [
+    'automated :robot:',
+    'dependencies :package:',
+  ],
+}

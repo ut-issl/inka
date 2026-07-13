@@ -1,0 +1,4 @@
+---
+config:
+  # Issue and pull request templates do not start with an H1 by convention.
+  MD041: false

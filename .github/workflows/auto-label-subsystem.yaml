@@ -1,0 +1,17 @@
+name: Auto Label Subsystem
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  auto-label:
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    uses: ut-issl/github-project-workflows/.github/workflows/auto-label-subsystem.yml@main

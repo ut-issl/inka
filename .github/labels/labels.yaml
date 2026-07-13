@@ -1,0 +1,138 @@
+---
+- name: "bug :bug:"
+  color: "F9D0C4"
+  description: "Something isn't working"
+
+- name: "documentation :notebook:"
+  color: "F0F0F0"
+  description: "Improvements or additions to documentation"
+
+- name: "enhancement :sparkles:"
+  description: "New feature or request"
+  color: "F0F0F0"
+
+- name: "good first issue :beginner:"
+  description: "Good for newcomers"
+  color: "F0F0F0"
+
+- name: "question :question:"
+  description: "Further information is requested"
+  color: "F0F0F0"
+
+- name: "icebox :ice_cube:"
+  description: "icebox or pending"
+  color: "F0F0F0"
+
+- name: "priority::high :rocket:"
+  description: "priority high"
+  color: "F9D0C4"
+
+- name: "priority::low :car:"
+  description: "priority low"
+  color: "C2E0C6"
+
+- name: "priority::medium :airplane:"
+  description: "priority medium"
+  color: "FEF2C0"
+
+- name: "update::major :whale:"
+  color: "F9D0C4"
+  description: "Major update"
+
+- name: "update::minor :dolphin:"
+  color: "FEF2C0"
+  description: "Minor update"
+
+- name: "update::patch :fish:"
+  color: "C2E0C6"
+  description: "Patch update"
+
+- name: "ci :gear:"
+  description: "Changes to CI workflows"
+  color: "FFD580"
+
+- name: "pre-commit :hook:"
+  description: "Changes to pre-commit hooks"
+  color: "FFD580"
+
+- name: "automated :robot:"
+  description: "Automated issue or pull request"
+  color: "D6D6D6"
+
+- name: "dependencies :package:"
+  description: "Update dependencies"
+  color: "D6D6D6"
+
+- name: "versioning :bookmark:"
+  description: "Versioning changes"
+  color: "D6D6D6"
+
+# 系ラベル（不要なものはリポジトリごとに削除してください）
+- name: "sys::構造"
+  description: "構造系"
+  color: "D4C5F9"
+
+- name: "sys::熱"
+  description: "熱系"
+  color: "D4C5F9"
+
+- name: "sys::電源"
+  description: "電源系"
+  color: "D4C5F9"
+
+- name: "sys::通信"
+  description: "通信系"
+  color: "D4C5F9"
+
+- name: "sys::CDH"
+  description: "CDH系（コマンド・データ処理）"
+  color: "D4C5F9"
+
+- name: "sys::姿勢"
+  description: "姿勢制御系"
+  color: "D4C5F9"
+
+- name: "sys::軌道"
+  description: "軌道系"
+  color: "D4C5F9"
+
+- name: "sys::推進"
+  description: "推進系"
+  color: "D4C5F9"
+
+- name: "sys::地上"
+  description: "地上系"
+  color: "D4C5F9"
+
+- name: "sys::PL"
+  description: "ペイロード・ミッション機器"
+  color: "D4C5F9"
+
+- name: "sys::電装"
+  description: "電装系"
+  color: "D4C5F9"
+
+- name: "sys::システム"
+  description: "システム系"
+  color: "D4C5F9"
+
+- name: "sys::SE"
+  description: "システムズエンジニアリング"
+  color: "D4C5F9"
+
+- name: "sys::SW"
+  description: "ソフトウェア"
+  color: "D4C5F9"
+
+# TAGラベル（不要なものはリポジトリごとに削除してください）
+- name: "tag::formal-methods"
+  description: "Formal Methods TAG"
+  color: "FF7A00"
+
+- name: "tag::autonomy"
+  description: "Autonomy TAG"
+  color: "00B8FF"
+
+- name: "tag::inference"
+  description: "Inference TAG"
+  color: "7A5CFF"
