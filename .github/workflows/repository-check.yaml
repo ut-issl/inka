@@ -1,4 +1,4 @@
-name: CI
+name: Repository check
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       github_actions: ${{ steps.changed-files.outputs.github_actions_any_changed }}
-      github_actions_ci: ${{ steps.changed-files.outputs.github_actions_ci_any_changed }}
+      github_actions_repository_check: ${{ steps.changed-files.outputs.github_actions_repository_check_any_changed }}
       renovate_config: ${{ steps.changed-files.outputs.renovate_config_any_changed }}
       md: ${{ steps.changed-files.outputs.md_any_changed }}
       json5: ${{ steps.changed-files.outputs.json5_any_changed }}
@@ -46,8 +46,8 @@ jobs:
           files_yaml: |
             github_actions:
               - .github/workflows/**
-            github_actions_ci:
-              - .github/workflows/ci.yaml
+            github_actions_repository_check:
+              - .github/workflows/repository-check.yaml
             renovate_config:
               - .github/renovate.json5
             md:
@@ -121,7 +121,7 @@ jobs:
     needs: determine-changes
     if: >-
       ${{ needs.determine-changes.outputs.renovate_config == 'true' ||
-      needs.determine-changes.outputs.github_actions_ci == 'true' }}
+      needs.determine-changes.outputs.github_actions_repository_check == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -148,7 +148,7 @@ jobs:
     needs: determine-changes
     if: >-
       ${{ needs.determine-changes.outputs.md == 'true' ||
-      needs.determine-changes.outputs.github_actions_ci == 'true' }}
+      needs.determine-changes.outputs.github_actions_repository_check == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -196,7 +196,7 @@ jobs:
     needs: determine-changes
     if: >-
       ${{ needs.determine-changes.outputs.json5 == 'true' ||
-      needs.determine-changes.outputs.github_actions_ci == 'true' }}
+      needs.determine-changes.outputs.github_actions_repository_check == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -235,7 +235,7 @@ jobs:
     needs: determine-changes
     if: >-
       ${{ needs.determine-changes.outputs.toml == 'true' ||
-      needs.determine-changes.outputs.github_actions_ci == 'true' }}
+      needs.determine-changes.outputs.github_actions_repository_check == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -311,7 +311,7 @@ jobs:
     needs: determine-changes
     if: >-
       ${{ needs.determine-changes.outputs.yaml == 'true' ||
-      needs.determine-changes.outputs.github_actions_ci == 'true' }}
+      needs.determine-changes.outputs.github_actions_repository_check == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -388,36 +388,32 @@ jobs:
           fail_level: error
           typos_flags: .
 
-  # lint-commit-messages:
-  #   name: Lint commit messages
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 10
+  collect:
+    name: Collect repository check results
+    needs:
+      - determine-changes
+      - lint-gh-actions
+      - validate-renovate-config
+      - lint-markdown
+      - lint-json5
+      - lint-toml
+      - lint-yaml
+      - check-prek
+      - check-typos
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
-  #   steps:
-  #     - name: Checkout the main repository
-  #       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-  #       with:
-  #         fetch-depth: 0
-  #         persist-credentials: false
-
-  #     - name: Set up Commitizen
-  #       uses: commitizen-tools/setup-cz@96c75e6ae9632047f2c9b4025b9dd1624b40de8f # v0.9.1
-  #       with:
-  #         python-version: '3.x'
-  #         version: '4.16.2'
-
-  #     - name: Lint commit messages on push
-  #       if: github.event_name == 'push'
-  #       env:
-  #         BEFORE_SHA: ${{ github.event.before }}
-  #         HEAD_SHA: ${{ github.sha }}
-  #       run: |
-  #         if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-  #           echo "::notice title=cz check::Base commit unavailable (new branch or force push); skipping lint."
-  #           exit 0
-  #         fi
-  #         cz check --rev-range "${BEFORE_SHA}..${HEAD_SHA}"
-
-  #     - name: Lint commit messages on pull request
-  #       if: github.event_name == 'pull_request'
-  #       run: cz check --rev-range ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Verify job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" = "failure" ] || [ "${result}" = "cancelled" ]; then
+              echo "::error title=Repository check::At least one required job did not succeed."
+              exit 1
+            fi
+          done
+          echo "All required jobs succeeded or were skipped."
