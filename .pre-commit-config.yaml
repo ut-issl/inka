@@ -52,6 +52,30 @@ repos:
       - id: check-shebang-scripts-are-executable
       - id: no-commit-to-branch
 
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --all-targets --locked -- -D warnings
+        language: system
+        files: '\.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$'
+        pass_filenames: false
+        stages: [pre-push]
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test --workspace --locked
+        language: system
+        files: '\.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$'
+        pass_filenames: false
+        stages: [pre-push]
+
   # - repo: https://github.com/commitizen-tools/commitizen
   #   rev: 953e1ba4599cc3143122ed5c3e8de3d6dfd5524d  # frozen: v4.16.2
   #   hooks:
