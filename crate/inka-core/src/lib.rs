@@ -1,0 +1,21 @@
+//! Core library for inka: structured argumentation with accountable approvals.
+
+/// Returns the version of the inka core library.
+#[must_use]
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_matches_package_version() {
+        // Arrange & Act
+        let actual = version();
+
+        // Assert
+        assert_eq!(actual, env!("CARGO_PKG_VERSION"));
+    }
+}

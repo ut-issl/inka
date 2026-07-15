@@ -1,0 +1,17 @@
+[package]
+name = "inka-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Command-line interface for inka"
+publish.workspace = true
+
+[[bin]]
+name = "inka"
+path = "src/main.rs"
+
+[dependencies]
+inka-core = { workspace = true }
+
+[lints]
+workspace = true

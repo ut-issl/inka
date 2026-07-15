@@ -1,0 +1,10 @@
+[package]
+name = "inka-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Core library for inka"
+publish.workspace = true
+
+[lints]
+workspace = true
