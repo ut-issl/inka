@@ -1,0 +1,30 @@
+// 枝4: 真実性と妥当性の分離(concept §6)
+
+structure truth_validity_separated {
+  ```
+  機械的に検証可能な事実の成否は人間の承認対象から外れ、人間は「その検証がこの命題の証拠として適切か」という妥当性の判断だけを担う
+  ```
+  children: verification_truth_by_machine, bind_validity_by_human, assumptions_surfaced
+}
+
+fiat verification_truth_by_machine {
+  ```
+  verification の成否は veriq と CI が機械的に判定し、eval はその結果を照合するだけで、人間の承認を要求しない
+  ```
+  until: M8
+  promote: bind
+}
+
+fiat bind_validity_by_human {
+  ```
+  命題と verification の対応関係(妥当性)は、bind 承認として人間が局所ビューの範囲で判断する
+  ```
+}
+
+fiat assumptions_surfaced {
+  ```
+  検証結果が依拠するすべての仮定は界面を貫通して機械的に集約され、境界の bind 承認者に総仮定集合として提示される
+  ```
+  until: M8
+  promote: bind
+}

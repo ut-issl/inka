@@ -1,0 +1,9 @@
+// ルート(concept §2.2)。
+// この文言自体は inka 内では誰も承認しない。ミッションステートメントとして inka の外で合意・変更管理する。
+
+objective inka_ok {
+  ```
+  inka を採用したチームは、頻繁に編集される論証に対して、意味のある承認と監査可能な記録を、編集の差分に比例するコストで維持できる
+  ```
+  children: edit_cost_proportional, approvals_meaningful, records_auditable, truth_validity_separated
+}

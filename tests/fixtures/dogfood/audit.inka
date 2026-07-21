@@ -1,0 +1,42 @@
+// 枝3: 記録の監査可能性(concept §9)
+
+structure records_auditable {
+  ```
+  第三者は、任意のコミット時点の承認状態について、誰が・何を・どのポリシーとフェーズの下で承認したかを機械的に検証できる
+  ```
+  children: target_unswappable, approver_unforgeable, log_tamper_evident, eval_reproducible, git_hosting_intact
+}
+
+structure target_unswappable {
+  ```
+  承認レコードの対象のすり替え(実際とは別の内容に承認が付いていると偽ること)は、view_hash の照合で検出される
+  ```
+  children: local_view_hash_sound
+}
+
+// approver_unforgeable は値埋め込み({$var})の実例。sig_scheme は values.toml で定義。
+// 契約は展開後のテキストでハッシュされるため、値の変更はこの契約の承認と
+// 直接親(records_auditable)の structure 承認を正確に失効させる。
+fiat approver_unforgeable {
+  ```
+  承認レコードの approver の偽装は、レコードの署名検証({$sig_scheme})で検出される
+  ```
+  until: M7
+  promote: bind
+}
+
+fiat log_tamper_evident {
+  ```
+  承認レコードの削除・書き換え(decline の握りつぶしを含む)は、アンカリングとの突合で検出される
+  ```
+  until: M7
+  promote: bind
+}
+
+fiat eval_reproducible {
+  ```
+  eval の入力はリポジトリの内容のみであり、同一コミットに対する eval の結果は実行環境や時刻によらず同一である
+  ```
+  until: M3
+  promote: bind
+}

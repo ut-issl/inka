@@ -1,0 +1,53 @@
+// 枝2: 承認が儀式化しない(concept §4, §5, §7, §12)
+
+structure approvals_meaningful {
+  ```
+  記録される approve は、承認者が局所ビューだけを根拠に引き受けた判断を表しており、形式的な儀式に退化しない
+  ```
+  children: description_is_contract, labels_cover_reality, policy_is_reviewable, queue_minimizes_friction
+}
+
+structure description_is_contract {
+  ```
+  運用中の論証において、description は下位構造を読まずに真偽を判断できる契約文として維持される
+  ```
+  children: lint_flags_leaky_contracts, approvers_follow_norm
+}
+
+fiat lint_flags_leaky_contracts {
+  ```
+  LLM lint は、子の契約群から親の主張が導けない場合、および局所ビュー外の知識を前提とする語がある場合に decline を返す
+  ```
+  until: M9
+  promote: bind
+}
+
+// labels_cover_reality は markdown を含む description の実例。
+// フェンス内はほぼ verbatim にハッシュされる(改行が契約の一部になる)。
+fiat labels_cover_reality {
+  ```
+  approve / decline / cannot-take-responsibility の3値は、承認者が取りうる判断の状態を過不足なく表現する:
+
+  - **approve**: 引き受ける(任意で `until:<phase>` の承認者側留保を付けられる)
+  - **decline**: 拒む。拒否権であり、理由コメントが必須
+  - **cannot-take-responsibility**: 自分では負えない。委譲先を指名できる
+  ```
+}
+
+fiat policy_is_reviewable {
+  ```
+  どの対象に誰の承認が何枚必要かはリポジトリ内のポリシーテキストが定めており、承認基準の変更は PR レビューを通る
+  ```
+  until: M3
+  promote: bind
+  // ポリシーパーサ + eval のテストへ bind する
+}
+
+fiat queue_minimizes_friction {
+  ```
+  承認者には、ポリシーが自分に要求する未承認・stale の局所ビューだけが、前回自分が承認した局所ビューとの diff とともに提示される
+  ```
+  until: M4
+  promote: bind
+  // approve TUI の完成をもって bind する
+}
