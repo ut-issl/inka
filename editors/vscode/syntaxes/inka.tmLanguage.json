@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "inka",
+  "scopeName": "source.inka",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#fence" },
+    { "include": "#blockHeader" },
+    { "include": "#property" },
+    { "include": "#braces" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "//.*$",
+      "name": "comment.line.double-slash.inka"
+    },
+    "blockHeader": {
+      "match": "^\\s*(objective|structure|bind|fiat)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*((?:#[A-Za-z_][A-Za-z0-9_-]*\\s*)*)",
+      "captures": {
+        "1": { "name": "storage.type.mode.inka" },
+        "2": { "name": "entity.name.type.proposition.inka" },
+        "3": { "name": "constant.other.tag.inka" }
+      }
+    },
+    "property": {
+      "begin": "^\\s*(children|source|until|promote)\\s*(:)",
+      "beginCaptures": {
+        "1": { "name": "keyword.other.property.inka" },
+        "2": { "name": "punctuation.separator.key-value.inka" }
+      },
+      "end": "$",
+      "patterns": [
+        {
+          "match": "veriq:[A-Za-z_][A-Za-z0-9_.]*",
+          "name": "string.unquoted.source-reference.inka"
+        },
+        {
+          "match": "[A-Za-z_][A-Za-z0-9_]*",
+          "name": "variable.other.reference.inka"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.list.inka"
+        }
+      ]
+    },
+    "fence": {
+      "begin": "^\\s*(`{3,})\\s*([A-Za-z0-9_-]*)\\s*$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.fence.begin.inka" },
+        "2": { "name": "fenced_code.block.language.inka" }
+      },
+      "end": "^\\s*(\\1)\\s*$",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.fence.end.inka" }
+      },
+      "contentName": "string.unquoted.description.inka",
+      "patterns": [
+        {
+          "match": "\\{\\$[A-Za-z_][A-Za-z0-9_]*\\}",
+          "name": "variable.other.interpolation.inka"
+        },
+        { "include": "text.html.markdown" }
+      ]
+    },
+    "braces": {
+      "match": "[{}]",
+      "name": "punctuation.section.block.inka"
+    }
+  }
+}

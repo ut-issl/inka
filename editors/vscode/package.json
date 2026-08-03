@@ -1,0 +1,34 @@
+{
+  "name": "inka-syntax",
+  "displayName": "inka DSL",
+  "description": "Syntax highlighting for the inka assurance-argument DSL (.inka)",
+  "version": "0.0.1",
+  "publisher": "inka",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "inka",
+        "aliases": [
+          "inka"
+        ],
+        "extensions": [
+          ".inka"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "inka",
+        "scopeName": "source.inka",
+        "path": "./syntaxes/inka.tmLanguage.json"
+      }
+    ]
+  }
+}
