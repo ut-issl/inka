@@ -52,25 +52,36 @@ running referee.
 - insta snapshots: both example projects pass; a broken-fixtures suite triggers
   each diagnostic exactly once
 
-## Decisions to settle in this issue (recorded as rustdoc, per code-first policy)
+## Settled rules to implement (rationale recorded as rustdoc, per code-first policy)
 
-1. **Escaping rule** for a literal `{$` inside a description.
-2. **Property ordering**: free order or fixed? duplicates always an error?
-3. **Unreferenced tags**: silent, or warn (no policy exists yet to reference them)?
-4. **ID namespaces**: the separator is `::` (e.g. `aocs::pointing_ok`) — decided.
-   Left to settle here: how a namespace is assigned (project name, directory, or
-   explicit in the ID), whether references within the same namespace may omit the
-   prefix, and the lexer treatment of `::`. Policy selectors use the same notation
-   (`power::*`). Note that `source:` references keep Python's dotted names
-   (`veriq:aocs.verify_detumble`) since they name veriq-side objects.
-5. **Unresolvable `source:` references**: format check only at `check` time
-   (existence is eval's job once a veriq export is present) — confirm.
+1. **No escape for `{$` in v1.** Only the exact pattern `{$identifier}` is treated
+   as interpolation; any other `{` or `$` is always literal. An escape notation is
+   deferred until a real need to write a literal `{$var}` in a contract appears
+   (YAGNI). Typos are caught by the undefined-variable error.
+2. **Property order is free. Duplicates are always an error.**
+3. **Tags are free vocabulary.** `check` (M1) says nothing about tags. Typo
+   detection arrives with policies (M3) as a warning on the policy side — a
+   selector referencing a tag that appears nowhere selects the empty set and is
+   probably a typo. Unreferenced tags on the argument side are legitimate
+   forward-looking annotations.
+4. **Namespaces are assigned by directory structure.** The namespace is the
+   directory path relative to `argument/`, joined with `::`
+   (`eol_capacity_ok` in `argument/power/eol.inka` is `power::eol_capacity_ok`).
+   Files directly under `argument/` have no namespace. `::` cannot be written in
+   an ID itself — namespaces arise only from location. References within the same
+   namespace may omit the prefix; crossing namespaces requires the full path.
+   Since IDs are excluded from hashes, moving a file is a bulk rename and
+   invalidates no approvals. Policy selectors use the same notation (`power::*`).
+   `source:` references keep Python's dotted names (`veriq:aocs.verify_detumble`)
+   since they name veriq-side objects.
+5. **`source:` gets a format check only** at `check` time; existence is eval's
+   job once a veriq export is present.
 
 ## Acceptance criteria
 
 - [ ] `inka check` passes on `tests/fixtures/dogfood` and `tests/fixtures/aocs`.
 - [ ] Broken-fixtures suite exists; all diagnostics snapshot-fixed with insta.
-- [ ] The five decisions above are implemented and documented in rustdoc with a
+- [ ] The five rules above are implemented and documented in rustdoc with a
       one-line rationale each.
 
 ## References
