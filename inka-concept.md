@@ -246,11 +246,11 @@ phase EM:
 
 phase FM:
   rule structure(*):            llm-lint, any(2), not-author, fresh(FM, 1)
-  rule structure(power.*):      any(2), fresh(EM, 1)    # バス流用部は EM 承認で足りる
+  rule structure(power::*):     any(2), fresh(EM, 1)    # バス流用部は EM 承認で足りる
   rule fiat(*):                 pm, fresh(FM, all)
   rule fiat(#env):              any(1)                  # 環境仮定だけは fiat が正当
   rule bind(*):                 any(1), not-author
-  rule veriq(power.*):          role(power, 1), not-author
+  rule veriq(power::*):         role(power, 1), not-author
 
 rule phase-transition(EM -> FM): pm, eval-clean(EM)
 ```
@@ -267,7 +267,7 @@ rule phase-transition(EM -> FM): pm, eval-clean(EM)
 
 - `fresh(FM, all)`:FM 期の承認のみ有効(実質的な全失効)。`fresh(FM, 1)`:全箇所をもう一度は見るが過去の承認も一部有効。全失効か・何枚剥がすかはチームがポリシーで対象別に宣言する。
 - fiat(仮定)は文脈(フェーズも文脈)に最も敏感なため、フェーズごと全見直し(`fresh all`)を推奨デフォルトとする。
-- **フェーズの空間的粒度も fresh で表現する**(専用機構は設けない)。「電源系は EM の承認で十分」は `rule structure(power.*): fresh(EM, 1)` と書く。これは「電源系は FM である」という状態ではなく「FM フェーズにおいて電源系には EM 相当の鮮度で足りるとチームが判断した」という**要求緩和の宣言**であり、実態に忠実で、緩和が PR レビューを通る。
+- **フェーズの空間的粒度も fresh で表現する**(専用機構は設けない)。「電源系は EM の承認で十分」は `rule structure(power::*): fresh(EM, 1)` と書く。これは「電源系は FM である」という状態ではなく「FM フェーズにおいて電源系には EM 相当の鮮度で足りるとチームが判断した」という**要求緩和の宣言**であり、実態に忠実で、緩和が PR レビューを通る。
 
 ### LLM lint は「モデルという名の承認者」
 

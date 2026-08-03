@@ -57,9 +57,12 @@ running referee.
 1. **Escaping rule** for a literal `{$` inside a description.
 2. **Property ordering**: free order or fixed? duplicates always an error?
 3. **Unreferenced tags**: silent, or warn (no policy exists yet to reference them)?
-4. **ID namespaces**: flat vs dotted (`aocs.pointing_ok`). The aocs example wants
-   to share a node with a power-domain argument, and concept's policy selectors
-   already assume `power.*`.
+4. **ID namespaces**: the separator is `::` (e.g. `aocs::pointing_ok`) — decided.
+   Left to settle here: how a namespace is assigned (project name, directory, or
+   explicit in the ID), whether references within the same namespace may omit the
+   prefix, and the lexer treatment of `::`. Policy selectors use the same notation
+   (`power::*`). Note that `source:` references keep Python's dotted names
+   (`veriq:aocs.verify_detumble`) since they name veriq-side objects.
 5. **Unresolvable `source:` references**: format check only at `check` time
    (existence is eval's job once a veriq export is present) — confirm.
 
