@@ -20,4 +20,15 @@ ln -s "$(pwd)/editors/vscode" ~/.vscode/extensions/inka.inka-syntax-0.0.1
 
 その後、コマンドパレットで **Developer: Reload Window**。
 
-LSP(診断・hover・rename 等)はロードマップ M6 で `inka lsp` として別途実装する。
+## 設計方針
+
+この TextMate 文法は**意図的に簡素なベースレイヤ**である。フェンス内の装飾は
+`{$var}`・`**太字**`・`` `インラインコード` ``・箇条書き記号のみで、markdown 文法の
+埋め込みはしない——埋め込み文法が開くブロック領域(リスト・コードフェンス等)は
+外側のフェンス終端を覆い隠し、インデント量に依存する壊れ方をするため。
+
+description 内の本格的な markdown ハイライトは、ロードマップ M6 の `inka lsp` が
+semantic tokens で供給する: サーバ側の本物のパーサが description 範囲を確定し、
+その範囲だけを CommonMark パーサにかけてトークン化する方式。TextMate 側は
+一次描画と、LSP が存在しない表示面(GitHub 等)のための恒久的なフォールバックとして
+このまま残す。
