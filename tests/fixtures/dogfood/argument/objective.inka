@@ -1,0 +1,9 @@
+// Root (concept §2.2). Nobody approves this wording inside inka; it is agreed
+// and change-managed outside, as the mission statement.
+
+objective inka_ok {
+  ```
+  A team adopting inka can maintain meaningful approvals and auditable records over a frequently edited argument, at a cost proportional to the size of each edit
+  ```
+  children: edit_cost_proportional, approvals_meaningful, records_auditable, truth_validity_separated
+}

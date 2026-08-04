@@ -1,0 +1,6 @@
+# Values referenced by {$var} in descriptions.
+# Contracts are hashed after interpolation, so changing a value here precisely
+# invalidates the approvals of the contracts referencing it, plus their direct
+# parents' structure approvals.
+
+sig_scheme = "SSH signature (sshsig / ed25519)"

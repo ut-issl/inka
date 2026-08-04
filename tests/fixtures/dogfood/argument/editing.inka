@@ -1,0 +1,49 @@
+// Branch 1: iterative development works (concept §3, §11).
+// "Every edit demands re-approval from exactly those whose interface changed —
+//  no more, no less."
+
+structure edit_cost_proportional {
+  ```
+  For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed
+  ```
+  children: invalidation_exact, surface_edits_free
+}
+
+structure invalidation_exact {
+  ```
+  Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents
+  ```
+  children: local_view_binding, local_view_hash_sound
+}
+
+fiat local_view_binding {
+  ```
+  Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below
+  ```
+  until: M3
+  promote: bind
+  // Once eval exists, bind this to the scenario test
+  // "approve → edit a grandchild → not stale".
+}
+
+fiat local_view_hash_sound {
+  ```
+  The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes
+  ```
+  until: M2
+  promote: bind
+  // Bind to the hash v1 golden vectors + proptests (first CI bind target).
+}
+
+structure surface_edits_free {
+  ```
+  Renaming IDs and reordering child references never invalidate any approval
+  ```
+  children: local_view_hash_sound, id_not_in_contract
+}
+
+fiat id_not_in_contract {
+  ```
+  IDs and tags are not part of the contract: what an approver judged is the content, not its name
+  ```
+}

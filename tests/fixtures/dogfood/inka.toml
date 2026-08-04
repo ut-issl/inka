@@ -1,0 +1,23 @@
+# inka project definition.
+# Rule-side state (current phase) and loading configuration live here.
+# eval still reads repository content only, so purity is preserved.
+
+[project]
+name = "inka-dogfood"
+
+[phases]
+# The total order of phases is declared here (fresh comparison and --forecast
+# need it). This project reuses the roadmap milestones as its phases.
+order = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10"]
+current = "M0"
+
+# The argument itself is read by convention: every *.inka under argument/.
+# Which files form the argument is not configuration — splitting and renaming
+# files requires no manifest edit.
+
+[values]
+# Values files resolving {$var} in descriptions
+files = ["values.toml"]
+
+# [policy]
+# Policy location and format are settled in M3 (undecided).
