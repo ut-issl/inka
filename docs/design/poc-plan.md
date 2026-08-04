@@ -2,7 +2,7 @@
 
 The smallest implementation with which one person can experience the inka
 system end to end. Feature-by-feature build notes live in
-[../implementation/](../implementation/README.md).
+[../poc-implementation/](../poc-implementation/README.md).
 Japanese version: [poc-plan_ja.md](poc-plan_ja.md).
 
 ## Goal
@@ -29,7 +29,8 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   descriptions.
 - **`inka check`**: graph construction (interning, adjacency, toposort,
   reachability) and the structural diagnostics; non-zero exit on error.
-- **Hashing**: normalization + the three view-hash kinds. The bind hash uses
+- **Hashing**: normalization + the four view-hash kinds (objective / structure /
+  bind / fiat). The bind hash uses
   the evidence interface hash with an empty assumption slot. A minimal
   golden-vector set freezes the layout before real approvals are recorded.
 - **Approval records**: the v1 schema with `sig` left empty; jsonl read/write;
@@ -39,9 +40,10 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   record writing. The queue and eval share one validity function.
 - **Policy**: built-in default only — every target needs `any(1)`. No policy
   language. Decline veto applies.
-- **`inka eval`**: established fixpoint; stale detection; decline veto;
-  node-side `until:` expiry against the declared phase order; blame output
-  with per-cause reasons; non-zero exit when not clean.
+- **`inka eval`**: established fixpoint (the objective requires its own
+  approval); stale detection; decline veto; hard node-side `until:` expiry
+  against the declared phase order (post-deadline approvals do not count
+  either); blame output with per-cause reasons; non-zero exit when not clean.
 - **CI evidence provider (test-target granularity)**: `source: ci:<target>`;
   `ci-export.json` generated in CI (an `inka ci-export` subcommand is the
   preferred generator); eval-side matching.

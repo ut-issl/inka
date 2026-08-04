@@ -23,6 +23,7 @@ fiat <id> {
   ```...```
   until: <phase>
   promote: bind
+  reason: "<short rationale>"
 }
 ```
 
@@ -32,6 +33,11 @@ fiat <id> {
   reserved. Inside fences: natural language only; outside: keywords only.
 - Mode-required properties, enforced at parse time: `structure`/`objective` →
   `children:` required; `bind` → `source:` required; `fiat` → neither allowed.
+- Annotations: `until: <phase>` and `reason: "<short text>"` may appear on any
+  block; `promote: <structure|bind>` may appear on fiat only and is optional
+  (an `until:` without `promote:` is plain expiry). `reason` takes a
+  double-quoted, single-line string with no escape sequences — the only quoted
+  token in the language; descriptions never use quotes.
 - `//` line comments; dropped at the lexer, never hashed.
 - No escape for `{$` — only the exact pattern `{$identifier}` is interpolation;
   everything else is literal.
@@ -61,9 +67,12 @@ fiat <id> {
   space indent; join with `\n`. Idempotent. Internal newlines and spacing are
   contract content (near-verbatim; no markdown-AST normalization).
 - Annotation canonical form: `key:value` strings sorted by key
-  (e.g. `["promote:bind", "until:M3"]`).
+  (e.g. `["promote:bind", "reason:awaiting the mass-properties test",
+  "until:M3"]`; the `reason` value is the string content without quotes).
 - Framing: every field is u64-LE length-prefixed; lists carry a u64-LE element
-  count. Domain tags: `inka:structure:v1` / `inka:fiat:v1` / `inka:bind:v1`.
+  count. Domain tags: `inka:objective:v1` / `inka:structure:v1` /
+  `inka:fiat:v1` / `inka:bind:v1`.
+  - objective = tag ‖ desc ‖ annotations ‖ children descs (sorted bytewise)
   - structure = tag ‖ desc ‖ annotations ‖ children descs (sorted bytewise)
   - fiat = tag ‖ desc ‖ annotations
   - bind = tag ‖ desc ‖ annotations ‖ interface_hash (raw 32 bytes) ‖
@@ -75,7 +84,8 @@ fiat <id> {
 
 ## Approval records (v1)
 
-- Fields: `v` (=1), `target` (`"<kind>:<id>"`), `view_hash` (`"sha256:<hex>"`),
+- Fields: `v` (=1), `target` (`"<kind>:<id>"`, kind ∈ objective | structure |
+  bind | fiat), `view_hash` (`"sha256:<hex>"`),
   `label` (approve | decline), `comment` (required for decline), `approver`,
   `key_id`, `timestamp` (RFC3339 UTC; audit only — eval never reads it),
   `phase` (current phase at approval time), `until` (approver-side reservation),
@@ -90,10 +100,16 @@ fiat <id> {
 - A record counts iff: its target and view_hash match the current values; no
   decline exists on the same hash (a decline is a veto regardless of quorum);
   and the node's `until:` has not expired (compared via the declared phase
-  order).
+  order). **Expiry is hard**: once the current phase is past `until:`, no
+  approval of that node counts — including approvals granted after the
+  deadline. An `until:` is a jointly-approved decline placed toward the future;
+  lifting it requires editing the annotation, which changes the contract and
+  demands fresh approval.
 - established: fiat = satisfied fiat approval; structure = satisfied structure
   approval ∧ all children established; bind = satisfied bind approval ∧
-  evidence match; objective = all children established (no approval of its own).
+  evidence match; objective = satisfied objective approval ∧ all children
+  established (the root's wording is agreed inside inka like any other
+  contract).
 - blame lists only nodes whose failure cause is their own (missing / stale /
   declined / expired / evidence mismatch), not nodes failing solely through
   their children.

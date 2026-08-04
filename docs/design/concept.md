@@ -17,8 +17,9 @@ repository, evaluated by a pure function.
    natural-language contract (its description). It is *discharged* in one of
    three modes, declared as the block keyword: `structure` (decomposed into
    children), `bind` (bound to machine-verifiable evidence), or `fiat` (accepted
-   without argument; leaves only). The root is a single `objective`, approved by
-   no one inside inka. Modes map one-to-one onto approval targets.
+   without argument; leaves only). The root is a single `objective`; its
+   wording is itself an approvable contract — agreement on the root is recorded
+   inside inka like everything else. Modes map one-to-one onto approval targets.
 
 2. **Approvals bind to the local view.** The local view of a node is its own
    rendered description + deadline annotations + its direct children's
@@ -38,14 +39,20 @@ repository, evaluated by a pure function.
    cannot-take-responsibility. A decline on the current hash is a veto: quorum
    never overrides it. `established` is a fixpoint over the DAG (fiat approval ∨
    structure approval ∧ all children established ∨ bind approval ∧ evidence
-   pass). eval reads repository content only — no clock, no network — so the
+   pass; the objective needs its own approval plus all children). eval reads
+   repository content only — no clock, no network — so the
    same commit always evaluates identically.
 
 5. **Policy is reviewable text.** Which targets need whose approvals is written
    as selectors (mode × id/namespace/`#tag`) and predicates (`any`, `role`,
    `including`, `not-author`, `fresh`, `forbidden`, …). Phases have a declared
    total order; `fresh` compares recorded phases, never timestamps. Deadline
-   annotations (`until:` / `promote:`) let authors declare debt that expires.
+   annotations let authors declare debt that expires: `until: <phase>` with a
+   quoted `reason:` on any node, plus `promote: <structure|bind>` on fiat to
+   name the successor mode. Expiry is hard — past the deadline no approval of
+   the node counts, even freshly granted ones — so keeping things as they are
+   requires visibly editing the annotation (a contract change), never silent
+   re-approval.
 
 6. **Values are contracts too.** `{$var}` in descriptions resolves from a TOML
    file; contracts are hashed *after* interpolation, so changing one requirement
@@ -58,7 +65,10 @@ repository, evaluated by a pure function.
 
 ## Lifecycle
 
-A proposition typically starts `fiat` with `until: <phase>` / `promote: bind`
+A proposition typically starts `fiat` with `until:` / `promote:` / `reason:`
 (explicit, expiring debt), then becomes `bind` when evidence exists, or
-`structure` when decomposed. Because parents bind only to children's
-descriptions, a child's mode change never invalidates the parent's approval.
+`structure` when decomposed. A structure or bind whose grounds feel weak
+carries `until:` + `reason:` as an obligation to revise its children or source
+by the deadline. Because parents bind only to children's descriptions, neither
+a child's mode change nor its annotations ever invalidate the parent's
+approval.

@@ -23,6 +23,7 @@ fiat <id> {
   ```...```
   until: <phase>
   promote: bind
+  reason: "<短い理由>"
 }
 ```
 
@@ -32,6 +33,10 @@ fiat <id> {
   フェンス内=自然言語のみ、フェンス外=キーワードのみ。
 - モード別必須プロパティ(パース時に強制): `structure`/`objective` → `children:`
   必須、`bind` → `source:` 必須、`fiat` → どちらも不可。
+- 注釈: `until: <phase>` と `reason: "<短文>"` は全ブロックに書ける。
+  `promote: <structure|bind>` は fiat のみ・任意(`promote:` なしの `until:` は
+  単純な期限切れ)。`reason` は二重引用符の1行文字列でエスケープなし — 言語中で
+  唯一の引用符トークン(description は引用符を使わない)。
 - `//` 行コメント。字句段階で落ち、ハッシュされない。
 - `{$` のエスケープは無い — 正確なパターン `{$識別子}` のみが補間で、それ以外は
   文字通り。
@@ -58,9 +63,12 @@ fiat <id> {
   空行除去、共通スペースインデントの剥ぎ取り、`\n` で連結。冪等。内部の改行と空白は
   契約の一部(ほぼ verbatim。markdown-AST 正規化はしない)。
 - 注釈の正規形: キーでソートした `key:value` 文字列列(例
-  `["promote:bind", "until:M3"]`)。
+  `["promote:bind", "reason:awaiting the mass-properties test", "until:M3"]`。
+  `reason` の値は引用符を除いた本文そのもの)。
 - フレーミング: 全フィールドは u64-LE の長さ接頭辞付き。リストは u64-LE の要素数を
-  前置。ドメインタグ: `inka:structure:v1` / `inka:fiat:v1` / `inka:bind:v1`。
+  前置。ドメインタグ: `inka:objective:v1` / `inka:structure:v1` /
+  `inka:fiat:v1` / `inka:bind:v1`。
+  - objective = tag ‖ desc ‖ annotations ‖ 子 desc 群(バイト列順ソート)
   - structure = tag ‖ desc ‖ annotations ‖ 子 desc 群(バイト列順ソート)
   - fiat = tag ‖ desc ‖ annotations
   - bind = tag ‖ desc ‖ annotations ‖ interface_hash(生32バイト)‖ 仮定リスト
@@ -70,7 +78,8 @@ fiat <id> {
 
 ## 承認レコード(v1)
 
-- フィールド: `v`(=1)、`target`(`"<kind>:<id>"`)、`view_hash`
+- フィールド: `v`(=1)、`target`(`"<kind>:<id>"`。kind ∈ objective | structure |
+  bind | fiat)、`view_hash`
   (`"sha256:<hex>"`)、`label`(approve | decline)、`comment`(decline では必須)、
   `approver`、`key_id`、`timestamp`(RFC3339 UTC。監査用のみ — eval は読まない)、
   `phase`(承認時点の現在フェーズ)、`until`(承認者側留保)、`policy_hash`、`sig`
@@ -84,10 +93,13 @@ fiat <id> {
 
 - レコードが数えられる条件: target と view_hash が現在値に一致し、同一ハッシュへの
   decline が存在せず(decline はクォーラムに関係なく拒否権)、ノードの `until:` が
-  失効していない(宣言されたフェーズ順序で比較)。
+  失効していない(宣言されたフェーズ順序で比較)。**失効はハード**: 現在フェーズが
+  `until:` を過ぎたら、そのノードの承認は**期限後に付けられたものも含めて**一切
+  カウントしない。`until:` は全員が承認した「未来へ先置きされた decline」であり、
+  解除は注釈の編集=契約変更+再承認のみ。
 - established: fiat = 有効な fiat 承認 / structure = 有効な structure 承認 ∧ 全子
-  established / bind = 有効な bind 承認 ∧ 証拠の照合 / objective = 全子 established
-  (自身の承認なし)。
+  established / bind = 有効な bind 承認 ∧ 証拠の照合 / objective = 有効な objective
+  承認 ∧ 全子 established(ルートの文言も他の契約と同様に inka の中で合意される)。
 - blame は原因が自分自身にあるノードだけを列挙(不足・stale・decline・失効・証拠
   不一致)。子経由でのみ未確立のノードは出さない。
 

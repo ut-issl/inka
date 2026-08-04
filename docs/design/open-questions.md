@@ -5,9 +5,6 @@ settle each. Japanese version: [open-questions_ja.md](open-questions_ja.md).
 
 ## DSL and semantics
 
-- **`promote:` vocabulary.** Only `promote: bind` is in use. Whether a planned
-  decomposition (`promote: structure`) can be declared is open. Settle when a
-  real argument wants it.
 - **Multiset vs. set children.** No example has wanted the same child twice.
   Tentative: a set, with duplicates as an error. Revisit only if a real
   argument needs multiplicity.
@@ -15,13 +12,6 @@ settle each. Japanese version: [open-questions_ja.md](open-questions_ja.md).
   which has sufficed. Whether numbers/units deserve structure is open. Guard:
   values are for shared literal constants — anything computed or verified
   belongs to an evidence provider, so values must not grow into a shadow one.
-
-## Conventions
-
-- **Source comments vs. approval comments.** `//` comments are never part of
-  the contract. When "why is fiat acceptable now" belongs in a source comment
-  versus an approval-time comment (which is logged and auditable) needs a
-  written convention.
 
 ## Policy
 

@@ -23,7 +23,8 @@ pub fn valid_approvals<'a>(
 2. 同一ハッシュへの decline が1つでもあれば**拒否権**: 承認数に関係なく unsatisfied
    (blame 用に decline レコードを返す)
 3. ノード側 `until:` の失効: `phase_order[current] > phase_order[until]` なら
-   承認を数えない(期限切れ)。kind によらず同じ式でよい
+   承認を数えない(期限切れ)。**期限後に付けられた承認も数えない**(record.phase は
+   参照しない)。解除は注釈の編集=ハッシュ変更+再承認のみ。kind によらず同じ式でよい
 4. 残った approve が **1件以上**(デフォルトポリシー any(1))なら satisfied
 
 ## established 不動点
@@ -36,7 +37,7 @@ for id in topo_order:
         Fiat      => satisfied(fiat(id)),
         Structure => satisfied(structure(id)) && children(id).all(established),
         Bind      => satisfied(bind(id)) && ci_matches(id),   // 08 参照
-        Objective => children(id).all(established),           // 承認は不要
+        Objective => satisfied(objective(id)) && children(id).all(established),
     }
 ```
 
@@ -79,5 +80,7 @@ pub struct Blame { pub node: NodeId, pub reasons: Vec<BlameReason> }
 5. until:M2 のノード、current を M3 に変更 → UntilExpired
 6. bind: export なし / commit 不一致 / interface 変化 / fail の4種が
    それぞれの BlameReason になる
+7. objective 未承認 → objective が MissingApproval で blame される
+8. until 期限後に付けた承認 → カウントされず UntilExpired のまま
 
 すべて insta スナップショットで固定。

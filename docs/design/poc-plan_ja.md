@@ -1,7 +1,7 @@
 # inka — PoC 実装方針
 
 一人で inka のシステムを端から端まで体験できる最小の実装。機能ごとの実装ノートは
-[../implementation/](../implementation/README.md) にある。
+[../poc-implementation/](../poc-implementation/README.md) にある。
 英語版(正): [poc-plan.md](poc-plan.md)
 
 ## ゴール
@@ -26,8 +26,8 @@
   `{$var}` 展開。
 - **`inka check`**: グラフ構築(interning、隣接、トポソート、到達性)と構造診断。
   error があれば非ゼロ終了。
-- **ハッシュ**: 正規化+ view_hash 3種。bind ハッシュは証拠の界面ハッシュ+空の
-  仮定スロット。本物の承認を記録し始める前に最小のゴールデンベクタでレイアウトを凍結。
+- **ハッシュ**: 正規化+ view_hash 4種(objective / structure / bind / fiat)。
+  bind ハッシュは証拠の界面ハッシュ+空の仮定スロット。本物の承認を記録し始める前に最小のゴールデンベクタでレイアウトを凍結。
 - **承認レコード**: `sig` を空にした v1 スキーマ、jsonl の読み書き、署名対象の
   正規化バイト列関数(署名はしない)。
 - **`inka approve`(CLI、TUI なし)**: 不足/stale 対象のキュー、`--as <approver>` の
@@ -35,8 +35,9 @@
   キューと eval は1つの有効性判定関数を共有する。
 - **ポリシー**: 組み込みデフォルトのみ — 全対象 `any(1)`。ポリシー言語なし。
   decline の拒否権は有効。
-- **`inka eval`**: established 不動点、stale 検出、decline 拒否権、宣言された
-  フェーズ順序に対するノード側 `until:` の失効、原因別の blame 出力、clean でなければ
+- **`inka eval`**: established 不動点(objective も自身の承認を要する)、stale 検出、
+  decline 拒否権、宣言されたフェーズ順序に対するノード側 `until:` のハード失効
+  (期限後に付けた承認もカウントしない)、原因別の blame 出力、clean でなければ
   非ゼロ終了。
 - **CI evidence provider(テストターゲット粒度)**: `source: ci:<target>`、CI で
   生成する `ci-export.json`(生成は `inka ci-export` サブコマンドが望ましい)、

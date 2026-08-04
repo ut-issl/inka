@@ -15,8 +15,9 @@ pub struct Block {
     pub description: Description,
     pub children: Vec<Spanned<String>>,      // structure/objective のみ
     pub source: Option<Spanned<SourceRef>>,  // bind のみ
-    pub until: Option<Spanned<String>>,      // フェーズ名
-    pub promote: Option<Spanned<String>>,    // "bind" 等
+    pub until: Option<Spanned<String>>,      // フェーズ名(全モード可)
+    pub promote: Option<Spanned<String>>,    // "structure" | "bind"(fiat のみ・任意)
+    pub reason: Option<Spanned<String>>,     // 引用符付き短文(引用符を除いて保持)
     pub span: Span,
 }
 
@@ -29,8 +30,10 @@ pub struct Description {
 pub enum SourceRef { Veriq(String), Ci(String) }   // "veriq:aocs.verify_x" / "ci:tests/x.rs"
 ```
 
-モード別の必須/禁止(structure→children 必須、bind→source 必須、fiat→どちらも禁止、
-objective→children 必須)は**パーサの検査**として実装し、AST に不正な組合せを持ち込まない。
+モード別の必須/禁止(structure/objective→children 必須、bind→source 必須、fiat→
+どちらも不可)と注釈の行列(`until:`/`reason:` は全モード可、`promote:` は fiat のみ・
+任意で値は structure|bind)は**パーサの検査**として実装し、AST に不正な組合せを
+持ち込まない。
 
 ## lexer
 
@@ -41,7 +44,8 @@ objective→children 必須)は**パーサの検査**として実装し、AST �
   終端として raw ブロックを丸ごと1トークン `FenceBlock { raw, info, span }` に切り出す。
   この間 `//` も `{}` も一切解釈しない(フェンス内=自然言語の世界、が規則の実装)
 - それ以外の行: 識別子 / キーワード(objective, structure, bind, fiat)/
-  `#tag` / `{` / `}` / `children:` などの `ident:` 形 / `,` / `::`(将来用に予約)
+  `#tag` / `{` / `}` / `children:` などの `ident:` 形 / `,` / 引用符付き文字列
+  (`"..."`。1行・エスケープなし。`reason:` の値専用)/ `::`(将来用に予約)
 - フェンス外に裸のテキストは存在できない構文なので、予約語は常にキーワードとして
   扱ってよい(文との衝突を考えなくてよい)
 
@@ -58,6 +62,7 @@ entry     := FenceBlock
            | 'source' ':' source_ref
            | 'until' ':' ident
            | 'promote' ':' ident
+           | 'reason' ':' STRING
 ```
 
 - **description はブロックにつきちょうど1つ**(0個・2個は error)
@@ -76,7 +81,8 @@ entry     := FenceBlock
 
 - dogfood / aocs の全ファイルがパースでき、AST の insta スナップショットが安定する
 - 壊しフィクスチャ: description なし、description 2個、fiat に children、bind に
-  source なし、未知プロパティ、重複プロパティ、閉じ忘れ `}`(→次ブロックが生きて
+  source なし、structure に `promote:`、`promote: fiat` など不正な値、閉じない
+  引用符、未知プロパティ、重複プロパティ、閉じ忘れ `}`(→次ブロックが生きて
   いることまで確認 = 回復のテスト)
 - フェンス: より長いフェンス(````)の中に ``` を含むケース、インフォ文字列付き、
   CRLF 入力

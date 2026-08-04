@@ -21,11 +21,12 @@
 pub fn normalize(rendered: &str) -> String
 ```
 
-## 期限注釈の正規形
+## 注釈の正規形
 
-`until` / `promote` を `key:value` の文字列にし、**キーでソートした列**にする。
-値にコロンや空白は入らない(フェーズ名・モード名のみ)。
-例: `["promote:bind", "until:M3"]`。
+`until` / `promote` / `reason` を `key:value` の文字列にし、**キーでソートした列**に
+する。`until` / `promote` の値はフェーズ名・モード名のみ。`reason` の値は引用符を
+除いた本文そのもの(空白を含みうるが、長さ接頭辞フレーミングなので曖昧にならない)。
+例: `["promote:bind", "reason:awaiting the mass-properties test", "until:M3"]`。
 
 ## フレーミング(バイトレイアウト v1)
 
@@ -35,6 +36,11 @@ pub fn normalize(rendered: &str) -> String
 ```
 field(s)   = u64_le(len(s)) ++ bytes(s)          // s は UTF-8 文字列 or 生バイト
 list(xs)   = u64_le(count) ++ field(x1) ++ ...   // 順序は呼び出し側が確定させる
+
+objective_hash = SHA256( field("inka:objective:v1")
+                      ++ field(normalize(desc))
+                      ++ list(annotations_sorted)
+                      ++ list(children_descs_sorted) )
 
 structure_hash = SHA256( field("inka:structure:v1")
                       ++ field(normalize(desc))
@@ -61,7 +67,7 @@ bind_hash      = SHA256( field("inka:bind:v1")
 ## API
 
 ```rust
-pub enum ViewKind { Structure, Fiat, Bind }
+pub enum ViewKind { Objective, Structure, Fiat, Bind }
 pub struct LocalView<'a> {
     pub kind: ViewKind,
     pub description: &'a str,             // rendered(正規化前)
@@ -77,7 +83,7 @@ pub fn view_hash(v: &LocalView) -> [u8; 32]
 `tests/golden/hash/*.json` に置く。1件 = 入力(kind, desc, annotations, children,
 interface_hash)+ `expected: "sha256:..."`(hex)。最低カバレッジ:
 
-- 3種それぞれ / 注釈あり・なし / 子の順序違いで同一ハッシュになるペア /
+- 4種それぞれ / 注釈あり・なし(reason 含む)/ 子の順序違いで同一ハッシュになるペア /
   1文字違いで異なるペア / 日本語・結合文字(NFC の効きを確認)/ 空 children
 - 2〜3件は Rust 実装と独立に(Python ワンライナー等で)再導出して照合。
   スクリプトは PR 説明に貼り、リポジトリには入れない

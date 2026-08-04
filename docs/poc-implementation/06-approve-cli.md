@@ -15,8 +15,8 @@ pub struct QueueItem {
 }
 ```
 
-- 承認対象の全列挙: structure ノード → structure(N)、fiat ノード → fiat(N)、
-  bind ノード → bind(N)。objective は対象外
+- 承認対象の全列挙: objective → objective(N)、structure ノード → structure(N)、
+  fiat ノード → fiat(N)、bind ノード → bind(N)
 - 各対象について現在の view_hash を計算し、レコード群から該当 target のものを引く:
   - 現在ハッシュに一致する approve があれば **キューに出さない**
   - 一致する approve がなく、過去ハッシュへの approve だけ → Stale
