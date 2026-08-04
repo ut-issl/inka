@@ -1,0 +1,20 @@
+// Environment assumptions. An "assumption" is not a special node kind or keyword —
+// it is just a proposition discharged in fiat mode (concept §2.1). Parents reference
+// these through ordinary children; DAG sharing covers reuse.
+//
+// The ID'd shared-definition "registry" (concept §6.4) is a veriq-integration
+// mechanism (M8): calcs declare assumes=["<id>"] and the aggregated assumption set
+// presented at bind approval needs identity-based aggregation. It never appears in
+// argument-side syntax.
+
+fiat approvers_follow_norm {
+  ```
+  Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts
+  ```
+}
+
+fiat git_hosting_intact {
+  ```
+  The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker
+  ```
+}

@@ -1,0 +1,42 @@
+// Branch 3: records are auditable (concept §9).
+
+structure records_auditable {
+  ```
+  A third party can mechanically verify, for the approval state at any commit, who approved what, and under which policy and phase
+  ```
+  children: target_unswappable, approver_unforgeable, log_tamper_evident, eval_reproducible, git_hosting_intact
+}
+
+structure target_unswappable {
+  ```
+  Swapping an approval record's target (pretending an approval covers different content) is detected by checking the view_hash
+  ```
+  children: local_view_hash_sound
+}
+
+// approver_unforgeable is the value-interpolation example; sig_scheme is defined
+// in values.toml. Contracts are hashed after interpolation, so changing the value
+// precisely invalidates this approval and the parent's structure approval.
+fiat approver_unforgeable {
+  ```
+  Forging an approval record's approver is detected by verifying the record's signature ({$sig_scheme})
+  ```
+  until: M7
+  promote: bind
+}
+
+fiat log_tamper_evident {
+  ```
+  Deleting or rewriting approval records (including suppressing a decline) is detected by reconciliation against the anchoring
+  ```
+  until: M7
+  promote: bind
+}
+
+fiat eval_reproducible {
+  ```
+  eval's input is repository content only; the result for a given commit is identical regardless of execution environment or time
+  ```
+  until: M3
+  promote: bind
+}
