@@ -1,7 +1,7 @@
 # 01: lexer・AST・パーサ
 
 対象: `argument/*.inka` のテキスト → span 付き AST。確定済みの構文規則
-(issue-drafts/06 の5規則)に従う。
+([../design/spec.md](../design/spec.md))に従う。
 
 ## AST(先に型を固める)
 

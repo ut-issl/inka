@@ -1,19 +1,19 @@
 # ミニマム実装ガイド
 
-inka-minimum-roadmap.md の8機能を自力実装するためのガイド。各ファイルが1機能に対応する。
-コードの正解を書く場所ではなく、型の形・アルゴリズム・凍結すべき決定・落とし穴を先に
-固めておく場所。
+PoC([../design/poc-plan.md](../design/poc-plan.md))のスコープを自力実装するための
+ガイド。各ファイルが1機能に対応する。コードの正解を書く場所ではなく、型の形・
+アルゴリズム・凍結すべき決定・落とし穴を先に固めておく場所。
 
-| ファイル | 内容 | 対応するミニマム§ |
-|---|---|---|
-| [01-syntax.md](01-syntax.md) | lexer・AST・再帰下降パーサ・エラー回復 | §1 |
-| [02-project.md](02-project.md) | inka.toml・argument/ 規約・`{$var}` 展開 | §1 |
-| [03-graph-check.md](03-graph-check.md) | interning・グラフ・診断・`inka check` | §2 |
-| [04-hash.md](04-hash.md) | 正規化・view_hash 3種・ゴールデンベクタ(凍結対象) | §3 |
-| [05-record.md](05-record.md) | 承認レコード・正規化バイト列・jsonl(凍結対象) | §4 |
-| [06-approve-cli.md](06-approve-cli.md) | キュー導出・`inka approve` | §5, §6 |
-| [07-eval.md](07-eval.md) | established 不動点・stale・blame・`inka eval` | §6, §7 |
-| [08-ci-provider.md](08-ci-provider.md) | ci-export.json・照合・GitHub Actions | §8 |
+| ファイル | 内容 |
+|---|---|
+| [01-syntax.md](01-syntax.md) | lexer・AST・再帰下降パーサ・エラー回復 |
+| [02-project.md](02-project.md) | inka.toml・argument/ 規約・`{$var}` 展開 |
+| [03-graph-check.md](03-graph-check.md) | interning・グラフ・診断・`inka check` |
+| [04-hash.md](04-hash.md) | 正規化・view_hash 3種・ゴールデンベクタ(凍結対象) |
+| [05-record.md](05-record.md) | 承認レコード・正規化バイト列・jsonl(凍結対象) |
+| [06-approve-cli.md](06-approve-cli.md) | キュー導出・`inka approve` |
+| [07-eval.md](07-eval.md) | established 不動点・stale・blame・`inka eval` |
+| [08-ci-provider.md](08-ci-provider.md) | ci-export.json・照合・GitHub Actions |
 
 ## 共通方針
 
@@ -37,7 +37,7 @@ inka-minimum-roadmap.md の8機能を自力実装するためのガイド。各�
   check も eval の blame も最終的にこれを吐く。ariadne への変換は cli/ 側の1関数。
 - **凍結対象**(04, 05)は実装より先にゴールデンベクタを書き、CI で
   `tests/golden/` を追記専用として守る。
-- **rustdoc に理由を書く**: 確定済みの設計判断(構文規則5つ、正規化、フレーミング)は
+- **rustdoc に理由を書く**: 確定済みの設計判断(構文規則、正規化、フレーミング)は
   該当モジュールの rustdoc に1行ずつ理由を残す(仕様書は作らない)。
 
 ## 推奨する着手順
