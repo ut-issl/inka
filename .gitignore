@@ -115,6 +115,14 @@ tags
 .history
 .ionide
 
+### Python ###
+# Virtual environment
+/.venv
+
+### Zensical ###
+# Generated static site
+/site
+
 ### Rust ###
 # Build artifacts
 /target

@@ -1,0 +1,74 @@
+# Pages deployment is disabled while the repository is private (the Pages
+# site would be publicly visible even for a private repository).
+# To re-enable when the repository becomes public:
+#   1. Delete the placeholder `disabled` job below.
+#   2. Restore the commented-out `on:`, `concurrency:`, `permissions:`, and
+#      `jobs:` sections.
+#   3. In Settings -> Pages, set "Build and deployment" source to
+#      "GitHub Actions".
+name: Documentation
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  disabled:
+    name: Placeholder (deployment disabled while repository is private)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Explain why this workflow does nothing
+        run: echo "Documentation deployment is disabled while the repository is private."
+
+# on:
+#   push:
+#     branches:
+#       - main
+#
+# concurrency:
+#   group: ${{ github.workflow }}
+#   cancel-in-progress: false
+#
+# permissions:
+#   contents: read
+#   pages: write
+#   id-token: write
+#
+# jobs:
+#
+#   deploy:
+#     name: Build and deploy to GitHub Pages
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 10
+#     environment:
+#       name: github-pages
+#       url: ${{ steps.deployment.outputs.page_url }}
+#
+#     steps:
+#       - name: Checkout the main repository
+#         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+#         with:
+#           persist-credentials: false
+#
+#       - name: Configure GitHub Pages
+#         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+#
+#       - name: Install uv
+#         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+#
+#       - name: Build the English site
+#         run: uv run --locked zensical build --clean
+#
+#       - name: Build the Japanese site
+#         run: uv run --locked zensical build --clean -f zensical.ja.toml
+#
+#       - name: Upload the site as a Pages artifact
+#         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+#         with:
+#           path: site
+#
+#       - name: Deploy to GitHub Pages
+#         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+#         id: deployment

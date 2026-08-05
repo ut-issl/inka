@@ -17,9 +17,9 @@ repos:
     rev: fcb0ac886b00dd0305756b1e8466432e11601b5a  # frozen: v1.2.0
     hooks:
       - id: tombi-format
-        exclude: ^Cargo\.lock$
+        exclude: ^(Cargo|uv)\.lock$
       - id: tombi-lint
-        exclude: ^Cargo\.lock$
+        exclude: ^(Cargo|uv)\.lock$
 
   - repo: https://github.com/adrienverge/yamllint
     rev: cba56bcde1fdd01c1deb3f945e69764c291a6530  # frozen: v1.38.0
