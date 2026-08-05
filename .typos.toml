@@ -1,4 +1,6 @@
 [default.extend-words]
+# Rust TUI crate, not a misspelling of "ratatouille"
+ratatui = "ratatui"
 
 [files]
 extend-exclude = [".git"]

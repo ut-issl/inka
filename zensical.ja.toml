@@ -1,0 +1,128 @@
+# Japanese site, built to site/ja/ (build with: zensical build -f zensical.ja.toml).
+# The English site (canonical) is configured in zensical.toml.
+# Keep both files in sync — only language-specific values should differ.
+
+[project]
+site_name = "inka"
+site_description = "説明責任のある承認を伴う、構造化された論証。テキストベース、LSP 対応、反復的な開発のために。"
+site_author = "Shunsuke Shimomura"
+site_url = "https://www.space.t.u-tokyo.ac.jp/inka/ja/"
+docs_dir = "docs/ja"
+site_dir = "site/ja"
+copyright = """
+Copyright &copy; 2026 Shunsuke Shimomura
+"""
+
+nav = [
+  { "ホーム" = "index.md" },
+  { "設計" = [
+    { "コンセプト" = "design/concept.md" },
+    { "確定仕様" = "design/spec.md" },
+    { "PoC 実装方針" = "design/poc-plan.md" },
+    { "全体実装方針" = "design/full-plan.md" },
+    { "未決事項" = "design/open-questions.md" },
+  ] },
+]
+
+[project.theme]
+language = "ja"
+features = [
+  "announce.dismiss",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.footnote.tooltips",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "ダークモードに切り替え"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "ライトモードに切り替え"
+
+# Language selector shown in the header.
+[[project.extra.alternate]]
+name = "English"
+link = "https://www.space.t.u-tokyo.ac.jp/inka/"
+lang = "en"
+
+[[project.extra.alternate]]
+name = "日本語"
+link = "https://www.space.t.u-tokyo.ac.jp/inka/ja/"
+lang = "ja"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/ut-issl/inka"
+
+[project.markdown_extensions.abbr]
+
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions.attr_list]
+
+[project.markdown_extensions.def_list]
+
+[project.markdown_extensions.footnotes]
+
+[project.markdown_extensions.md_in_html]
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.pymdownx.betterem]
+
+[project.markdown_extensions.pymdownx.caret]
+
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.keys]
+
+[project.markdown_extensions.pymdownx.magiclink]
+
+[project.markdown_extensions.pymdownx.mark]
+
+[project.markdown_extensions.pymdownx.smartsymbols]
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
+
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+
+[project.markdown_extensions.pymdownx.tilde]
