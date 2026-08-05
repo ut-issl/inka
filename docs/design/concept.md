@@ -48,8 +48,9 @@ repository, evaluated by a pure function.
    `including`, `not-author`, `fresh`, `forbidden`, …). Phases have a declared
    total order; `fresh` compares recorded phases, never timestamps. Deadline
    annotations let authors declare debt that expires: `until: <phase>` with a
-   quoted `reason:` on any node, plus `promote: <structure|bind>` on fiat to
-   name the successor mode. Expiry is hard — past the deadline no approval of
+   quoted `reason:` on any node (`reason:` and `promote:` only ever accompany
+   an `until:`), plus `promote:` to name the successor mode — `structure` or
+   `bind` on a fiat, `structure` only on the objective. Expiry is hard — past the deadline no approval of
    the node counts, even freshly granted ones — so keeping things as they are
    requires visibly editing the annotation (a contract change), never silent
    re-approval.

@@ -33,11 +33,15 @@ fiat <id> {
   reserved. Inside fences: natural language only; outside: keywords only.
 - Mode-required properties, enforced at parse time: `structure`/`objective` →
   `children:` required; `bind` → `source:` required; `fiat` → neither allowed.
-- Annotations: `until: <phase>` and `reason: "<short text>"` may appear on any
-  block; `promote: <structure|bind>` may appear on fiat only and is optional
-  (an `until:` without `promote:` is plain expiry). `reason` takes a
-  double-quoted, single-line string with no escape sequences — the only quoted
-  token in the language; descriptions never use quotes.
+- Annotations form a group anchored on `until:` — `reason:` and `promote:` may
+  only appear together with `until:`. `until: <phase>` and `reason: "<short
+  text>"` may appear on any block. `promote:` names the successor mode and is
+  optional (an `until:` without `promote:` is plain expiry): on fiat the
+  target is `structure` or `bind`; on the objective it is `structure` only.
+  structure and bind take no `promote:` — announcing a mode change there is
+  not supported. `reason` takes a double-quoted, single-line string with no
+  escape sequences — the only quoted token in the language; descriptions never
+  use quotes.
 - `//` line comments; dropped at the lexer, never hashed.
 - No escape for `{$` — only the exact pattern `{$identifier}` is interpolation;
   everything else is literal.

@@ -3,37 +3,22 @@
 対象: `argument/*.inka` のテキスト → span 付き AST。確定済みの構文規則
 ([../design/spec.md](../design/spec.md))に従う。
 
-## AST(先に型を固める)
+## AST(実装済み — `crate/inka-core/src/ast.rs` が正)
 
-```rust
-pub enum Mode { Objective, Structure, Bind, Fiat }
+AST は実装済みで、このガイドではなく**コードと rustdoc が正**である。要点:
 
-pub struct Block {
-    pub mode: Mode,
-    pub id: Spanned<String>,
-    pub tags: Vec<Spanned<String>>,          // "#safety" の '#' を除いた形で保持
-    pub description: Description,
-    pub children: Vec<Spanned<String>>,      // structure/objective のみ
-    pub source: Option<Spanned<SourceRef>>,  // bind のみ
-    pub until: Option<Spanned<String>>,      // フェーズ名(全モード可)
-    pub promote: Option<Spanned<String>>,    // "structure" | "bind"(fiat のみ・任意)
-    pub reason: Option<Spanned<String>>,     // 引用符付き短文(引用符を除いて保持)
-    pub span: Span,
-}
+- モードごとの構造体(`ObjectiveBlock` / `StructureBlock` / `BindBlock` /
+  `FiatBlock`)を `Block` enum で束ね、不正な組合せ(fiat に children、structure に
+  source、objective の `promote: bind` 等)を**型で表現不能**にする。
+- 注釈は `until:` をアンカーとする `Deadline { until, reason }`。promote を書ける
+  モードだけが対応する型を持つ(`FiatDeadline` = structure|bind、
+  `ObjectiveDeadline` = structure のみ)。`reason:` / `promote:` が `until:` なしで
+  現れないことも型が保証する。
+- 診断が指しうる要素は `Spanned<T>` で包む。FileId / SourceMap / Span / Spanned は
+  `source.rs` にある。
 
-pub struct Description {
-    pub raw: String,            // フェンス内の生テキスト(展開・正規化前)
-    pub info: Option<String>,   // フェンスのインフォ文字列(保持のみ)
-    pub span: Span,             // フェンス内側の範囲({$var} の span 逆算に使う)
-}
-
-pub enum SourceRef { Veriq(String), Ci(String) }   // "veriq:aocs.verify_x" / "ci:tests/x.rs"
-```
-
-モード別の必須/禁止(structure/objective→children 必須、bind→source 必須、fiat→
-どちらも不可)と注釈の行列(`until:`/`reason:` は全モード可、`promote:` は fiat のみ・
-任意で値は structure|bind)は**パーサの検査**として実装し、AST に不正な組合せを
-持ち込まない。
+パーサの仕事は「テキストをこの型に入れること」であり、型に入らないもの
+(モードとプロパティの不整合、不正な promote 先)はその場で診断になる。
 
 ## lexer
 
@@ -81,8 +66,8 @@ entry     := FenceBlock
 
 - dogfood / aocs の全ファイルがパースでき、AST の insta スナップショットが安定する
 - 壊しフィクスチャ: description なし、description 2個、fiat に children、bind に
-  source なし、structure に `promote:`、`promote: fiat` など不正な値、閉じない
-  引用符、未知プロパティ、重複プロパティ、閉じ忘れ `}`(→次ブロックが生きて
-  いることまで確認 = 回復のテスト)
+  source なし、structure に `promote:`、objective に `promote: bind`、`until:` なしの
+  `reason:`、`promote: fiat` など不正な値、閉じない引用符、未知プロパティ、
+  重複プロパティ、閉じ忘れ `}`(→次ブロックが生きていることまで確認 = 回復のテスト)
 - フェンス: より長いフェンス(````)の中に ``` を含むケース、インフォ文字列付き、
   CRLF 入力

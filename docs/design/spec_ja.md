@@ -33,10 +33,13 @@ fiat <id> {
   フェンス内=自然言語のみ、フェンス外=キーワードのみ。
 - モード別必須プロパティ(パース時に強制): `structure`/`objective` → `children:`
   必須、`bind` → `source:` 必須、`fiat` → どちらも不可。
-- 注釈: `until: <phase>` と `reason: "<短文>"` は全ブロックに書ける。
-  `promote: <structure|bind>` は fiat のみ・任意(`promote:` なしの `until:` は
-  単純な期限切れ)。`reason` は二重引用符の1行文字列でエスケープなし — 言語中で
-  唯一の引用符トークン(description は引用符を使わない)。
+- 注釈は `until:` をアンカーとするグループ — `reason:` と `promote:` は `until:`
+  がある場合にのみ書ける。`until: <phase>` と `reason: "<短文>"` は全ブロックに
+  書ける。`promote:` は後継モードの宣言で任意(`promote:` なしの `until:` は単純な
+  期限切れ): fiat では `structure` | `bind`、objective では `structure` のみ。
+  structure と bind に `promote:` は書けない — モード変更の予告は想定しない。
+  `reason` は二重引用符の1行文字列でエスケープなし — 言語中で唯一の引用符トークン
+  (description は引用符を使わない)。
 - `//` 行コメント。字句段階で落ち、ハッシュされない。
 - `{$` のエスケープは無い — 正確なパターン `{$識別子}` のみが補間で、それ以外は
   文字通り。
