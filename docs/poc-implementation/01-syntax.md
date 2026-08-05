@@ -1,7 +1,7 @@
 # 01: lexer・AST・パーサ
 
 対象: `argument/*.inka` のテキスト → span 付き AST。確定済みの構文規則
-([../design/spec.md](../design/spec.md))に従う。
+([../en/design/spec.md](../en/design/spec.md))に従う。
 
 ## AST(実装済み — `crate/inka-core/src/ast.rs` が正)
 

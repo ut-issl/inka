@@ -1,6 +1,6 @@
 # ミニマム実装ガイド
 
-PoC([../design/poc-plan.md](../design/poc-plan.md))のスコープを自力実装するための
+PoC([../en/design/poc-plan.md](../en/design/poc-plan.md))のスコープを自力実装するための
 ガイド。各ファイルが1機能に対応する。コードの正解を書く場所ではなく、型の形・
 アルゴリズム・凍結すべき決定・落とし穴を先に固めておく場所。
 
