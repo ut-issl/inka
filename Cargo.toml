@@ -10,6 +10,7 @@ publish = false
 
 [workspace.dependencies]
 inka-core = { path = "crate/inka-core" }
+thiserror = "2"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

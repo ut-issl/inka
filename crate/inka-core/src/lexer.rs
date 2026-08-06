@@ -1,0 +1,828 @@
+use crate::source::{FileId, Span, Spanned};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenKind {
+    Objective,
+    Structure,
+    Bind,
+    Fiat,
+
+    Ident(String),
+    Tag(String),
+    StringLiteral(String),
+
+    LeftBrace,
+    RightBrace,
+    Colon,
+    Comma,
+    DoubleColon,
+    FenceBlock {
+        raw: String,
+        info: Option<String>,
+        content_span: Span,
+    },
+}
+
+pub type Token = Spanned<TokenKind>;
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
+pub struct LexError {
+    pub span: Span,
+    pub message: String,
+}
+
+pub struct Lexer<'a> {
+    file_id: FileId,
+    input: &'a str,
+    offset: usize,
+}
+
+impl<'a> Lexer<'a> {
+    #[must_use]
+    pub fn new(file_id: FileId, input: &'a str) -> Self {
+        Self {
+            file_id,
+            input,
+            offset: 0,
+        }
+    }
+
+    /// Tokenizes the whole input into a flat token stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LexError`] for an unterminated fence or string literal, a
+    /// `#` tag with no name, or a character that cannot start a token.
+    pub fn lex(mut self) -> Result<Vec<Token>, LexError> {
+        let mut tokens = Vec::new();
+
+        while !self.is_eof() {
+            /*
+             * Fence detection must happen before comment handling because
+             * `//` inside a fenced description is ordinary text.
+             */
+            if self.is_at_line_start()
+                && let Some(fence) = self.try_lex_fence()?
+            {
+                tokens.push(fence);
+                continue;
+            }
+
+            self.skip_horizontal_whitespace();
+
+            if self.is_eof() {
+                break;
+            }
+
+            if self.starts_with("\n") || self.starts_with("\r") {
+                self.offset += 1;
+                continue;
+            }
+
+            if self.starts_with("//") {
+                self.skip_to_line_end();
+                continue;
+            }
+
+            let token = match self.current_byte() {
+                Some(b'{') => self.single_char_token(TokenKind::LeftBrace),
+                Some(b'}') => self.single_char_token(TokenKind::RightBrace),
+                Some(b',') => self.single_char_token(TokenKind::Comma),
+
+                Some(b':') if self.starts_with("::") => {
+                    let start = self.offset;
+                    self.offset += 2;
+                    self.token(start, self.offset, TokenKind::DoubleColon)
+                }
+
+                Some(b':') => self.single_char_token(TokenKind::Colon),
+
+                Some(b'#') => self.lex_tag()?,
+
+                Some(b'"') => self.lex_string()?,
+
+                Some(byte) if is_ident_start(byte) => self.lex_identifier(),
+
+                Some(_) => {
+                    return Err(self.error_at_current("unexpected character"));
+                }
+
+                None => break,
+            };
+
+            tokens.push(token);
+        }
+
+        Ok(tokens)
+    }
+
+    fn try_lex_fence(&mut self) -> Result<Option<Token>, LexError> {
+        let line_start = self.offset;
+        let line_end = self.find_line_end(line_start);
+        let line = &self.input[line_start..line_end];
+
+        let Some(opening) = parse_opening_fence(line) else {
+            return Ok(None);
+        };
+
+        let token_start = line_start;
+        let opening_line_end = self.next_line_start(line_end);
+        let content_start = opening_line_end;
+
+        self.offset = opening_line_end;
+
+        while !self.is_eof() {
+            let closing_line_start = self.offset;
+            let closing_line_end = self.find_line_end(closing_line_start);
+            let closing_line = &self.input[closing_line_start..closing_line_end];
+
+            if is_closing_fence(closing_line, opening.backtick_count) {
+                let raw = self.input[content_start..closing_line_start].to_owned();
+                let token_end = self.next_line_start(closing_line_end);
+
+                let token = Spanned {
+                    span: self.span(token_start, token_end),
+                    value: TokenKind::FenceBlock {
+                        raw,
+                        info: opening.info,
+                        content_span: self.span(content_start, closing_line_start),
+                    },
+                };
+
+                self.offset = token_end;
+                return Ok(Some(token));
+            }
+
+            self.offset = self.next_line_start(closing_line_end);
+        }
+
+        Err(LexError {
+            message: "unclosed fenced description".to_owned(),
+            span: self.span(token_start, self.input.len()),
+        })
+    }
+
+    fn lex_identifier(&mut self) -> Token {
+        let start = self.offset;
+
+        self.offset += 1;
+
+        while let Some(byte) = self.current_byte() {
+            if !is_ident_continue(byte) {
+                break;
+            }
+
+            self.offset += 1;
+        }
+
+        let text = &self.input[start..self.offset];
+
+        let kind = match text {
+            "objective" => TokenKind::Objective,
+            "structure" => TokenKind::Structure,
+            "bind" => TokenKind::Bind,
+            "fiat" => TokenKind::Fiat,
+            _ => TokenKind::Ident(text.to_owned()),
+        };
+
+        self.token(start, self.offset, kind)
+    }
+
+    fn lex_tag(&mut self) -> Result<Token, LexError> {
+        let start = self.offset;
+        self.offset += 1;
+
+        let value_start = self.offset;
+
+        while let Some(byte) = self.current_byte() {
+            if !is_ident_continue(byte) {
+                break;
+            }
+
+            self.offset += 1;
+        }
+
+        if self.offset == value_start {
+            return Err(LexError {
+                message: "expected a tag name after `#`".to_owned(),
+                span: self.span(start, self.offset),
+            });
+        }
+
+        let value = self.input[value_start..self.offset].to_owned();
+
+        Ok(self.token(start, self.offset, TokenKind::Tag(value)))
+    }
+
+    fn lex_string(&mut self) -> Result<Token, LexError> {
+        let start = self.offset;
+        self.offset += 1;
+
+        let value_start = self.offset;
+
+        while let Some(byte) = self.current_byte() {
+            match byte {
+                b'"' => {
+                    let value = self.input[value_start..self.offset].to_owned();
+                    self.offset += 1;
+
+                    return Ok(self.token(start, self.offset, TokenKind::StringLiteral(value)));
+                }
+
+                b'\n' | b'\r' => {
+                    return Err(LexError {
+                        message: "string literal must end on the same line".to_owned(),
+                        span: self.span(start, self.offset),
+                    });
+                }
+
+                _ => {
+                    self.offset += 1;
+                }
+            }
+        }
+
+        Err(LexError {
+            message: "unclosed string literal".to_owned(),
+            span: self.span(start, self.input.len()),
+        })
+    }
+
+    fn skip_horizontal_whitespace(&mut self) {
+        while matches!(self.current_byte(), Some(b' ' | b'\t')) {
+            self.offset += 1;
+        }
+    }
+
+    fn skip_to_line_end(&mut self) {
+        while let Some(byte) = self.current_byte() {
+            if matches!(byte, b'\n' | b'\r') {
+                break;
+            }
+
+            self.offset += 1;
+        }
+    }
+
+    fn single_char_token(&mut self, kind: TokenKind) -> Token {
+        let start = self.offset;
+        self.offset += 1;
+        self.token(start, self.offset, kind)
+    }
+
+    fn token(&self, start: usize, end: usize, value: TokenKind) -> Token {
+        Spanned {
+            span: self.span(start, end),
+            value,
+        }
+    }
+
+    fn error_at_current(&self, message: impl Into<String>) -> LexError {
+        // Span the whole UTF-8 character so both ends stay on char
+        // boundaries and the range remains safe to slice when a diagnostic
+        // renders it. A single `+ 1` would split a multi-byte character.
+        let width = self.input[self.offset..]
+            .chars()
+            .next()
+            .map_or(0, char::len_utf8);
+        let end = self.offset + width;
+
+        LexError {
+            message: message.into(),
+            span: self.span(self.offset, end),
+        }
+    }
+
+    fn span(&self, start: usize, end: usize) -> Span {
+        Span {
+            file_id: self.file_id,
+            start,
+            end,
+        }
+    }
+
+    fn is_eof(&self) -> bool {
+        self.offset >= self.input.len()
+    }
+
+    fn current_byte(&self) -> Option<u8> {
+        self.input.as_bytes().get(self.offset).copied()
+    }
+
+    fn starts_with(&self, pattern: &str) -> bool {
+        self.input[self.offset..].starts_with(pattern)
+    }
+
+    fn is_at_line_start(&self) -> bool {
+        self.offset == 0
+            || matches!(
+                self.input.as_bytes().get(self.offset - 1),
+                Some(b'\n' | b'\r')
+            )
+    }
+
+    fn find_line_end(&self, start: usize) -> usize {
+        self.input[start..]
+            .find(['\r', '\n'])
+            .map_or(self.input.len(), |relative| start + relative)
+    }
+
+    fn next_line_start(&self, line_end: usize) -> usize {
+        if self.input[line_end..].starts_with("\r\n") {
+            line_end + 2
+        } else if self.input[line_end..].starts_with('\n')
+            || self.input[line_end..].starts_with('\r')
+        {
+            line_end + 1
+        } else {
+            line_end
+        }
+    }
+}
+
+struct OpeningFence {
+    backtick_count: usize,
+    info: Option<String>,
+}
+
+fn parse_opening_fence(line: &str) -> Option<OpeningFence> {
+    let trimmed = line.trim();
+
+    let backtick_count = trimmed
+        .as_bytes()
+        .iter()
+        .take_while(|&&byte| byte == b'`')
+        .count();
+
+    if backtick_count < 3 {
+        return None;
+    }
+
+    // Everything after the fence is the info string, kept verbatim (only the
+    // surrounding whitespace is trimmed). It is accepted and reserved, so
+    // multi-word forms such as `rust ignore` are preserved as-is.
+    let info = trimmed[backtick_count..].trim();
+
+    Some(OpeningFence {
+        backtick_count,
+        info: (!info.is_empty()).then(|| info.to_owned()),
+    })
+}
+
+fn is_closing_fence(line: &str, minimum_length: usize) -> bool {
+    let trimmed = line.trim();
+
+    let backtick_count = trimmed
+        .as_bytes()
+        .iter()
+        .take_while(|&&byte| byte == b'`')
+        .count();
+
+    backtick_count >= minimum_length && backtick_count == trimmed.len()
+}
+
+fn is_ident_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
+fn is_ident_continue(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::SourceMap;
+
+    fn lex(input: &str) -> Result<Vec<Token>, LexError> {
+        let mut map = SourceMap::new();
+        let file_id = map.add_file("test.inka".into(), input.to_string());
+
+        Lexer::new(file_id, input).lex()
+    }
+
+    fn kinds(tokens: &[Token]) -> Vec<&TokenKind> {
+        tokens.iter().map(|token| &token.value).collect()
+    }
+    #[test]
+    fn lexes_block_header_and_punctuation() {
+        let tokens = lex("objective root #critical { children: child-a, child-b }")
+            .expect("input should lex successfully");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Objective,
+                &TokenKind::Ident("root".to_owned()),
+                &TokenKind::Tag("critical".to_owned()),
+                &TokenKind::LeftBrace,
+                &TokenKind::Ident("children".to_owned()),
+                &TokenKind::Colon,
+                &TokenKind::Ident("child-a".to_owned()),
+                &TokenKind::Comma,
+                &TokenKind::Ident("child-b".to_owned()),
+                &TokenKind::RightBrace,
+            ]
+        );
+    }
+
+    #[test]
+    fn recognizes_all_mode_keywords() {
+        let tokens = lex("objective structure bind fiat").expect("input should lex successfully");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Objective,
+                &TokenKind::Structure,
+                &TokenKind::Bind,
+                &TokenKind::Fiat,
+            ]
+        );
+    }
+
+    #[test]
+    fn ignores_comments_outside_fences() {
+        let tokens = lex(r"
+objective root { // opening comment
+    children: child // property comment
+}
+")
+        .expect("input should lex successfully");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Objective,
+                &TokenKind::Ident("root".to_owned()),
+                &TokenKind::LeftBrace,
+                &TokenKind::Ident("children".to_owned()),
+                &TokenKind::Colon,
+                &TokenKind::Ident("child".to_owned()),
+                &TokenKind::RightBrace,
+            ]
+        );
+    }
+
+    #[test]
+    fn preserves_comment_markers_and_braces_inside_fence() {
+        let input = concat!(
+            "objective root {\n",
+            "```\n",
+            "Text before // this is not a comment\n",
+            "{ braces are ordinary text }\n",
+            "```\n",
+            "}\n",
+        );
+
+        let tokens = lex(input).expect("input should lex successfully");
+
+        let fence = tokens
+            .iter()
+            .find_map(|token| match &token.value {
+                TokenKind::FenceBlock {
+                    raw,
+                    info,
+                    content_span,
+                } => Some((raw, info, content_span)),
+                _ => None,
+            })
+            .expect("a fence token should be emitted");
+
+        assert_eq!(
+            fence.0,
+            concat!(
+                "Text before // this is not a comment\n",
+                "{ braces are ordinary text }\n",
+            )
+        );
+        assert_eq!(fence.1, &None);
+        assert_eq!(&input[fence.2.start..fence.2.end], fence.0);
+    }
+
+    #[test]
+    fn lexes_fence_info_string() {
+        let tokens = lex(concat!(
+            "objective root {\n",
+            "```md\n",
+            "description\n",
+            "```\n",
+            "}\n",
+        ))
+        .expect("input should lex successfully");
+
+        let info = tokens.iter().find_map(|token| match &token.value {
+            TokenKind::FenceBlock { info, .. } => Some(info),
+            _ => None,
+        });
+
+        assert_eq!(info, Some(&Some("md".to_owned())));
+    }
+
+    #[test]
+    fn longer_fence_may_close_shorter_fence() {
+        let tokens = lex(concat!("```\n", "description\n", "````\n",))
+            .expect("a longer fence should close the block");
+
+        assert!(matches!(
+            tokens.as_slice(),
+            [Spanned {
+                value: TokenKind::FenceBlock { raw, .. },
+                ..
+            }] if raw == "description\n"
+        ));
+    }
+
+    #[test]
+    fn shorter_fence_does_not_close_longer_fence() {
+        let tokens = lex(concat!(
+            "````\n",
+            "first line\n",
+            "```\n",
+            "second line\n",
+            "````\n",
+        ))
+        .expect("the final fence should close the block");
+
+        assert!(matches!(
+            tokens.as_slice(),
+            [Spanned {
+                value: TokenKind::FenceBlock { raw, .. },
+                ..
+            }] if raw == concat!(
+                "first line\n",
+                "```\n",
+                "second line\n",
+            )
+        ));
+    }
+
+    #[test]
+    fn rejects_unclosed_fence() {
+        let error = lex(concat!("```\n", "description\n",))
+            .expect_err("an unclosed fence should be rejected");
+
+        assert_eq!(error.message, "unclosed fenced description");
+        assert_eq!(error.span.start, 0);
+        assert_eq!(error.span.end, "```\ndescription\n".len());
+    }
+
+    #[test]
+    fn preserves_interpolation_syntax_inside_fence() {
+        let tokens = lex(concat!("```\n", "Value is {$value}.\n", "```\n",))
+            .expect("interpolation syntax should remain raw text");
+
+        assert!(matches!(
+            tokens.as_slice(),
+            [Spanned {
+                value: TokenKind::FenceBlock { raw, .. },
+                ..
+            }] if raw == "Value is {$value}.\n"
+        ));
+    }
+
+    #[test]
+    fn lexes_string_literal_without_quotes() {
+        let tokens =
+            lex(r#"reason: "temporary assumption""#).expect("input should lex successfully");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Ident("reason".to_owned()),
+                &TokenKind::Colon,
+                &TokenKind::StringLiteral("temporary assumption".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_unclosed_string_literal() {
+        let input = r#"reason: "temporary assumption"#;
+
+        let error = lex(input).expect_err("an unclosed string literal should be rejected");
+
+        assert_eq!(error.message, "unclosed string literal");
+        assert_eq!(error.span.start, "reason: ".len());
+        assert_eq!(error.span.end, input.len());
+    }
+
+    #[test]
+    fn rejects_multiline_string_literal() {
+        let error = lex(concat!("reason: \"first line\n", "second line\"\n",))
+            .expect_err("string literals must remain on one line");
+
+        assert_eq!(error.message, "string literal must end on the same line");
+    }
+
+    #[test]
+    fn rejects_tag_without_name() {
+        let error = lex("objective root # {").expect_err("a tag must have a name");
+
+        assert_eq!(error.message, "expected a tag name after `#`");
+    }
+
+    #[test]
+    fn lexes_double_colon_as_one_token() {
+        let tokens = lex("namespace::item").expect("input should lex successfully");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Ident("namespace".to_owned()),
+                &TokenKind::DoubleColon,
+                &TokenKind::Ident("item".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn records_half_open_token_spans() {
+        let input = "objective root";
+
+        let tokens = lex(input).expect("input should lex successfully");
+
+        assert_eq!(
+            &input[tokens[0].span.start..tokens[0].span.end],
+            "objective"
+        );
+        assert_eq!(&input[tokens[1].span.start..tokens[1].span.end], "root");
+
+        assert_eq!(tokens[0].span.start, 0);
+        assert_eq!(tokens[0].span.end, 9);
+
+        assert_eq!(tokens[1].span.start, 10);
+        assert_eq!(tokens[1].span.end, 14);
+    }
+
+    #[test]
+    fn fence_span_includes_delimiters_but_content_span_does_not() {
+        let input = concat!("```md\n", "hello\n", "```\n",);
+
+        let tokens = lex(input).expect("input should lex successfully");
+
+        let token = tokens.first().expect("a fence token should exist");
+
+        let TokenKind::FenceBlock {
+            raw, content_span, ..
+        } = &token.value
+        else {
+            panic!("expected a fence token");
+        };
+
+        assert_eq!(&input[token.span.start..token.span.end], input);
+        assert_eq!(&input[content_span.start..content_span.end], "hello\n");
+        assert_eq!(raw, "hello\n");
+    }
+
+    #[test]
+    fn handles_crlf_without_corrupting_spans() {
+        let input = concat!(
+            "objective root {\r\n",
+            "```md\r\n",
+            "description\r\n",
+            "```\r\n",
+            "}\r\n",
+        );
+
+        let tokens = lex(input).expect("CRLF input should lex successfully");
+
+        assert_eq!(tokens.len(), 5);
+        assert!(matches!(tokens[0].value, TokenKind::Objective));
+        assert_eq!(tokens[1].value, TokenKind::Ident("root".to_owned()));
+        assert!(matches!(tokens[2].value, TokenKind::LeftBrace));
+        assert!(matches!(tokens[4].value, TokenKind::RightBrace));
+
+        let TokenKind::FenceBlock {
+            raw,
+            info,
+            content_span,
+        } = &tokens[3].value
+        else {
+            panic!("expected a fence token");
+        };
+
+        assert_eq!(raw, "description\r\n");
+        assert_eq!(info.as_deref(), Some("md"));
+        assert_eq!(&input[content_span.start..content_span.end], raw);
+
+        for token in &tokens {
+            assert!(token.span.start <= token.span.end);
+            assert!(token.span.end <= input.len());
+        }
+    }
+
+    #[test]
+    fn handles_cr_only_line_endings() {
+        let input = concat!(
+            "objective root {\r",
+            "```md\r",
+            "description\r",
+            "```\r",
+            "}\r",
+        );
+
+        let tokens = lex(input).expect("CR-only input should lex successfully");
+
+        assert_eq!(tokens.len(), 5);
+        assert!(matches!(tokens[0].value, TokenKind::Objective));
+        assert_eq!(tokens[1].value, TokenKind::Ident("root".to_owned()));
+        assert!(matches!(tokens[2].value, TokenKind::LeftBrace));
+        assert!(matches!(tokens[4].value, TokenKind::RightBrace));
+
+        let TokenKind::FenceBlock {
+            raw,
+            info,
+            content_span,
+        } = &tokens[3].value
+        else {
+            panic!("expected a fence token");
+        };
+
+        assert_eq!(raw, "description\r");
+        assert_eq!(info.as_deref(), Some("md"));
+        assert_eq!(&input[content_span.start..content_span.end], raw);
+    }
+
+    #[test]
+    fn rejects_unrecognized_character() {
+        let error = lex("objective root @").expect_err("unknown characters should be rejected");
+
+        assert_eq!(error.message, "unexpected character");
+        assert_eq!(error.span.start, "objective root ".len());
+        assert_eq!(error.span.end, "objective root @".len());
+    }
+
+    #[test]
+    fn lexes_ci_source_target_with_slash() {
+        let tokens = lex(r#"ci: "tests/hash_props.rs""#).expect("a quoted ci target should lex");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Ident("ci".to_owned()),
+                &TokenKind::Colon,
+                &TokenKind::StringLiteral("tests/hash_props.rs".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn lexes_veriq_source_target() {
+        let tokens =
+            lex(r#"veriq: "aocs.verify_attitude""#).expect("a quoted veriq target should lex");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &TokenKind::Ident("veriq".to_owned()),
+                &TokenKind::Colon,
+                &TokenKind::StringLiteral("aocs.verify_attitude".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn lexes_empty_input_to_no_tokens() {
+        let tokens = lex("").expect("empty input should lex");
+
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn spans_non_ascii_character_on_char_boundary() {
+        let input = "objective √";
+
+        let error = lex(input).expect_err("a non-ASCII stray char should be rejected");
+
+        assert_eq!(error.message, "unexpected character");
+        // The span must stay on char boundaries so a renderer can slice it.
+        assert_eq!(&input[error.span.start..error.span.end], "√");
+    }
+
+    #[test]
+    fn lexes_tab_indented_fence() {
+        let tokens = lex(concat!("\t```md\n", "\tdescription\n", "\t```\n"))
+            .expect("a tab-indented fence should lex");
+
+        assert!(
+            tokens
+                .iter()
+                .any(|token| matches!(token.value, TokenKind::FenceBlock { .. }))
+        );
+    }
+
+    #[test]
+    fn preserves_multi_word_fence_info_string() {
+        let tokens = lex(concat!("```rust ignore\n", "x\n", "```\n"))
+            .expect("a multi-word fence info string should be accepted");
+
+        let info = tokens.iter().find_map(|token| match &token.value {
+            TokenKind::FenceBlock { info, .. } => Some(info.clone()),
+            _ => None,
+        });
+
+        assert_eq!(info, Some(Some("rust ignore".to_owned())));
+    }
+}
