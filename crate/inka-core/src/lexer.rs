@@ -75,12 +75,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
 
-            if self.starts_with("\r\n") {
-                self.offset += 2;
-                continue;
-            }
-
-            if self.starts_with("\n") {
+            if self.starts_with("\n") || self.starts_with("\r") {
                 self.offset += 1;
                 continue;
             }
@@ -320,7 +315,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn is_at_line_start(&self) -> bool {
-        self.offset == 0 || matches!(self.input.as_bytes().get(self.offset - 1), Some(b'\n'))
+        self.offset == 0
+            || matches!(
+                self.input.as_bytes().get(self.offset - 1),
+                Some(b'\n' | b'\r')
+            )
     }
 
     fn find_line_end(&self, start: usize) -> usize {
@@ -712,6 +711,38 @@ objective root { // opening comment
             assert!(token.span.start <= token.span.end);
             assert!(token.span.end <= input.len());
         }
+    }
+
+    #[test]
+    fn handles_cr_only_line_endings() {
+        let input = concat!(
+            "objective root {\r",
+            "```md\r",
+            "description\r",
+            "```\r",
+            "}\r",
+        );
+
+        let tokens = lex(input).expect("CR-only input should lex successfully");
+
+        assert_eq!(tokens.len(), 5);
+        assert!(matches!(tokens[0].value, TokenKind::Objective));
+        assert_eq!(tokens[1].value, TokenKind::Ident("root".to_owned()));
+        assert!(matches!(tokens[2].value, TokenKind::LeftBrace));
+        assert!(matches!(tokens[4].value, TokenKind::RightBrace));
+
+        let TokenKind::FenceBlock {
+            raw,
+            info,
+            content_span,
+        } = &tokens[3].value
+        else {
+            panic!("expected a fence token");
+        };
+
+        assert_eq!(raw, "description\r");
+        assert_eq!(info.as_deref(), Some("md"));
+        assert_eq!(&input[content_span.start..content_span.end], raw);
     }
 
     #[test]
