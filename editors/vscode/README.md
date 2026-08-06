@@ -3,7 +3,7 @@
 `.inka` ファイルの最小シンタックスハイライト(TextMate 文法のみ、LSP なし)。
 
 対応: ブロックキーワード(`objective` / `structure` / `bind` / `fiat`)、命題 ID、タグ(`#safety`)、
-プロパティ(`children:` / `source:` / `until:` / `promote:`)、`veriq:` 参照、
+プロパティ(`children:` / `ci:` / `veriq:` / `until:` / `promote:` / `reason:`)、引用符付きの値、
 フェンス付き description(markdown 埋め込み+ `{$var}` の強調)、`//` コメント。
 
 ## インストール(開発用)

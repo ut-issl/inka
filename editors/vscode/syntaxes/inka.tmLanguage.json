@@ -23,7 +23,7 @@
       }
     },
     "property": {
-      "begin": "^\\s*(children|source|until|promote)\\s*(:)",
+      "begin": "^\\s*(children|ci|veriq|until|promote|reason)\\s*(:)",
       "beginCaptures": {
         "1": { "name": "keyword.other.property.inka" },
         "2": { "name": "punctuation.separator.key-value.inka" }
@@ -31,8 +31,8 @@
       "end": "$",
       "patterns": [
         {
-          "match": "veriq:[A-Za-z_][A-Za-z0-9_.]*",
-          "name": "string.unquoted.source-reference.inka"
+          "match": "\"[^\"]*\"",
+          "name": "string.quoted.double.inka"
         },
         {
           "match": "[A-Za-z_][A-Za-z0-9_]*",

@@ -1,6 +1,6 @@
 # 08: CI bind provider(テストターゲット粒度)
 
-対象: `source: ci:<target>` の bind を、CI が生成した ci-export.json と照合して
+対象: `ci: "<target>"` の bind を、CI が生成した ci-export.json と照合して
 established にする。ミニマムの bind はこの provider のみ。
 
 ## ci-export.json
@@ -68,7 +68,7 @@ jobs:
 
 bind ノードについて:
 
-1. `source` が `ci:<id>` であること(`veriq:` はミニマムでは常に未確立+blame)
+1. bind が `ci: "<id>"` であること(`veriq:` はミニマムでは常に未確立+blame)
 2. export に `<id>` のエントリがある(なければ BindNoExport)
 3. **現在のワークツリーのそのファイルの interface_hash** と export の
    `interface_hash` が一致(不一致 = テストが検証後に変わった → BindInterfaceChanged)
@@ -86,5 +86,5 @@ bind ノードについて:
 - `inka ci-export` 自体のテスト: 一時ディレクトリに偽の tests/*.rs を置いて
   JSON の insta スナップショット
 - E2E(手動でよい): dogfood の `local_view_hash_sound` を
-  `bind { source: ci:tests/hash_props.rs }` に書き換え → approve → eval established、
+  `bind { ci: "tests/hash_props.rs" }` に書き換え → approve → eval established、
   テストファイルに1文字足す → eval で BindInterfaceChanged が出る
