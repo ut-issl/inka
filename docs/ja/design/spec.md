@@ -16,7 +16,7 @@ structure <id> #tag1 #tag2 {
 
 bind <id> {
   ```...```
-  source: veriq:<module>.<name>   // または ci:<test-target>
+  ci: "<test-target>"   // または veriq: "<module>.<name>"
 }
 
 fiat <id> {
@@ -32,14 +32,15 @@ fiat <id> {
 - ブロックにつきフェンス付き description をちょうど1つ。インフォ文字列は受理して予約。
   フェンス内=自然言語のみ、フェンス外=キーワードのみ。
 - モード別必須プロパティ(パース時に強制): `structure`/`objective` → `children:`
-  必須、`bind` → `source:` 必須、`fiat` → どちらも不可。
+  必須、`bind` → `ci:` か `veriq:` を厳密に1つ必須、`fiat` → どちらも不可。
 - 注釈は `until:` をアンカーとするグループ — `reason:` と `promote:` は `until:`
   がある場合にのみ書ける。`until: <phase>` と `reason: "<短文>"` は全ブロックに
   書ける。`promote:` は後継モードの宣言で任意(`promote:` なしの `until:` は単純な
   期限切れ): fiat では `structure` | `bind`、objective では `structure` のみ。
   structure と bind に `promote:` は書けない — モード変更の予告は想定しない。
-  `reason` は二重引用符の1行文字列でエスケープなし — 言語中で唯一の引用符トークン
-  (description は引用符を使わない)。
+  `reason`・`ci:`・`veriq:` プロパティは二重引用符の1行文字列値でエスケープなし —
+  言語中で唯一の引用符値。`ci:` / `veriq:` の値は不透明な evidence ターゲットで、
+  check は中身を解釈しない。description は引用符を使わない。
 - `//` 行コメント。字句段階で落ち、ハッシュされない。
 - `{$` のエスケープは無い — 正確なパターン `{$識別子}` のみが補間で、それ以外は
   文字通り。
@@ -49,8 +50,8 @@ fiat <id> {
 - 名前空間: 区切りは `::`、`argument/` 配下のディレクトリから自動付与
   (`argument/power/x.inka` → `power::<id>`)。直下のファイルは名前空間なし。
   同一名前空間内の参照は接頭辞省略可。ID の中に `::` は書けない。ポリシーセレクタも
-  同記法(`power::*`)。veriq の source 参照は Python の `module.function` 名のまま。
-- `source:` は check では形式検査のみ。実在と pass/fail は eval の仕事。
+  同記法(`power::*`)。`veriq:` 参照は Python の `module.function` 名のまま。
+- `ci:` / `veriq:` 参照は check では形式検査のみ。実在と pass/fail は eval の仕事。
 
 ## プロジェクト構成
 
@@ -76,7 +77,7 @@ fiat <id> {
   - fiat = tag ‖ desc ‖ annotations
   - bind = tag ‖ desc ‖ annotations ‖ interface_hash(生32バイト)‖ 仮定リスト
     (仮定集約が入るまでは空。席があるので後から埋めてもレイアウト変更にならない)
-- ハッシュ非包含: ID、タグ、コメント、`source:` の参照文字列。包含: 期限注釈。
+- ハッシュ非包含: ID、タグ、コメント、`ci:` / `veriq:` の参照文字列。包含: 期限注釈。
   値展開は正規化・ハッシュの前段 — ハッシュはプレースホルダを見ない。
 
 ## 承認レコード(v1)
@@ -114,7 +115,7 @@ fiat <id> {
 - `ci-export.json` v1: `commit`、`environment.lockfile_hash`、`targets[]`
   (`id` 例 `tests/hash_props.rs`、`interface_hash`(ファイル内容ハッシュ、CRLF→LF
   のみ)、`result`(`pass` | `fail`))。
-- `source: ci:<id>` の eval 照合: export にエントリがある/現在のワークツリーの
+- `ci: "<id>"` 参照の eval 照合: export にエントリがある/現在のワークツリーの
   ファイル界面ハッシュが export と一致/bind 承認の view_hash が現在の desc+界面
   ハッシュで再計算した値と一致/result が pass。export のコミット不一致は warning
   (内容の一致は界面ハッシュが担保)。
