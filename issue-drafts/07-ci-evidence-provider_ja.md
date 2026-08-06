@@ -1,89 +1,91 @@
-# bind: evidence provider の一般化と GitHub CI(テスト)provider の追加
+# bind: CI(テストターゲット)evidence provider の実装
 
 - **ラベル:** enhancement
-- **マイルストーン:** M8 周辺 — ただし veriq アダプタより**先に**、最初の実 bind
-  provider として実装する有力候補(仮定の集約が不要なため、veriq より厳密に単純)
-- **依存:** M3(bind をスタブにした `inka eval`)、ドラフト06(`inka check`)
+- **マイルストーン:** M8 周辺 — veriq アダプタより**先**に実装する有力候補(最初の実
+  bind provider。仮定の集約が不要なため veriq より単純)。
+- **依存:** bind をスタブにした `inka eval`(07-eval)、`inka check`(03/06)。
+- **実装ガイド:** `docs/poc-implementation/08-ci-provider.md`。
 
 ## 動機
 
-`source:` は現在 veriq 参照のみを受け付ける。CI で実行されるテストコードは同じ役割を
-果たせる: 人間の bind 承認が「このテストはこの命題の証拠として適切」を表明し、
-CI が真実性の側(このコミットで pass するか)を供給する。
+DSL は既に2つの evidence プロパティ——`veriq:`(Python calc 参照)と `ci:`(テスト
+ターゲット)——を区別する。その記法・provider 契約・`ci-export.json` v1 形式・eval 側
+照合は `spec.md` の *CI evidence provider* で確定済み。欠けているのは `ci:` provider の
+**実装**である。
 
-veriq 連携は最初からアダプタ1枚(JSON)に隔離されている。この Issue はその継ぎ目を
-**provider 契約**として一般化し、`ci:` を2番目の provider として追加する。
-ドッグフーディング上の見返り: dogfood 論証で `fiat until:M2 promote:bind` になっている
-命題(例 `local_view_hash_sound`)を、**inka 自身の CI で走る本物の proptest に bind**
-できるようになる。
+`ci:` はテストを機械証拠として立てる: 人間の bind 承認が「このテストはこの命題の証拠
+として適切」を表明し、CI が真実性の側(このコミットで pass するか)を供給する。
+ドッグフーディング上の見返り: 現在 `fiat until:M2 promote:bind` の命題(例
+`local_view_hash_sound`)を、**inka 自身の CI で走る本物の proptest に bind** できる。
 
-## provider 契約
+## spec で既に確定していること(再決定しない)
 
-bind が意味を持つために、どの evidence provider も次の4つを供給する:
+- **粒度:** テストターゲット(テストファイル1つ)。`ci: "tests/hash_props.rs"` で参照。
+- **provider 契約:** 内容アドレスの interface hash、pass が何を立証するかの人間可読な
+  言明、コミットに束縛された結果を「リポジトリの内容」として届けること(eval は外部
+  API を呼ばない)、環境ハッシュ。
+- **`ci-export.json` v1:** `commit`、`environment.lockfile_hash`、`targets[]`
+  = `{ id, interface_hash, result }`。`interface_hash` はテストファイルの内容ハッシュ
+  (CRLF→LF 正規化のみ)、`result` は `pass` | `fail`。
+- **eval 照合:** export に `<id>` のエントリがある/現在のワークツリーのファイルの
+  interface hash が export と一致/bind 承認の `view_hash` が現在の description +
+  interface hash で再計算した値と一致/`result` が pass。コミット不一致は warning
+  (内容の一致は interface hash が担保)。
 
-1. **内容アドレスの同一性** — 証拠の*界面*のハッシュ(テストなら正規化した関数 AST。
-   名前は同一性ではない)。bind 承認はこのハッシュに束縛され、テストの編集は承認を
-   失効させる。
-2. **言明(statement)** — pass が何を立証するかの人間可読な文(pytest なら
-   docstring)。承認時に提示される。
-3. **コミットに束縛された結果が「リポジトリの内容」として届くこと** — eval は外部 API を
-   呼ばない。provider は export ファイル(結果+コミット SHA)をリポジトリに書く。
-   veriq export JSON と同型。
-4. **環境** — lockfile ハッシュ+ CI ワークフロー定義ハッシュを環境ノードとして
-   (provider が対応するなら宣言された仮定も)。
+## スコープ(実装)
 
-## スコープ
+- **`inka ci-export` サブコマンド** — 各ターゲットの `interface_hash`(ファイル内容、
+  CRLF→LF)を計算し、現在のコミットの `ci-export.json` を書く。これが provider の
+  「結果をリポジトリ内容として届ける」部分。
+- **GitHub Actions ジョブ** — テストスイートを実行し、対象コミットごとに export を
+  コミット(または保存)する。
+- **eval 側 `ci:` 照合** — 上記の照合を実装。陳腐化・不一致の export は bind を単に
+  established にしない(明確な blame 付き)。
+- **dogfood 配線** — dogfood の命題1つ(例 `local_view_hash_sound`)を `fiat` から
+  `bind { ci: "..." }` に切り替え、本物の proptest に対して end-to-end で established に。
 
-- `source:` の provider 記法: `veriq:<module>.<name>` / `ci:<test-id>`
-  (テスト ID は pytest ネイティブ形式。例
-  `tests/test_hash.py::test_order_invariance`)
-- **テスト側の opt-in マーカー**(例 `@inka_evidence(statement="...")`):
-  注釈されたテストだけが bind 可能。マーカーが言明を運び、証拠の境界を明示する
-  (veriq の `@calc` と同じ規律)。
-- `ci-export.json` を生成する pytest プラグイン:
+## export 例(`ci-export.json` v1)
 
-  ```json
-  {
-    "commit": "abc123...",
-    "environment": { "lockfile_hash": "...", "workflow_hash": "..." },
-    "tests": [
-      {
-        "id": "tests/test_hash.py::test_order_invariance",
-        "interface_hash": "sha256:...",
-        "statement": "hash is invariant under child permutation",
-        "result": "pass"
-      }
-    ]
-  }
-  ```
+```json
+{
+  "commit": "abc123...",
+  "environment": { "lockfile_hash": "sha256:..." },
+  "targets": [
+    {
+      "id": "tests/hash_props.rs",
+      "interface_hash": "sha256:...",
+      "result": "pass"
+    }
+  ]
+}
+```
 
-- スイートを実行し export をコミット(または保存)する GitHub Actions ジョブ。
-- eval 側の照合: bind 承認のハッシュ == 現在の界面ハッシュ、export のコミット ==
-  評価対象コミット、result == pass。不一致・陳腐化した export は単に established に
-  ならない(明確な blame メッセージ付き)。
-- concept §2.1 の更新: 「source は veriq に限定」→「source は登録された evidence
-  provider への参照」+上記 provider 契約。
-- 完全性の強化パス(後日、M7 の機構): GitHub OIDC / Sigstore(`actions/attest`)による
-  CI 署名 attestation。`ci:github-actions` は非人間 attestor(`llm:<model>` の前例)と
-  同格になる。
+人間可読な言明は bind ノードの description が担い、export は同一性+結果のみを持つ
+(ターゲットごとの statement フィールドは持たない)。
 
 ## スコープ外
 
-- **有効内容(closure)の変更検出** — 界面が不変のままヘルパが変わるケース。
-  意図的に別 Issue(ドラフト08)に分離: veriq と ci に等しく適用され、かつ bind の
-  束縛先には**入れてはならない**(失効爆発のリスク)。
+- **有効内容(closure)の変更検出** — ターゲットファイル自体の内容ハッシュが一致した
+  ままヘルパが変わるケース。意図的に別 Issue(ドラフト08)へ分離: `veriq:` と `ci:` に
+  等しく適用され、bind の束縛先には**入れてはならない**(失効爆発のリスク)。
+
+## 完全性の強化パス(後日)
+
+- GitHub OIDC / Sigstore(`actions/attest`)による CI 署名 attestation。
+  `ci:github-actions` を非人間 attestor(`llm:<model>` の前例)と同格にする。初版では
+  スコープ外。
 
 ## 受け入れ条件
 
-- [ ] provider 契約が rustdoc に文書化され、`source:` の文法が一般化されている。
-- [ ] pytest マーカー+ export 生成が inka 自身の CI で動いている。
+- [ ] `inka ci-export` が実ターゲットに対し spec 形式の `ci-export.json` を生成する。
+- [ ] GitHub Actions ジョブが inka 自身の CI で export を生成する。
+- [ ] eval 側 `ci:` 照合を実装し、陳腐化・不一致に blame を出す。
 - [ ] dogfood の命題1つ(例 `local_view_hash_sound`)が本物の proptest に bind され、
       end-to-end で established になる。
-- [ ] bind されたテストの本体を編集すると bind 承認が失効する(テスト)。
-- [ ] concept.md §2.1 / §6 が provider 一般化に更新されている。
+- [ ] bind されたテストファイルの内容を編集すると bind 承認が失効する。
 
 ## 参照
 
-- inka-concept.md §2.1(source の限定)、§6(真実性/妥当性の分離)、
-  §9(attestation。非人間 attestor の `llm:` 前例)
-- inka-implementation-roadmap.md M8
+- `docs/en/design/spec.md` → *CI evidence provider (test-target granularity)*
+- `docs/en/design/poc-plan.md`(CI evidence provider の項)
+- `docs/poc-implementation/08-ci-provider.md`(実装ガイド)
