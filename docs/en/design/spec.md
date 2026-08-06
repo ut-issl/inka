@@ -16,7 +16,7 @@ structure <id> #tag1 #tag2 {
 
 bind <id> {
   ```...```
-  source: veriq:<module>.<name>   // or ci:<test-target>
+  ci: "<test-target>"   // or veriq: "<module>.<name>"
 }
 
 fiat <id> {
@@ -32,16 +32,19 @@ fiat <id> {
 - Exactly one fenced description per block. Fence info strings are accepted and
   reserved. Inside fences: natural language only; outside: keywords only.
 - Mode-required properties, enforced at parse time: `structure`/`objective` →
-  `children:` required; `bind` → `source:` required; `fiat` → neither allowed.
+  `children:` required; `bind` → exactly one of `ci:` / `veriq:` required;
+  `fiat` → neither allowed.
 - Annotations form a group anchored on `until:` — `reason:` and `promote:` may
   only appear together with `until:`. `until: <phase>` and `reason: "<short
   text>"` may appear on any block. `promote:` names the successor mode and is
   optional (an `until:` without `promote:` is plain expiry): on fiat the
   target is `structure` or `bind`; on the objective it is `structure` only.
   structure and bind take no `promote:` — announcing a mode change there is
-  not supported. `reason` takes a double-quoted, single-line string with no
-  escape sequences — the only quoted token in the language; descriptions never
-  use quotes.
+  not supported. The `reason`, `ci:`, and `veriq:` properties take a
+  double-quoted, single-line string value with no escape sequences — the only
+  quoted values in the language. A `ci:` / `veriq:` value is the opaque
+  evidence target, which `check` does not interpret. Descriptions never use
+  quotes.
 - `//` line comments; dropped at the lexer, never hashed.
 - No escape for `{$` — only the exact pattern `{$identifier}` is interpolation;
   everything else is literal.
@@ -51,10 +54,10 @@ fiat <id> {
 - Namespaces: `::` separator, assigned by directory under `argument/`
   (`argument/power/x.inka` → `power::<id>`); root-level files are unnamespaced;
   same-namespace references may omit the prefix; `::` cannot be written inside
-  an ID; policy selectors use the same notation (`power::*`); veriq source
+  an ID; policy selectors use the same notation (`power::*`); `veriq:`
   references keep Python's dotted `module.function` names.
-- `source:` gets a format check only at `check` time; existence and pass/fail
-  are eval's job.
+- `ci:` / `veriq:` references get a format check only at `check` time;
+  existence and pass/fail are eval's job.
 
 ## Project layout
 
@@ -82,7 +85,7 @@ fiat <id> {
   - bind = tag ‖ desc ‖ annotations ‖ interface_hash (raw 32 bytes) ‖
     assumption list (empty until assumption aggregation lands; the slot exists
     so filling it later is not a layout change)
-- Excluded from hashes: IDs, tags, comments, `source:` reference strings.
+- Excluded from hashes: IDs, tags, comments, `ci:` / `veriq:` reference strings.
   Included: deadline annotations. Interpolation happens before normalization
   and hashing — hashes never see placeholders.
 
@@ -127,7 +130,7 @@ fiat <id> {
 - `ci-export.json` v1: `commit`; `environment.lockfile_hash`; `targets[]` with
   `id` (a test target such as `tests/hash_props.rs`), `interface_hash`
   (file-content hash, CRLF→LF normalization only), `result` (`pass` | `fail`).
-- eval matching for `source: ci:<id>`: the export has an entry for `<id>`; the
+- eval matching for a `ci: "<id>"` reference: the export has an entry for `<id>`; the
   current worktree file's interface hash equals the export's; the bind
   approval's view_hash recomputes against the current description + interface
   hash; the result is pass. An export commit mismatch is a warning (content

@@ -38,7 +38,7 @@
   decline 拒否権、宣言されたフェーズ順序に対するノード側 `until:` のハード失効
   (期限後に付けた承認もカウントしない)、原因別の blame 出力、clean でなければ
   非ゼロ終了。
-- **CI evidence provider(テストターゲット粒度)**: `source: ci:<target>`、CI で
+- **CI evidence provider(テストターゲット粒度)**: `ci: "<target>"`、CI で
   生成する `ci-export.json`(生成は `inka ci-export` サブコマンドが望ましい)、
   eval 側の照合。
 

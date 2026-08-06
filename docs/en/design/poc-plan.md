@@ -43,7 +43,7 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   approval); stale detection; decline veto; hard node-side `until:` expiry
   against the declared phase order (post-deadline approvals do not count
   either); blame output with per-cause reasons; non-zero exit when not clean.
-- **CI evidence provider (test-target granularity)**: `source: ci:<target>`;
+- **CI evidence provider (test-target granularity)**: `ci: "<target>"`;
   `ci-export.json` generated in CI (an `inka ci-export` subcommand is the
   preferred generator); eval-side matching.
 
