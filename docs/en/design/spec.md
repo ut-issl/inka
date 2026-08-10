@@ -29,6 +29,9 @@ fiat <id> {
 
 - Blocks: `objective` / `structure` / `bind` / `fiat` + id + optional tags +
   `{}`. Indentation is never structurally significant.
+- Identifiers (block ids, references, phase names, tag names) match
+  `[A-Za-z_][A-Za-z0-9_-]*`; namespace-qualified references join identifiers
+  with `::`.
 - Exactly one fenced description per block. Fence info strings are accepted and
   reserved. Inside fences: natural language only; outside: keywords only.
 - Mode-required properties, enforced at parse time: `structure`/`objective` →

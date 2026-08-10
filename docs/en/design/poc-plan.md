@@ -10,7 +10,7 @@ The following loop runs against the dogfood project
 (`tests/fixtures/dogfood`):
 
 1. Write the argument → `inka check` passes
-2. Approve it yourself with `inka approve` → `inka eval` is clean
+2. Approve it yourself with `inka review` → `inka eval` is clean
 3. Edit a contract (description or a value) → exactly the affected approvals go
    stale and appear in blame
 4. Re-approve → clean again
@@ -34,9 +34,10 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   golden-vector set freezes the layout before real approvals are recorded.
 - **Approval records**: the v1 schema with `sig` left empty; jsonl read/write;
   the canonical-signing-bytes function (no signing yet).
-- **`inka approve` (CLI, no TUI)**: queue of missing/stale targets; per-target
-  approve / decline (comment required) under `--as <approver>`; append-only
-  record writing. The queue and eval share one validity function.
+- **`inka review` (CLI, no TUI)**: queue of missing/stale targets; per-target
+  approve / decline (comment required) under `--as <approver>`, interactively
+  or via `--approve` / `--decline` on a single target; append-only record
+  writing. The queue and eval share one validity function.
 - **Policy**: built-in default only — every target needs `any(1)`. No policy
   language. Decline veto applies.
 - **`inka eval`**: established fixpoint (the objective requires its own
