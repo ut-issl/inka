@@ -8,7 +8,7 @@
 次のループが dogfood プロジェクト(`tests/fixtures/dogfood`)に対して回ること:
 
 1. 論証を書く → `inka check` が通る
-2. 自分で `inka approve` する → `inka eval` が clean になる
+2. 自分で `inka review` で承認する → `inka eval` が clean になる
 3. 契約(description または値)を編集する → 影響を受けた承認だけが stale になり
    blame に出る
 4. 再承認する → clean に戻る
@@ -29,8 +29,9 @@
   bind ハッシュは証拠の界面ハッシュ+空の仮定スロット。本物の承認を記録し始める前に最小のゴールデンベクタでレイアウトを凍結。
 - **承認レコード**: `sig` を空にした v1 スキーマ、jsonl の読み書き、署名対象の
   正規化バイト列関数(署名はしない)。
-- **`inka approve`(CLI、TUI なし)**: 不足/stale 対象のキュー、`--as <approver>` の
-  下での対象ごとの approve / decline(コメント必須)、追記専用のレコード書き込み。
+- **`inka review`(CLI、TUI なし)**: 不足/stale 対象のキュー、`--as <approver>` の
+  下での対象ごとの approve / decline(コメント必須)。対話処理に加えて単一対象への
+  `--approve` / `--decline` の非対話形を持つ。追記専用のレコード書き込み。
   キューと eval は1つの有効性判定関数を共有する。
 - **ポリシー**: 組み込みデフォルトのみ — 全対象 `any(1)`。ポリシー言語なし。
   decline の拒否権は有効。
