@@ -22,8 +22,7 @@ fiat local_view_binding {
   ```
   until: M3
   promote: bind
-  // Once eval exists, bind this to the scenario test
-  // "approve → edit a grandchild → not stale".
+  reason: "bind to the scenario test: approve, edit a grandchild, stays fresh"
 }
 
 fiat local_view_hash_sound {
@@ -32,7 +31,7 @@ fiat local_view_hash_sound {
   ```
   until: M2
   promote: bind
-  // Bind to the hash v1 golden vectors + proptests (first CI bind target).
+  reason: "bind to the hash v1 golden vectors and proptests (first CI bind target)"
 }
 
 structure surface_edits_free {
