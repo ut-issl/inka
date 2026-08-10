@@ -25,12 +25,9 @@ pub enum TokenKind {
 
 pub type Token = Spanned<TokenKind>;
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{message}")]
-pub struct LexError {
-    pub span: Span,
-    pub message: String,
-}
+/// An error produced while lexing: the shared [`crate::source::Diagnostic`]
+/// shape under the name callers of this module expect.
+pub type LexError = crate::source::Diagnostic;
 
 pub struct Lexer<'a> {
     file_id: FileId,

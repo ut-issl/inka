@@ -18,20 +18,16 @@ use crate::ast::{
 use crate::lexer::{Token, TokenKind};
 use crate::source::{FileId, Span, Spanned};
 
-/// A parse diagnostic: a message anchored to the span it concerns.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{message}")]
-pub struct Diagnostic {
-    pub span: Span,
-    pub message: String,
-}
+pub use crate::source::Diagnostic;
 
 /// The outcome of a parse: every block that could be constructed, plus every
 /// diagnostic collected along the way. A non-empty `diagnostics` does not imply
 /// an empty `blocks`; recovery keeps producing well-formed blocks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parse {
+    /// Every block that assembled cleanly enough to be represented in the AST.
     pub blocks: Vec<Block>,
+    /// Every problem found, in source order.
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -80,8 +76,15 @@ struct RawBlock {
 }
 
 /// The validated common pieces of a block, handed to a per-mode builder.
+///
+/// `description` stays optional here so that a block missing its description
+/// still runs every mode-specific validation — all of its diagnostics surface
+/// in one pass — before the block itself is dropped.
 struct BlockParts {
-    common: BlockCommon,
+    id: Spanned<String>,
+    tags: Vec<Spanned<String>>,
+    span: Span,
+    description: Option<Description>,
     deadline: Option<Deadline>,
     promote: Option<Spanned<PromoteMode>>,
     children: Option<Spanned<Vec<Spanned<String>>>>,
@@ -225,7 +228,7 @@ impl<'a> Parser<'a> {
                 Some(_) => {
                     let span = self.current_span();
                     self.error(span, "expected a property or `}`");
-                    self.recover_within_block();
+                    self.skip_to_entry_boundary();
                 }
             }
         }
@@ -271,7 +274,7 @@ impl<'a> Parser<'a> {
         if !matches!(self.peek_kind(), Some(TokenKind::Colon)) {
             let span = self.current_span();
             self.error(span, format!("expected `:` after `{name}`"));
-            self.recover_within_block();
+            self.skip_to_entry_boundary();
             return;
         }
         self.pos += 1;
@@ -280,27 +283,32 @@ impl<'a> Parser<'a> {
             "children" => self.parse_children(raw, name_span),
             "ci" => self.parse_source(raw, name_span, SourceScheme::Ci),
             "veriq" => self.parse_source(raw, name_span, SourceScheme::Veriq),
-            "until" => self.parse_until(raw),
-            "reason" => self.parse_reason(raw),
+            "until" => self.parse_until(raw, name_span),
+            "reason" => self.parse_reason(raw, name_span),
             "promote" => self.parse_promote(raw, name_span),
             _ => {
                 self.error(name_span, format!("unknown property `{name}`"));
-                self.skip_property_value();
+                self.skip_to_entry_boundary();
             }
         }
     }
 
     fn parse_children(&mut self, raw: &mut RawBlock, name_span: Span) {
         let mut ids = Vec::new();
-        if let Some(id) = self.expect_ident("expected a child identifier") {
-            ids.push(id);
-            while matches!(self.peek_kind(), Some(TokenKind::Comma)) {
-                self.pos += 1;
-                match self.expect_ident("expected a child identifier after `,`") {
-                    Some(id) => ids.push(id),
-                    None => break,
+        match self.parse_child_ref("expected a child identifier") {
+            Some(id) => {
+                ids.push(id);
+                while matches!(self.peek_kind(), Some(TokenKind::Comma)) {
+                    self.pos += 1;
+                    let Some(id) = self.parse_child_ref("expected a child identifier after `,`")
+                    else {
+                        self.skip_to_entry_boundary();
+                        break;
+                    };
+                    ids.push(id);
                 }
             }
+            None => self.skip_to_entry_boundary(),
         }
 
         if raw.children.is_some() {
@@ -313,8 +321,25 @@ impl<'a> Parser<'a> {
         });
     }
 
+    /// Parses one child reference: an identifier optionally qualified with
+    /// `::` namespace segments (`power::x`), collapsed into a single spanned
+    /// string exactly as written.
+    fn parse_child_ref(&mut self, message: &str) -> Option<Spanned<String>> {
+        let mut id = self.expect_ident(message)?;
+        while matches!(self.peek_kind(), Some(TokenKind::DoubleColon)) {
+            self.pos += 1;
+            let segment = self.expect_ident("expected an identifier after `::`")?;
+            id = Spanned {
+                span: join(id.span, segment.span),
+                value: format!("{}::{}", id.value, segment.value),
+            };
+        }
+        Some(id)
+    }
+
     fn parse_source(&mut self, raw: &mut RawBlock, name_span: Span, scheme: SourceScheme) {
         let Some(value) = self.expect_string("expected a quoted reference") else {
+            self.skip_to_entry_boundary();
             return;
         };
         let source = match scheme {
@@ -336,23 +361,25 @@ impl<'a> Parser<'a> {
         raw.source = Some(spanned);
     }
 
-    fn parse_until(&mut self, raw: &mut RawBlock) {
+    fn parse_until(&mut self, raw: &mut RawBlock, name_span: Span) {
         let Some(phase) = self.expect_ident("expected a phase name after `until:`") else {
+            self.skip_to_entry_boundary();
             return;
         };
         if raw.until.is_some() {
-            self.error(phase.span, "duplicate property `until`");
+            self.error(name_span, "duplicate property `until`");
             return;
         }
         raw.until = Some(phase);
     }
 
-    fn parse_reason(&mut self, raw: &mut RawBlock) {
+    fn parse_reason(&mut self, raw: &mut RawBlock, name_span: Span) {
         let Some(text) = self.expect_string("expected a quoted reason after `reason:`") else {
+            self.skip_to_entry_boundary();
             return;
         };
         if raw.reason.is_some() {
-            self.error(text.span, "duplicate property `reason`");
+            self.error(name_span, "duplicate property `reason`");
             return;
         }
         raw.reason = Some(text);
@@ -375,6 +402,7 @@ impl<'a> Parser<'a> {
             _ => {
                 let span = self.current_span();
                 self.error(span, "expected a promote target after `promote:`");
+                self.skip_to_entry_boundary();
                 return;
             }
         };
@@ -408,13 +436,7 @@ impl<'a> Parser<'a> {
         span: Span,
         mut raw: RawBlock,
     ) -> Option<Block> {
-        let description = self.resolve_description(&mut raw, id.span)?;
-        let common = BlockCommon {
-            id,
-            tags,
-            description,
-            span,
-        };
+        let description = self.resolve_description(&mut raw, id.span);
 
         let deadline = if let Some(until) = raw.until.take() {
             Some(Deadline {
@@ -429,7 +451,10 @@ impl<'a> Parser<'a> {
         };
 
         let parts = BlockParts {
-            common,
+            id,
+            tags,
+            span,
+            description,
             deadline,
             promote: raw.promote.take(),
             children: raw.children.take(),
@@ -437,10 +462,10 @@ impl<'a> Parser<'a> {
         };
 
         match mode {
-            Mode::Objective => Some(self.build_objective(parts)),
-            Mode::Structure => Some(self.build_structure(parts)),
+            Mode::Objective => self.build_objective(parts),
+            Mode::Structure => self.build_structure(parts),
             Mode::Bind => self.build_bind(parts),
-            Mode::Fiat => Some(self.build_fiat(parts)),
+            Mode::Fiat => self.build_fiat(parts),
         }
     }
 
@@ -466,7 +491,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn build_objective(&mut self, parts: BlockParts) -> Block {
+    fn build_objective(&mut self, parts: BlockParts) -> Option<Block> {
         self.forbid_source(parts.source.as_ref(), "objective");
         let deadline = match (parts.deadline, parts.promote) {
             (Some(deadline), promote) => Some(ObjectiveDeadline {
@@ -478,43 +503,42 @@ impl<'a> Parser<'a> {
                 None
             }
         };
-        let children = self.require_children(parts.children, parts.common.id.span, "objective");
-        Block::Objective(ObjectiveBlock {
-            common: parts.common,
+        let children = self.require_children(parts.children, parts.id.span, "objective");
+        Some(Block::Objective(ObjectiveBlock {
+            common: common(parts.id, parts.tags, parts.description?, parts.span),
             deadline,
             children,
-        })
+        }))
     }
 
-    fn build_structure(&mut self, parts: BlockParts) -> Block {
+    fn build_structure(&mut self, parts: BlockParts) -> Option<Block> {
         self.forbid_source(parts.source.as_ref(), "structure");
         self.forbid_promote(parts.promote.as_ref(), "structure");
-        let children = self.require_children(parts.children, parts.common.id.span, "structure");
-        Block::Structure(StructureBlock {
-            common: parts.common,
+        let children = self.require_children(parts.children, parts.id.span, "structure");
+        Some(Block::Structure(StructureBlock {
+            common: common(parts.id, parts.tags, parts.description?, parts.span),
             deadline: parts.deadline,
             children,
-        })
+        }))
     }
 
     fn build_bind(&mut self, parts: BlockParts) -> Option<Block> {
         self.forbid_children(parts.children.as_ref(), "bind");
         self.forbid_promote(parts.promote.as_ref(), "bind");
-        let Some(source) = parts.source else {
+        if parts.source.is_none() {
             self.error(
-                parts.common.id.span,
+                parts.id.span,
                 "a bind requires exactly one of `ci:` or `veriq:`",
             );
-            return None;
-        };
+        }
         Some(Block::Bind(BindBlock {
-            common: parts.common,
+            common: common(parts.id, parts.tags, parts.description?, parts.span),
             deadline: parts.deadline,
-            source,
+            source: parts.source?,
         }))
     }
 
-    fn build_fiat(&mut self, parts: BlockParts) -> Block {
+    fn build_fiat(&mut self, parts: BlockParts) -> Option<Block> {
         self.forbid_children(parts.children.as_ref(), "fiat");
         self.forbid_source(parts.source.as_ref(), "fiat");
         let deadline = match (parts.deadline, parts.promote) {
@@ -527,10 +551,10 @@ impl<'a> Parser<'a> {
                 None
             }
         };
-        Block::Fiat(FiatBlock {
-            common: parts.common,
+        Some(Block::Fiat(FiatBlock {
+            common: common(parts.id, parts.tags, parts.description?, parts.span),
             deadline,
-        })
+        }))
     }
 
     // --- Mode-specific validation helpers --------------------------------
@@ -603,12 +627,31 @@ impl<'a> Parser<'a> {
                 value: name.clone(),
             };
             self.pos += 1;
-            Some(ident)
-        } else {
-            let span = self.current_span();
-            self.error(span, message.to_owned());
-            None
+            return Some(ident);
         }
+
+        let span = self.current_span();
+
+        /*
+         * A mode keyword in value position is a common mistake; naming it
+         * beats the generic message. It is consumed so it cannot cascade
+         * into a bogus "unclosed block" — unless it is followed by an
+         * identifier, in which case it likely really is the next block's
+         * header and block-level recovery must see it.
+         */
+        if let Some(keyword) = self.peek_kind().and_then(keyword_text)
+            && !matches!(self.peek_kind_at(1), Some(TokenKind::Ident(_)))
+        {
+            self.error(
+                span,
+                format!("`{keyword}` is a reserved keyword and cannot be used as an identifier"),
+            );
+            self.pos += 1;
+            return None;
+        }
+
+        self.error(span, message.to_owned());
+        None
     }
 
     fn expect_string(&mut self, message: &str) -> Option<Spanned<String>> {
@@ -630,9 +673,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Skips a malformed or unknown property's value up to the next entry
-    /// boundary, so the rest of the block still parses.
-    fn skip_property_value(&mut self) {
+    /// Skips a malformed entry up to the next entry boundary — the next
+    /// property (an identifier directly followed by `:`), description fence,
+    /// `}`, mode keyword, or EOF — so the rest of the block still parses.
+    fn skip_to_entry_boundary(&mut self) {
         loop {
             let at_boundary = match self.peek_kind() {
                 None | Some(TokenKind::RightBrace | TokenKind::FenceBlock { .. }) => true,
@@ -651,12 +695,6 @@ impl<'a> Parser<'a> {
 
     fn recover_to_next_block(&mut self) {
         while !self.at_eof() && !self.at_mode_keyword() {
-            self.pos += 1;
-        }
-    }
-
-    fn recover_within_block(&mut self) {
-        while !self.at_eof() && !self.at_right_brace() && !self.at_mode_keyword() {
             self.pos += 1;
         }
     }
@@ -700,9 +738,19 @@ impl<'a> Parser<'a> {
     fn at_mode_keyword(&self) -> bool {
         self.peek_kind().is_some_and(is_mode_keyword)
     }
+}
 
-    fn at_right_brace(&self) -> bool {
-        matches!(self.peek_kind(), Some(TokenKind::RightBrace))
+fn common(
+    id: Spanned<String>,
+    tags: Vec<Spanned<String>>,
+    description: Description,
+    span: Span,
+) -> BlockCommon {
+    BlockCommon {
+        id,
+        tags,
+        description,
+        span,
     }
 }
 
@@ -727,13 +775,22 @@ fn mode_of(kind: &TokenKind) -> Option<Mode> {
 }
 
 fn is_mode_keyword(kind: &TokenKind) -> bool {
-    matches!(
-        kind,
-        TokenKind::Objective | TokenKind::Structure | TokenKind::Bind | TokenKind::Fiat
-    )
+    keyword_text(kind).is_some()
+}
+
+/// The source text of a mode keyword token, for use in diagnostics.
+fn keyword_text(kind: &TokenKind) -> Option<&'static str> {
+    match kind {
+        TokenKind::Objective => Some("objective"),
+        TokenKind::Structure => Some("structure"),
+        TokenKind::Bind => Some("bind"),
+        TokenKind::Fiat => Some("fiat"),
+        _ => None,
+    }
 }
 
 fn join(start: Span, end: Span) -> Span {
+    debug_assert_eq!(start.file_id, end.file_id);
     Span {
         file_id: start.file_id,
         start: start.start,
@@ -891,7 +948,7 @@ mod tests {
         );
     }
 
-    // --- Diagnostics: the breakage fixtures from 01-syntax.md -------------
+    // --- Diagnostics: the breakage cases from docs/en/design/spec.md ------
 
     #[test]
     fn rejects_block_without_description() {
@@ -1060,5 +1117,142 @@ mod tests {
 
         assert!(parse.blocks.is_empty());
         assert!(parse.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parses_namespaced_children() {
+        let input = "objective root {\n```\nRoot\n```\nchildren: power::x, y\n}\n";
+        let parse = parse_str(input);
+
+        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        let Some(Block::Objective(block)) = parse.blocks.first() else {
+            panic!("expected an objective block");
+        };
+        let child_ids: Vec<&str> = block.children.iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(child_ids, vec!["power::x", "y"]);
+
+        let first = &block.children[0];
+        assert_eq!(&input[first.span.start..first.span.end], "power::x");
+    }
+
+    #[test]
+    fn parses_multiple_tags() {
+        let parse = parse_str("structure s #a #b {\n```\nClaim\n```\nchildren: c\n}\n");
+
+        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        let Some(Block::Structure(block)) = parse.blocks.first() else {
+            panic!("expected a structure block");
+        };
+        let tags: Vec<&str> = block.common.tags.iter().map(|t| t.value.as_str()).collect();
+        assert_eq!(tags, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn parses_bind_with_deadline() {
+        let parse = parse_str(
+            "bind b {\n```\nClaim\n```\nci: \"tests/x.rs\"\nuntil: M2\nreason: \"pending rig\"\n}\n",
+        );
+
+        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        let Some(Block::Bind(block)) = parse.blocks.first() else {
+            panic!("expected a bind block");
+        };
+        let deadline = block.deadline.as_ref().expect("a deadline");
+        assert_eq!(deadline.until.value, "M2");
+        assert_eq!(
+            deadline.reason.as_ref().map(|r| r.value.as_str()),
+            Some("pending rig")
+        );
+    }
+
+    #[test]
+    fn parses_fiat_promote_to_structure() {
+        let parse = parse_str("fiat f {\n```\nClaim\n```\nuntil: M2\npromote: structure\n}\n");
+
+        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        let Some(Block::Fiat(block)) = parse.blocks.first() else {
+            panic!("expected a fiat block");
+        };
+        let deadline = block.deadline.as_ref().expect("a deadline");
+        assert_eq!(
+            deadline.promote.as_ref().map(|p| p.value),
+            Some(FiatPromoteTarget::Structure)
+        );
+    }
+
+    #[test]
+    fn recovers_to_next_property_after_missing_colon() {
+        let parse = parse_str("objective root {\n```\nRoot\n```\nfoo\nchildren: a\n}\n");
+
+        assert_eq!(
+            messages(&parse),
+            vec!["expected `:` after `foo`"],
+            "recovery must not swallow the following valid property"
+        );
+        let Some(Block::Objective(block)) = parse.blocks.first() else {
+            panic!("expected an objective block");
+        };
+        let child_ids: Vec<&str> = block.children.iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(child_ids, vec!["a"]);
+    }
+
+    #[test]
+    fn keeps_later_property_after_bad_property_value() {
+        // `until:` is given a string instead of a phase name; `reason:` must
+        // still be seen (proved by its own requires-until diagnostic).
+        let parse = parse_str("fiat f {\n```\nClaim\n```\nuntil: \"M2\"\nreason: \"why\"\n}\n");
+
+        assert!(
+            has_message(&parse, "expected a phase name after `until:`"),
+            "{:?}",
+            messages(&parse)
+        );
+        assert!(
+            has_message(&parse, "`reason:` requires `until:`"),
+            "the property after the bad value must not be swallowed: {:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn duplicate_property_diagnostic_points_at_property_name() {
+        let input = "fiat f {\n```\nClaim\n```\nuntil: M2\nuntil: M3\n}\n";
+        let parse = parse_str(input);
+
+        let diagnostic = parse
+            .diagnostics
+            .iter()
+            .find(|d| d.message.contains("duplicate property `until`"))
+            .expect("a duplicate diagnostic");
+        assert_eq!(&input[diagnostic.span.start..diagnostic.span.end], "until");
+    }
+
+    #[test]
+    fn reports_mode_violations_even_without_description() {
+        let parse = parse_str("fiat f {\nchildren: a\n}\n");
+
+        assert!(parse.blocks.is_empty());
+        assert!(
+            has_message(&parse, "exactly one description"),
+            "{:?}",
+            messages(&parse)
+        );
+        assert!(
+            has_message(&parse, "a fiat cannot have `children:`"),
+            "mode validation must run even when the description is missing: {:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn rejects_keyword_as_child_identifier_with_one_diagnostic() {
+        let parse = parse_str("objective root {\n```\nRoot\n```\nchildren: fiat\n}\n");
+
+        assert_eq!(
+            messages(&parse),
+            vec!["`fiat` is a reserved keyword and cannot be used as an identifier"],
+            "one typo must not cascade into unclosed-block errors"
+        );
+        assert_eq!(parse.blocks.len(), 1, "the block itself survives");
     }
 }
