@@ -81,6 +81,19 @@ impl SourceMap {
     }
 }
 
+/// A message anchored to the span it concerns.
+///
+/// This is the one diagnostic shape shared by every pass (lexer, parser, and
+/// later checks), so a renderer or caller handles them uniformly.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
+pub struct Diagnostic {
+    /// The source range the message is about.
+    pub span: Span,
+    /// Human-readable description of the problem.
+    pub message: String,
+}
+
 /// Half-open byte range `[start, end)` within one source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {

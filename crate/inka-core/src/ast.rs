@@ -112,11 +112,11 @@ pub enum ObjectivePromoteTarget {
 /// than to the AST.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceRef {
-    /// A `veriq:<module>.<name>` reference.
+    /// A `veriq: "<module>.<name>"` reference.
     ///
     /// The dotted Python name is preserved verbatim.
     Veriq(String),
-    /// A `ci:<test-target>` reference, such as `ci:tests/hash_props.rs`.
+    /// A `ci: "<test-target>"` reference, such as `ci: "tests/hash_props.rs"`.
     Ci(String),
 }
 
