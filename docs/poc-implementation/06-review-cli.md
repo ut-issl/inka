@@ -1,6 +1,9 @@
-# 06: `inka approve`(CLI)
+# 06: `inka review`(CLI)
 
 対象: キュー導出と承認レコードの追記。TUI は作らない。
+
+コマンド名は行為(レビュー)を指す。approve / decline は対象ごとに選ぶ**結果**であり、
+フラグとレコードの語彙はレコードスキーマ(05)の `approve | decline` に揃える。
 
 ## キュー導出
 
@@ -28,10 +31,16 @@ pub struct QueueItem {
 ## CLI の形
 
 ```
-inka approve --as shimomura            # キューを対話的に処理
-inka approve --as shimomura --list     # キュー表示のみ
-inka approve --as shimomura <id>       # 単一対象を直接
+inka review --as shimomura                    # キューを対話的に処理
+inka review --as shimomura --list             # キュー表示のみ
+inka review --as shimomura <id> --approve     # 単一対象を非対話で承認
+inka review --as shimomura <id> --decline --comment "..."   # 非対話 decline
 ```
+
+- `--approve` / `--decline` は**非対話の単一対象**専用。対話モードはフラグ無しで
+  開き、対象ごとに結果を選ぶ。
+- `--decline` は `--comment` 必須。引数パーサの段階で強制する(対話モードの
+  コメント必須入力と同じ規律を型で持つ)。
 
 対話ループ(1対象ずつ):
 
@@ -47,7 +56,8 @@ inka approve --as shimomura <id>       # 単一対象を直接
 - レコード追記は「1行を組み立てて append」だけにする。既存行の書き換え・削除の
   コードパスを**作らない**(append-only を関数構成で守る)
 - `--as` 未指定は error(環境変数フォールバックは後で足せる。まず明示のみ)
-- 標準入力が TTY でない場合(パイプ)は対話モードを拒否して `--list` を促す
+- 標準入力が TTY でない場合(パイプ)は対話モードを拒否して `--list` か
+  単一対象+`--approve`/`--decline` の非対話形を促す
 - timestamp の取得(now)は cli/ 層に置き、キュー導出・レコード構築の純関数には
   引数で渡す(eval の時計非依存と同じ規律)
 

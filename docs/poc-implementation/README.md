@@ -11,7 +11,7 @@ PoC([../en/design/poc-plan.md](../en/design/poc-plan.md))のスコープを自�
 | [03-graph-check.md](03-graph-check.md) | interning・グラフ・診断・`inka check` |
 | [04-hash.md](04-hash.md) | 正規化・view_hash 3種・ゴールデンベクタ(凍結対象) |
 | [05-record.md](05-record.md) | 承認レコード・正規化バイト列・jsonl(凍結対象) |
-| [06-approve-cli.md](06-approve-cli.md) | キュー導出・`inka approve` |
+| [06-review-cli.md](06-review-cli.md) | キュー導出・`inka review` |
 | [07-eval.md](07-eval.md) | established 不動点・stale・blame・`inka eval` |
 | [08-ci-provider.md](08-ci-provider.md) | ci-export.json・照合・GitHub Actions |
 
@@ -22,7 +22,7 @@ PoC([../en/design/poc-plan.md](../en/design/poc-plan.md))のスコープを自�
   lexer は手書き(logos は不要: フェンスと `{$var}` の文脈依存が手書きの方が素直)。
 - **純関数の束で書く**: `parse → load → graph → hash → eval` はすべて
   「入力バイト列 → 値」。I/O は cli/ に隔離する。eval に時計・環境変数・ネットワークを
-  持ち込まない(timestamp を使うのは approve の記録時のみ)。
+  持ち込まない(timestamp を使うのは review の記録時のみ)。
 - **span**: `struct Span { file: FileId, start: u32, end: u32 }`(バイトオフセット)。
   AST の主要要素は `Spanned<T> { value: T, span: Span }` で包む。
 - **診断型は自前で1つ**:
