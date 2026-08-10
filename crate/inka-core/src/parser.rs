@@ -994,6 +994,24 @@ mod tests {
     }
 
     #[test]
+    fn rejects_bind_with_both_ci_and_veriq() {
+        let parse =
+            parse_str("bind twice {\n```\nClaim\n```\nci: \"tests/a.rs\"\nveriq: \"m.check\"\n}\n");
+
+        assert!(
+            has_message(&parse, "duplicate source reference"),
+            "{:?}",
+            messages(&parse)
+        );
+        // The first reference wins and the block still parses.
+        assert_eq!(parse.blocks.len(), 1);
+        let Some(Block::Bind(block)) = parse.blocks.first() else {
+            panic!("expected a bind block");
+        };
+        assert_eq!(block.source.value, SourceRef::Ci("tests/a.rs".to_owned()));
+    }
+
+    #[test]
     fn rejects_promote_on_structure() {
         let parse = parse_str(
             "structure s {\n```\nStruct\n```\nchildren: a\nuntil: M2\npromote: bind\n}\n",
