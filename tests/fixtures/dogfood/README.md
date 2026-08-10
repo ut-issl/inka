@@ -1,9 +1,10 @@
 # dogfood: inka's own design argument
 
-inka's design claims (inka-concept.md) written in the inka DSL (ut-issl/inka#6).
-This is the canonical example project and the primary fixture for the minimum
-implementation (inka-minimum-roadmap.md): the goal loop — write → check → approve →
-eval → edit → stale → re-approve — runs against this project.
+inka's own design claims written in the inka DSL (ut-issl/inka#6).
+This is the canonical example project and the primary fixture for the PoC
+([docs/en/design/poc-plan.md](../../docs/en/design/poc-plan.md)): the goal loop —
+write → check → approve → eval → edit → stale → re-approve — runs against this
+project.
 
 Japanese version: [README_ja.md](README_ja.md)
 
@@ -30,10 +31,15 @@ description (`labels_cover_reality`); value interpolation (`approver_unforgeable
 Every machine-verifiable claim is currently a `fiat` block carrying
 `until: <milestone>` / `promote: bind` — the fiat→bind lifecycle of concept §2.1
 made visible. The first real bind lands with the CI provider
-(inka-minimum-roadmap.md §8, target: `local_view_hash_sound`).
+(target: `local_view_hash_sound`).
 
 ## Where the authoritative design lives
 
-This README does not restate the design. See:
+This README does not restate the design. See [docs/en/design/](../../docs/en/design/):
 
-- **inka-concept.md** — the current design
+- [concept.md](../../docs/en/design/concept.md) — what inka is
+- [spec.md](../../docs/en/design/spec.md) — the decided specification
+- [poc-plan.md](../../docs/en/design/poc-plan.md) /
+  [full-plan.md](../../docs/en/design/full-plan.md) — implementation plans
+- [open-questions.md](../../docs/en/design/open-questions.md) — what is still
+  undecided

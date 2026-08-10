@@ -1,7 +1,7 @@
 # dogfood: inka 自身の設計論証
 
-inka の設計主張(inka-concept.md)を inka DSL で書いたもの(ut-issl/inka#6)。
-標準サンプルプロジェクトであり、ミニマム実装(inka-minimum-roadmap.md)の主フィクスチャ。
+inka 自身の設計主張を inka DSL で書いたもの(ut-issl/inka#6)。
+標準サンプルプロジェクトであり、PoC([docs/ja/design/poc-plan.md](../../docs/ja/design/poc-plan.md))の主フィクスチャ。
 ゴールのループ — 書く → check → approve → eval → 編集 → stale → 再承認 — は
 このプロジェクトに対して回す。
 
@@ -29,10 +29,14 @@ inka の設計主張(inka-concept.md)を inka DSL で書いたもの(ut-issl/ink
 
 機械検証に昇格予定の主張はすべて `fiat` ブロック+`until: <マイルストーン>` /
 `promote: bind` — concept §2.1 の fiat→bind ライフサイクルの可視化。最初の本物の
-bind は CI provider(inka-minimum-roadmap.md §8、対象は `local_view_hash_sound`)で入る。
+bind は CI provider(対象は `local_view_hash_sound`)で入る。
 
 ## 設計の正はどこにあるか
 
-この README は設計を再述しない。参照先:
+この README は設計を再述しない。参照先は [docs/ja/design/](../../docs/ja/design/):
 
-- **inka-concept.md** — 現行設計
+- [concept.md](../../docs/ja/design/concept.md) — inka とは何か
+- [spec.md](../../docs/ja/design/spec.md) — 確定仕様
+- [poc-plan.md](../../docs/ja/design/poc-plan.md) /
+  [full-plan.md](../../docs/ja/design/full-plan.md) — 実装方針
+- [open-questions.md](../../docs/ja/design/open-questions.md) — 未決事項
