@@ -1,9 +1,12 @@
 //! Core library for inka: structured argumentation with accountable approvals.
 pub mod ast;
+pub mod interpolate;
 pub mod lexer;
 pub mod manifest;
 pub mod parser;
+pub mod project;
 pub mod source;
+pub mod values;
 
 /// Returns the version of the inka core library.
 #[must_use]

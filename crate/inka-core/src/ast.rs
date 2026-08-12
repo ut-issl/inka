@@ -7,22 +7,29 @@
 //! The AST preserves the parsed source structure only. Operations such as
 //! interpolation, hashing, and evidence matching are handled by later passes.
 //! Source locations used for diagnostics are represented with [`Spanned`].
+//!
+//! Block types are generic over their description type `D`, which encodes the
+//! processing stage: [`Description`] (the default) holds the raw fence text
+//! straight from the parser, and interpolation rebuilds the block around a
+//! rendered description type that no longer carries the raw text. A pass that
+//! must only see interpolated text takes the rendered form, so handing it
+//! pre-interpolation text is a type error rather than a convention.
 
 use crate::source::{Span, Spanned};
 
 /// A block in one of the four discharge modes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Block {
-    Objective(ObjectiveBlock),
-    Structure(StructureBlock),
-    Bind(BindBlock),
-    Fiat(FiatBlock),
+pub enum Block<D = Description> {
+    Objective(ObjectiveBlock<D>),
+    Structure(StructureBlock<D>),
+    Bind(BindBlock<D>),
+    Fiat(FiatBlock<D>),
 }
 
-impl Block {
+impl<D> Block<D> {
     /// Returns the fields shared by all block types.
     #[must_use]
-    pub fn common(&self) -> &BlockCommon {
+    pub fn common(&self) -> &BlockCommon<D> {
         match self {
             Block::Objective(b) => &b.common,
             Block::Structure(b) => &b.common,
@@ -30,20 +37,63 @@ impl Block {
             Block::Fiat(b) => &b.common,
         }
     }
+
+    /// Rebuilds the block around a new description, moving every other field.
+    ///
+    /// This is the only way a block changes description stage, so a stage
+    /// transition always replaces the previous description instead of
+    /// carrying both.
+    #[must_use]
+    pub fn with_description<D2>(self, description: D2) -> Block<D2> {
+        match self {
+            Block::Objective(b) => Block::Objective(ObjectiveBlock {
+                common: b.common.with_description(description),
+                deadline: b.deadline,
+                children: b.children,
+            }),
+            Block::Structure(b) => Block::Structure(StructureBlock {
+                common: b.common.with_description(description),
+                deadline: b.deadline,
+                children: b.children,
+            }),
+            Block::Bind(b) => Block::Bind(BindBlock {
+                common: b.common.with_description(description),
+                deadline: b.deadline,
+                source: b.source,
+            }),
+            Block::Fiat(b) => Block::Fiat(FiatBlock {
+                common: b.common.with_description(description),
+                deadline: b.deadline,
+            }),
+        }
+    }
 }
 
 /// Fields shared by every block, including its header, description, and span.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockCommon {
+pub struct BlockCommon<D = Description> {
     pub id: Spanned<String>,
     /// Tags without the leading `#`.
     ///
     /// Tags use a free-form vocabulary and are excluded from hashing.
     pub tags: Vec<Spanned<String>>,
-    pub description: Description,
+    pub description: D,
     /// Span covering the entire block, from the mode keyword through the
     /// closing brace.
     pub span: Span,
+}
+
+impl<D> BlockCommon<D> {
+    /// Moves every field except the description, which is replaced.
+    #[must_use]
+    pub fn with_description<D2>(self, description: D2) -> BlockCommon<D2> {
+        BlockCommon {
+            id: self.id,
+            tags: self.tags,
+            description,
+            span: self.span,
+        }
+    }
 }
 
 /// A fenced description containing the node's contract text.
@@ -122,24 +172,24 @@ pub enum SourceRef {
 
 /// The root block of an argument.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ObjectiveBlock {
-    pub common: BlockCommon,
+pub struct ObjectiveBlock<D = Description> {
+    pub common: BlockCommon<D>,
     pub deadline: Option<ObjectiveDeadline>,
     pub children: Vec<Spanned<String>>,
 }
 
 /// A proposition discharged by decomposition into child blocks.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StructureBlock {
-    pub common: BlockCommon,
+pub struct StructureBlock<D = Description> {
+    pub common: BlockCommon<D>,
     pub deadline: Option<Deadline>,
     pub children: Vec<Spanned<String>>,
 }
 
 /// A proposition discharged by reference to machine-verifiable evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BindBlock {
-    pub common: BlockCommon,
+pub struct BindBlock<D = Description> {
+    pub common: BlockCommon<D>,
     pub deadline: Option<Deadline>,
     pub source: Spanned<SourceRef>,
 }
@@ -148,7 +198,7 @@ pub struct BindBlock {
 ///
 /// Fiat blocks are always leaves.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FiatBlock {
-    pub common: BlockCommon,
+pub struct FiatBlock<D = Description> {
+    pub common: BlockCommon<D>,
     pub deadline: Option<FiatDeadline>,
 }
