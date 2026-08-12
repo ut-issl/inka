@@ -12,7 +12,7 @@ publish = false
 inka-core = { path = "crate/inka-core" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1", default-features = false, features = ["display", "parse", "serde", "std"] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

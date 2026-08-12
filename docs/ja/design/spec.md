@@ -60,8 +60,10 @@ fiat <id> {
 - `inka.toml`: `[project] name`、`[phases] order`(全順序)+ `current`(order に
   対して検証)、`[values] files`。未知キーは拒否。
 - 論証は規約読み込み: `argument/` 配下のすべての `*.inka`。
-- values ファイルはフラットな TOML 文字列マップ。再帰展開なし(1パス)。ファイル間の
-  キー衝突は error。未定義の `{$var}` は error。
+- values ファイルはフラットな TOML マップ。キーは識別子文法に一致し、必ず `{$key}` で
+  参照できる。文字列値はそのまま、それ以外の TOML 値 — 数値・真偽値・配列・テーブル
+  (ベクトル要求値など)— は TOML 表記のまま展開される。再帰展開なし(1パス)。
+  ファイル間のキー衝突は error。未定義の `{$var}` は error。
 
 ## ハッシュ(v1)
 

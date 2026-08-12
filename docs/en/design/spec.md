@@ -67,8 +67,12 @@ fiat <id> {
 - `inka.toml`: `[project] name`; `[phases] order` (total order) + `current`
   (validated against order); `[values] files`. Unknown keys are rejected.
 - The argument is read by convention: every `*.inka` under `argument/`.
-- Values files are flat TOML string maps. No recursive expansion (one pass);
-  key collisions across files are an error; an undefined `{$var}` is an error.
+- Values files are flat TOML maps; keys match the identifier grammar, so every
+  key is referenceable as `{$key}`. A string value is taken verbatim; any
+  other TOML value — numbers, booleans, arrays, tables (e.g. a vector
+  requirement) — is rendered with its TOML spelling. No recursive expansion
+  (one pass); key collisions across files are an error; an undefined `{$var}`
+  is an error.
 
 ## Hashing (v1)
 

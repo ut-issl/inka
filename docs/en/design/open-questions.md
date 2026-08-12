@@ -8,10 +8,12 @@ settle each. Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/
 - **Multiset vs. set children.** No example has wanted the same child twice.
   Tentative: a set, with duplicates as an error. Revisit only if a real
   argument needs multiplicity.
-- **Values typing and units.** Values are plain strings (`"0.05 deg (3σ)"`),
-  which has sufficed. Whether numbers/units deserve structure is open. Guard:
-  values are for shared literal constants — anything computed or verified
-  belongs to an evidence provider, so values must not grow into a shadow one.
+- **Values typing and units.** Values accept any TOML value, rendered with its
+  TOML spelling (`"0.05 deg (3σ)"`, `42`, `[1.5, 2.0, 3.25]`), so numeric
+  parameters and vectors need no quoting. Whether units deserve structure is
+  open. Guard: values are for shared literal constants — anything computed or
+  verified belongs to an evidence provider, so values must not grow into a
+  shadow one.
 
 ## Policy
 
@@ -36,6 +38,14 @@ settle each. Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/
   native extensions are opaque (covered by the environment hash); data files
   read by evidence need explicit inclusion. Start without data-file capture and
   record it as a limitation.
+- **graphcal as an input.** Whether [graphcal](https://graphcal.org/docs/) — a
+  unit-aware, DAG-based reactive calculation language (`.gcl`) — can be chosen
+  as an input to inka is an option under consideration. Nothing is decided:
+  neither adoption nor the integration shape (an evidence provider alongside
+  `veriq:` / `ci:`, a source of shared values, or something else). If inka's
+  operating discipline needs capabilities on the graphcal side (e.g. stable
+  interface hashes or a machine-readable export), proposing them upstream as
+  graphcal PRs is part of the option space.
 
 ## Audit and operations
 
