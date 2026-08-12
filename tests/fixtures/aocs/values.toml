@@ -1,0 +1,13 @@
+# Attitude-control requirement/condition values.
+# Contracts are hashed after interpolation, so changing a value here precisely
+# invalidates the approvals of the contracts referencing it, plus their direct
+# parents' structure approvals.
+
+pointing_accuracy = "0.05 deg (3σ)"
+attitude_knowledge = "0.01 deg (3σ)"
+max_tipoff_rate = "10 deg/s"
+detumble_time_limit = "2 orbits"
+wheel_momentum_margin = "30 %"
+safemode_sun_angle = "30 deg"
+safemode_entry_time = "10 min"
+orbit_altitude = "500-600 km altitude"
