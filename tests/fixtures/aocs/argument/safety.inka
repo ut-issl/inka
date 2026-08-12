@@ -1,0 +1,63 @@
+// Branches 2 & 3: safety (detumbling and safe mode).
+
+structure detumble_ok #safety {
+  ```
+  From both post-separation and FDIR re-entry conditions, the satellite completes detumbling and reaches safe mode without external intervention
+  ```
+  children: detumble_convergence_ok, mtq_authority_ok, rate_sensor_available
+}
+
+bind detumble_convergence_ok {
+  ```
+  Starting from the maximum tip-off rate {$max_tipoff_rate}, B-dot control damps the body rate to a safe-mode-transition level within {$detumble_time_limit}
+  ```
+  veriq: "aocs.verify_detumble"
+}
+
+fiat mtq_authority_ok {
+  ```
+  The magnetorquer dipole moment provides sufficient control torque for B-dot control across the geomagnetic field strengths of the target orbit ({$orbit_altitude})
+  ```
+  until: FM
+  promote: bind
+}
+
+fiat rate_sensor_available {
+  ```
+  The rate information required for detumbling remains available under gyro failure, from redundant sensing including estimation with coarse sun sensors and magnetometers
+  ```
+}
+
+structure safe_mode_ok #safety {
+  ```
+  In safe mode, the satellite maintains, without external intervention, a state satisfying all of the following:
+
+  - The angle between the solar-array normal and the sun direction stays within {$safemode_sun_angle} (positive power balance)
+  - Mode transition completes within {$safemode_entry_time} of anomaly detection
+  - All mission equipment is off and every unit stays within its thermal safety range
+  ```
+  children: sun_pointing_stable, fdir_transition_ok, safemode_power_positive
+}
+
+bind sun_pointing_stable {
+  ```
+  Safe-mode sun pointing acquires the sun starting from the residual rates left after detumbling, and thereafter keeps the sun angle within {$safemode_sun_angle}
+  ```
+  veriq: "aocs.verify_sun_pointing"
+}
+
+fiat fdir_transition_ok {
+  ```
+  The detection conditions and transition sequence for attitude anomalies (rate exceedance, loss of attitude determination, wheel failure) guarantee safe-mode arrival within {$safemode_entry_time} of detection
+  ```
+  until: FM
+  promote: bind
+}
+
+fiat safemode_power_positive {
+  ```
+  In the safe-mode configuration (all mission equipment off, sun angle within {$safemode_sun_angle}), generated power exceeds the configuration's consumption under all orbit conditions including eclipse
+  ```
+  // Ideally shared with a power-domain argument; kept local in this
+  // single-domain example (see README on namespaces).
+}

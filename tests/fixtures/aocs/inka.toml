@@ -1,0 +1,14 @@
+# AOCS (attitude control) example project definition.
+# The argument is read by convention: every *.inka under argument/.
+
+[project]
+name = "aocs-example"
+
+[phases]
+# Satellite-development phases.
+order = ["BBM", "EM", "FM"]
+current = "EM"
+
+[values]
+# Values file resolving {$var} in descriptions
+files = ["values.toml"]
