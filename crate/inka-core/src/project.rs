@@ -19,7 +19,7 @@ use crate::interpolate::{RenderedDescription, interpolate};
 use crate::lexer::Lexer;
 use crate::manifest::{Manifest, ManifestError, parse_manifest};
 use crate::parser::parse;
-use crate::source::{Diagnostic, SourceMap};
+use crate::source::{Error, SourceMap, Warning};
 use crate::values::{ValuesError, load_values};
 
 /// A fully loaded project: validated manifest and interpolated blocks, plus
@@ -35,9 +35,25 @@ pub struct Project {
     pub blocks: Vec<Block<RenderedDescription>>,
 }
 
+/// The outcome of loading a project directory.
+///
+/// Errors and the artifact are mutually exclusive — that is what the inner
+/// `Result` says — while warnings are orthogonal to success and therefore
+/// live outside it, exactly once. A caller that only wants the project can
+/// take `outcome.result?`; a caller that reports must read `warnings` first
+/// so a failed load still surfaces every finding of the run.
+#[derive(Debug)]
+pub struct LoadOutcome {
+    /// Suspicions raised while loading; the project (if any) is well-formed
+    /// despite them.
+    pub warnings: Vec<Warning>,
+    /// The loaded project, or the reason there is none.
+    pub result: Result<Project, LoadError>,
+}
+
 /// A reason a project directory could not be loaded.
 #[derive(Debug, thiserror::Error)]
-pub enum ProjectError {
+pub enum LoadError {
     #[error("failed to read {}: {source}", .path.display())]
     Read {
         path: PathBuf,
@@ -56,10 +72,13 @@ pub enum ProjectError {
     MissingArgumentDir { path: PathBuf },
     #[error("subdirectories under argument/ are not supported: {}", .path.display())]
     UnsupportedSubdirectory { path: PathBuf },
-    #[error("{}", render_diagnostics(.source_map, .diagnostics))]
-    Diagnostics {
+    /// The sources were readable but their content is broken. Constructed
+    /// only from a non-empty error batch: a stage that found no error keeps
+    /// loading instead.
+    #[error("{}", render_errors(.source_map, .errors))]
+    Invalid {
         source_map: SourceMap,
-        diagnostics: Vec<Diagnostic>,
+        errors: Vec<Error>,
     },
 }
 
@@ -71,16 +90,24 @@ pub enum ProjectError {
 /// its findings before the next runs, so one broken file does not hide
 /// problems in another.
 ///
-/// # Errors
-///
-/// Returns a [`ProjectError`] when `inka.toml` is missing or invalid, values
-/// files fail to load or collide, `argument/` is missing or contains a
-/// subdirectory, a file cannot be read, or any file has lexer, parser, or
-/// interpolation diagnostics.
-pub fn load_project(project_dir: &Path) -> Result<Project, ProjectError> {
+/// The `result` is a [`LoadError`] when `inka.toml` is missing or invalid,
+/// values files fail to load or collide, `argument/` is missing or contains
+/// a subdirectory, a file cannot be read, or any file has lexer, parser, or
+/// interpolation errors.
+#[must_use]
+pub fn load_project(project_dir: &Path) -> LoadOutcome {
+    // No load-stage pass emits warnings yet: the lane exists so every caller
+    // is already shaped for the day one does.
+    LoadOutcome {
+        warnings: Vec::new(),
+        result: load(project_dir),
+    }
+}
+
+fn load(project_dir: &Path) -> Result<Project, LoadError> {
     let manifest_path = project_dir.join("inka.toml");
     let manifest_text = read_file(&manifest_path)?;
-    let manifest = parse_manifest(&manifest_text).map_err(|source| ProjectError::Manifest {
+    let manifest = parse_manifest(&manifest_text).map_err(|source| LoadError::Manifest {
         path: manifest_path,
         source,
     })?;
@@ -88,25 +115,22 @@ pub fn load_project(project_dir: &Path) -> Result<Project, ProjectError> {
 
     let mut source_map = SourceMap::new();
     let mut blocks = Vec::new();
-    let mut diagnostics = Vec::new();
+    let mut errors = Vec::new();
     for path in argument_files(&project_dir.join("argument"))? {
         let text = read_file(&path)?;
-        let (file_blocks, file_diagnostics) = lex_and_parse(&mut source_map, path, text);
+        let (file_blocks, file_errors) = lex_and_parse(&mut source_map, path, text);
         blocks.extend(file_blocks);
-        diagnostics.extend(file_diagnostics);
+        errors.extend(file_errors);
     }
-    if !diagnostics.is_empty() {
-        return Err(ProjectError::Diagnostics {
-            source_map,
-            diagnostics,
-        });
+    if !errors.is_empty() {
+        return Err(LoadError::Invalid { source_map, errors });
     }
 
     let (blocks, interpolation_errors) = interpolate_blocks(blocks, &values);
     if !interpolation_errors.is_empty() {
-        return Err(ProjectError::Diagnostics {
+        return Err(LoadError::Invalid {
             source_map,
-            diagnostics: interpolation_errors,
+            errors: interpolation_errors,
         });
     }
 
@@ -118,7 +142,7 @@ pub fn load_project(project_dir: &Path) -> Result<Project, ProjectError> {
 }
 
 /// Every `*.inka` directly under `argument/`, sorted by path.
-fn argument_files(argument_dir: &Path) -> Result<Vec<PathBuf>, ProjectError> {
+fn argument_files(argument_dir: &Path) -> Result<Vec<PathBuf>, LoadError> {
     // No existence pre-check: reading directly and classifying the error
     // avoids reporting a directory that vanished in between as a plain read
     // failure, and matches how the manifest read is handled.
@@ -130,12 +154,12 @@ fn argument_files(argument_dir: &Path) -> Result<Vec<PathBuf>, ProjectError> {
                 std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
             ) =>
         {
-            return Err(ProjectError::MissingArgumentDir {
+            return Err(LoadError::MissingArgumentDir {
                 path: argument_dir.to_path_buf(),
             });
         }
         Err(source) => {
-            return Err(ProjectError::Read {
+            return Err(LoadError::Read {
                 path: argument_dir.to_path_buf(),
                 source,
             });
@@ -146,7 +170,7 @@ fn argument_files(argument_dir: &Path) -> Result<Vec<PathBuf>, ProjectError> {
     for entry in entries {
         paths.push(
             entry
-                .map_err(|source| ProjectError::Read {
+                .map_err(|source| LoadError::Read {
                     path: argument_dir.to_path_buf(),
                     source,
                 })?
@@ -160,7 +184,7 @@ fn argument_files(argument_dir: &Path) -> Result<Vec<PathBuf>, ProjectError> {
     let mut files = Vec::new();
     for path in paths {
         if path.is_dir() {
-            return Err(ProjectError::UnsupportedSubdirectory { path });
+            return Err(LoadError::UnsupportedSubdirectory { path });
         }
         if path.extension().is_some_and(|ext| ext == "inka") {
             files.push(path);
@@ -175,7 +199,7 @@ fn lex_and_parse(
     source_map: &mut SourceMap,
     path: PathBuf,
     text: String,
-) -> (Vec<Block>, Vec<Diagnostic>) {
+) -> (Vec<Block>, Vec<Error>) {
     let file_id = source_map.add_file(path, text);
     let text = &source_map
         .file(file_id)
@@ -184,14 +208,14 @@ fn lex_and_parse(
     match Lexer::new(file_id, text).lex() {
         Ok(tokens) => {
             let parsed = parse(file_id, &tokens);
-            (parsed.blocks, parsed.diagnostics)
+            (parsed.blocks, parsed.errors)
         }
         Err(lex_error) => (Vec::new(), vec![lex_error]),
     }
 }
 
-fn read_file(path: &Path) -> Result<String, ProjectError> {
-    std::fs::read_to_string(path).map_err(|source| ProjectError::Read {
+fn read_file(path: &Path) -> Result<String, LoadError> {
+    std::fs::read_to_string(path).map_err(|source| LoadError::Read {
         path: path.to_path_buf(),
         source,
     })
@@ -202,7 +226,7 @@ fn read_file(path: &Path) -> Result<String, ProjectError> {
 fn interpolate_blocks(
     blocks: Vec<Block>,
     values: &HashMap<String, String>,
-) -> (Vec<Block<RenderedDescription>>, Vec<Diagnostic>) {
+) -> (Vec<Block<RenderedDescription>>, Vec<Error>) {
     let mut rendered = Vec::with_capacity(blocks.len());
     let mut errors = Vec::new();
     for block in blocks {
@@ -214,27 +238,27 @@ fn interpolate_blocks(
     (rendered, errors)
 }
 
-/// Formats diagnostics as `path:line:column: severity: message` lines
-/// (1-based), the plain-text fallback used until the CLI grows a richer
-/// renderer. Unanchored diagnostics render as `severity: message` alone.
-fn render_diagnostics(source_map: &SourceMap, diagnostics: &[Diagnostic]) -> String {
-    let lines: Vec<String> = diagnostics
+/// Formats errors as `path:line:column: error: message` lines (1-based), the
+/// plain-text fallback used when [`LoadError::Invalid`] is displayed as a
+/// plain error. Unanchored errors render as `error: message` alone.
+fn render_errors(source_map: &SourceMap, errors: &[Error]) -> String {
+    let lines: Vec<String> = errors
         .iter()
-        .map(|diagnostic| {
-            let located = diagnostic
+        .map(|error| {
+            let located = error
                 .span
                 .and_then(|span| source_map.file(span.file_id).map(|file| (file, span)));
             match located {
                 Some((file, span)) => {
                     let (line, column) = file.line_col(span.start);
                     format!(
-                        "{}:{}:{}: {diagnostic}",
+                        "{}:{}:{}: {error}",
                         file.path.display(),
                         line + 1,
                         column + 1,
                     )
                 }
-                None => diagnostic.to_string(),
+                None => error.to_string(),
             }
         })
         .collect();

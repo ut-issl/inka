@@ -40,7 +40,7 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   writing. The queue and eval share one validity function.
 - **Policy**: built-in default only — every target needs `any(1)`. No policy
   language. Decline veto applies.
-- **`inka eval`**: established fixpoint (the objective requires its own
+- **`inka eval`**: established fixpoint (each objective requires its own
   approval); stale detection; decline veto; hard node-side `until:` expiry
   against the declared phase order (post-deadline approvals do not count
   either); blame output with per-cause reasons; non-zero exit when not clean.

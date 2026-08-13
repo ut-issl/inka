@@ -44,11 +44,11 @@ fn all_fixtures_parse_without_diagnostics() {
 
         let result = parse(file_id, &tokens);
         assert!(
-            result.diagnostics.is_empty(),
-            "{}: unexpected diagnostics: {:?}",
+            result.errors.is_empty(),
+            "{}: unexpected errors: {:?}",
             path.display(),
             result
-                .diagnostics
+                .errors
                 .iter()
                 .map(|d| d.message.as_str())
                 .collect::<Vec<_>>()

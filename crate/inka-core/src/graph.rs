@@ -27,7 +27,7 @@ use petgraph::visit::Dfs;
 use crate::ast::Block;
 use crate::interpolate::RenderedDescription;
 use crate::project::Project;
-use crate::source::Diagnostic;
+use crate::source::{Diagnostics, Error, Warning};
 
 /// Identity of a node in the argument graph.
 ///
@@ -72,8 +72,19 @@ impl<'p> Graph<'p> {
     /// undefined-reference diagnostic, with spans on the offending id or
     /// reference. Both passes run to completion before returning, so one
     /// bad id does not hide another.
-    pub fn build(blocks: &'p [Block<RenderedDescription>]) -> Result<Self, Vec<Diagnostic>> {
-        let mut diagnostics = Vec::new();
+    pub fn build(blocks: &'p [Block<RenderedDescription>]) -> Result<Self, Vec<Error>> {
+        let (graph, errors) = Self::build_collecting(blocks);
+        if errors.is_empty() {
+            Ok(graph)
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Builds the usable portion of the graph while retaining construction
+    /// errors, so `inka check` can continue with shape validation.
+    fn build_collecting(blocks: &'p [Block<RenderedDescription>]) -> (Self, Vec<Error>) {
+        let mut errors = Vec::new();
 
         // Registration: the first definition of an id wins its slot; every
         // later definition is an error anchored on the duplicate.
@@ -81,10 +92,7 @@ impl<'p> Graph<'p> {
         for block in blocks {
             let id = &block.common().id;
             if definitions.contains_key(id.value.as_str()) {
-                diagnostics.push(Diagnostic::error(
-                    id.span,
-                    format!("duplicate id `{}`", id.value),
-                ));
+                errors.push(Error::new(id.span, format!("duplicate id `{}`", id.value)));
             } else {
                 definitions.insert(&id.value, block);
             }
@@ -108,7 +116,7 @@ impl<'p> Graph<'p> {
             let mut seen: HashSet<&str> = HashSet::new();
             for child in graph[parent].children() {
                 if !seen.insert(child.value.as_str()) {
-                    diagnostics.push(Diagnostic::error(
+                    errors.push(Error::new(
                         child.span,
                         format!("duplicate reference `{}`", child.value),
                     ));
@@ -118,7 +126,7 @@ impl<'p> Graph<'p> {
                     Some(child_node) => {
                         graph.add_edge(parent, child_node.index(), ());
                     }
-                    None => diagnostics.push(Diagnostic::error(
+                    None => errors.push(Error::new(
                         child.span,
                         format!("undefined reference `{}`", child.value),
                     )),
@@ -126,11 +134,7 @@ impl<'p> Graph<'p> {
             }
         }
 
-        if diagnostics.is_empty() {
-            Ok(Self { graph, index })
-        } else {
-            Err(diagnostics)
-        }
+        (Self { graph, index }, errors)
     }
 
     /// Number of nodes in the graph.
@@ -253,18 +257,21 @@ impl<'p> Graph<'p> {
     /// - no objective block, including an empty graph → error, unanchored
     ///   because it concerns the project as a whole
     /// - a dependency cycle → error naming the full path
-    /// - a node no objective reaches → warning
+    /// - a node no objective reaches → warning, in the warnings lane so it
+    ///   never fails the check
     ///
     /// Any number of objectives is legal; reachability is judged against
     /// all of them together, so a node is an orphan only when every
     /// objective misses it.
     #[must_use]
-    pub fn validate(&self) -> Vec<Diagnostic> {
-        let mut diagnostics = Vec::new();
+    pub fn validate(&self) -> Diagnostics {
+        let mut diagnostics = Diagnostics::new();
         let objectives = self.objectives();
 
         if objectives.is_empty() {
-            diagnostics.push(Diagnostic::unanchored_error("no objective block found"));
+            diagnostics
+                .errors
+                .push(Error::unanchored("no objective block found"));
         }
 
         for cycle in self.cycles() {
@@ -274,7 +281,7 @@ impl<'p> Graph<'p> {
                 .map(|&node| self.id(node))
                 .collect::<Vec<_>>()
                 .join(" → ");
-            diagnostics.push(Diagnostic::error(
+            diagnostics.errors.push(Error::new(
                 self.block(cycle[0]).common().id.span,
                 format!("dependency cycle: {path}"),
             ));
@@ -287,7 +294,7 @@ impl<'p> Graph<'p> {
                 .collect();
             for node in self.nodes() {
                 if !reachable.contains(&node) {
-                    diagnostics.push(Diagnostic::warning(
+                    diagnostics.warnings.push(Warning::new(
                         self.block(node).common().id.span,
                         format!("`{}` is unreachable from any objective", self.id(node)),
                     ));
@@ -359,15 +366,25 @@ impl<'p> Graph<'p> {
 ///
 /// This is the graph half of `inka check`: construction problems (duplicate
 /// ids, duplicate or undefined references) and shape problems (a missing
-/// objective, cycles, unreachable nodes) come back as one diagnostic list
+/// objective, cycles, unreachable nodes) come back as one [`Diagnostics`]
 /// either way. A project with no blocks has no objective, so an empty
 /// argument is rejected here too.
 #[must_use]
-pub fn check(project: &Project) -> Vec<Diagnostic> {
-    match Graph::build(&project.blocks) {
-        Ok(graph) => graph.validate(),
-        Err(diagnostics) => diagnostics,
-    }
+pub fn check(project: &Project) -> Diagnostics {
+    check_blocks(&project.blocks)
+}
+
+/// Checks graph construction and shape in one pass. A partially resolved
+/// graph is sufficient for cycle and reachability analysis, so construction
+/// errors do not hide independent shape findings.
+fn check_blocks(blocks: &[Block<RenderedDescription>]) -> Diagnostics {
+    let (graph, mut errors) = Graph::build_collecting(blocks);
+    let Diagnostics {
+        errors: shape_errors,
+        warnings,
+    } = graph.validate();
+    errors.extend(shape_errors);
+    Diagnostics { errors, warnings }
 }
 
 #[cfg(test)]
@@ -377,7 +394,7 @@ mod tests {
     use crate::interpolate::interpolate;
     use crate::lexer::Lexer;
     use crate::parser::parse;
-    use crate::source::{Severity, SourceMap};
+    use crate::source::SourceMap;
 
     /// Lexes, parses, and interpolates one synthetic file into blocks, the
     /// same pipeline the project loader runs.
@@ -389,9 +406,9 @@ mod tests {
             .expect("test source should lex");
         let parsed = parse(file_id, &tokens);
         assert!(
-            parsed.diagnostics.is_empty(),
+            parsed.errors.is_empty(),
             "test source should parse cleanly: {:?}",
-            parsed.diagnostics
+            parsed.errors
         );
         let values = HashMap::new();
         parsed
@@ -405,8 +422,8 @@ mod tests {
             .collect()
     }
 
-    /// Builds a graph expected to fail, returning its diagnostics.
-    fn build_errors(source: &str) -> Vec<Diagnostic> {
+    /// Builds a graph expected to fail, returning its errors.
+    fn build_errors(source: &str) -> Vec<Error> {
         Graph::build(&blocks(source)).expect_err("caller expects build errors")
     }
 
@@ -506,7 +523,6 @@ fiat a {
         // Assert
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message, "duplicate id `a`");
-        assert_eq!(diagnostics[0].severity, Severity::Error);
     }
 
     #[test]
@@ -526,7 +542,6 @@ objective root {
         // Assert
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message, "undefined reference `ghost`");
-        assert_eq!(diagnostics[0].severity, Severity::Error);
     }
 
     #[test]
@@ -562,6 +577,52 @@ fiat a {
     }
 
     #[test]
+    fn check_collects_build_errors_and_shape_findings() {
+        // Arrange: the dangling reference is a construction error, while the
+        // cycle and orphan are independent findings on the resolved portion.
+        let blocks = blocks(
+            "\
+fiat orphan {
+  ```
+  orphan
+  ```
+}
+objective root {
+  ```
+  root
+  ```
+  children: a
+}
+structure a {
+  ```
+  cycle
+  ```
+  children: a, missing
+}
+",
+        );
+
+        // Act
+        let diagnostics = check_blocks(&blocks);
+
+        // Assert
+        let error_messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(
+            error_messages,
+            ["undefined reference `missing`", "dependency cycle: a → a"]
+        );
+        assert_eq!(diagnostics.warnings.len(), 1);
+        assert_eq!(
+            diagnostics.warnings[0].message,
+            "`orphan` is unreachable from any objective"
+        );
+    }
+
+    #[test]
     fn reports_duplicate_child_references_at_the_reference() {
         // Arrange & Act: the same child is listed twice in one block.
         let diagnostics = build_errors(
@@ -583,7 +644,6 @@ fiat a {
         // Assert
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message, "duplicate reference `a`");
-        assert_eq!(diagnostics[0].severity, Severity::Error);
     }
 
     #[test]
@@ -654,10 +714,10 @@ structure c {
         assert_eq!(ids(&graph, &cycles[0]), ["a", "b", "c"]);
         assert!(
             diagnostics
+                .errors
                 .iter()
-                .any(|d| d.message == "dependency cycle: a → b → c → a"
-                    && d.severity == Severity::Error),
-            "expected a cycle diagnostic, got {diagnostics:?}"
+                .any(|error| error.message == "dependency cycle: a → b → c → a"),
+            "expected a cycle error, got {diagnostics:?}"
         );
     }
 
@@ -689,9 +749,10 @@ structure a {
         assert_eq!(graph.cycles().len(), 1);
         assert!(
             diagnostics
+                .errors
                 .iter()
-                .any(|d| d.message == "dependency cycle: a → a"),
-            "expected a self-loop diagnostic, got {diagnostics:?}"
+                .any(|error| error.message == "dependency cycle: a → a"),
+            "expected a self-loop error, got {diagnostics:?}"
         );
     }
 
@@ -705,10 +766,10 @@ structure a {
         let diagnostics = graph.validate();
 
         // Assert: the judgement concerns the whole project, so no span.
-        assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].message, "no objective block found");
-        assert_eq!(diagnostics[0].severity, Severity::Error);
-        assert_eq!(diagnostics[0].span, None);
+        assert_eq!(diagnostics.errors.len(), 1);
+        assert_eq!(diagnostics.errors[0].message, "no objective block found");
+        assert_eq!(diagnostics.errors[0].span, None);
+        assert!(diagnostics.warnings.is_empty());
     }
 
     #[test]
@@ -720,9 +781,9 @@ structure a {
         let diagnostics = graph.validate();
 
         // Assert
-        assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].message, "no objective block found");
-        assert_eq!(diagnostics[0].span, None);
+        assert_eq!(diagnostics.errors.len(), 1);
+        assert_eq!(diagnostics.errors[0].message, "no objective block found");
+        assert_eq!(diagnostics.errors[0].span, None);
     }
 
     #[test]
@@ -753,7 +814,7 @@ fiat shared {
         let graph = Graph::build(&blocks).expect("graph should build");
 
         // Act & Assert
-        assert_eq!(graph.validate(), Vec::new());
+        assert!(graph.validate().is_empty());
     }
 
     #[test]
@@ -784,13 +845,14 @@ fiat orphan {
         // Act
         let diagnostics = graph.validate();
 
-        // Assert
-        assert_eq!(diagnostics.len(), 1);
+        // Assert: the finding sits in the warnings lane, so the check
+        // still passes.
+        assert!(!diagnostics.has_errors());
+        assert_eq!(diagnostics.warnings.len(), 1);
         assert_eq!(
-            diagnostics[0].message,
+            diagnostics.warnings[0].message,
             "`orphan` is unreachable from any objective"
         );
-        assert_eq!(diagnostics[0].severity, Severity::Warning);
     }
 
     #[test]
@@ -834,9 +896,10 @@ fiat orphan {
         let diagnostics = graph.validate();
 
         // Assert: neither `a` nor `b` is flagged, only the true orphan.
-        assert_eq!(diagnostics.len(), 1);
+        assert!(!diagnostics.has_errors());
+        assert_eq!(diagnostics.warnings.len(), 1);
         assert_eq!(
-            diagnostics[0].message,
+            diagnostics.warnings[0].message,
             "`orphan` is unreachable from any objective"
         );
     }
@@ -848,7 +911,7 @@ fiat orphan {
         let graph = Graph::build(&blocks).expect("graph should build");
 
         // Act & Assert
-        assert_eq!(graph.validate(), Vec::new());
+        assert!(graph.validate().is_empty());
     }
 
     #[test]
@@ -907,6 +970,6 @@ fiat shared {
 
         // Assert
         assert_eq!(ids(&graph, &graph.parents(shared)), ["a", "b"]);
-        assert_eq!(graph.validate(), Vec::new());
+        assert!(graph.validate().is_empty());
     }
 }

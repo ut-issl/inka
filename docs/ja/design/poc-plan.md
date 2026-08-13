@@ -35,7 +35,7 @@
   キューと eval は1つの有効性判定関数を共有する。
 - **ポリシー**: 組み込みデフォルトのみ — 全対象 `any(1)`。ポリシー言語なし。
   decline の拒否権は有効。
-- **`inka eval`**: established 不動点(objective も自身の承認を要する)、stale 検出、
+- **`inka eval`**: established 不動点(各 objective も自身の承認を要する)、stale 検出、
   decline 拒否権、宣言されたフェーズ順序に対するノード側 `until:` のハード失効
   (期限後に付けた承認もカウントしない)、原因別の blame 出力、clean でなければ
   非ゼロ終了。

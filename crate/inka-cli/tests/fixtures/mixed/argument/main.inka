@@ -1,0 +1,23 @@
+fiat orphan {
+  ```
+  a leaf nobody references
+  ```
+}
+objective root {
+  ```
+  the root claim
+  ```
+  children: a
+}
+structure a {
+  ```
+  first half of a loop
+  ```
+  children: b, missing
+}
+structure b {
+  ```
+  second half of a loop
+  ```
+  children: a
+}

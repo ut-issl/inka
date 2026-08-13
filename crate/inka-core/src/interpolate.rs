@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 
 use crate::ast::Description;
-use crate::source::{Diagnostic, Span};
+use crate::source::{Error, Span};
 
 /// A description after `{$var}` expansion.
 ///
@@ -48,12 +48,12 @@ impl RenderedDescription {
 ///
 /// # Errors
 ///
-/// Returns one [`Diagnostic`] per `{$var}` whose name is not in `values`,
+/// Returns one [`Error`] per `{$var}` whose name is not in `values`,
 /// anchored to the exact `{$var}` byte range in the source file.
 pub fn interpolate<S: std::hash::BuildHasher>(
     description: &Description,
     values: &HashMap<String, String, S>,
-) -> Result<RenderedDescription, Vec<Diagnostic>> {
+) -> Result<RenderedDescription, Vec<Error>> {
     let raw = &description.raw;
     let mut rendered = String::with_capacity(raw.len());
     let mut errors = Vec::new();
@@ -113,13 +113,8 @@ pub(crate) fn is_variable_name(name: &str) -> bool {
 /// Builds the diagnostic for an undefined `{$var}`. `start` and `end` are
 /// byte offsets within the raw text; the description span locates them in
 /// the source file.
-fn undefined_variable(
-    description: &Description,
-    name: &str,
-    start: usize,
-    end: usize,
-) -> Diagnostic {
-    Diagnostic::error(
+fn undefined_variable(description: &Description, name: &str, start: usize, end: usize) -> Error {
+    Error::new(
         Span {
             file_id: description.span.file_id,
             start: description.span.start + start,

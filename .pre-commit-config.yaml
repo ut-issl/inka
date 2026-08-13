@@ -36,6 +36,9 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
         args: ["--markdown-linebreak-ext=md"]
+        # insta snapshots freeze renderer output verbatim, including any
+        # trailing spaces ariadne emits; stripping them breaks the tests.
+        exclude: '\.snap$'
       - id: pretty-format-json
         args: ["--autofix", "--no-sort-keys"]
       - id: check-json

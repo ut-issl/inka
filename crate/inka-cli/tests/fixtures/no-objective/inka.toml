@@ -1,0 +1,9 @@
+[project]
+name = "no-objective"
+
+[phases]
+order = ["P0"]
+current = "P0"
+
+[values]
+files = []

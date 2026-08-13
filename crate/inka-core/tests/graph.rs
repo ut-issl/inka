@@ -10,11 +10,13 @@ use common::fixture_dir;
 
 fn assert_clean_dag(name: &str) {
     // Arrange
-    let project = load_project(&fixture_dir(name)).expect("fixture project should load");
+    let project = load_project(&fixture_dir(name))
+        .result
+        .expect("fixture project should load");
 
     // Act
     let graph = Graph::build(&project.blocks)
-        .unwrap_or_else(|diagnostics| panic!("{name} should build a graph: {diagnostics:?}"));
+        .unwrap_or_else(|errors| panic!("{name} should build a graph: {errors:?}"));
 
     // Assert: one node per block, a single objective, and a valid DAG.
     assert_eq!(graph.len(), project.blocks.len());
@@ -49,7 +51,9 @@ fn aocs_project_builds_and_validates_as_a_dag() {
 #[test]
 fn dogfood_topological_order_respects_every_edge() {
     // Arrange
-    let project = load_project(&fixture_dir("dogfood")).expect("dogfood should load");
+    let project = load_project(&fixture_dir("dogfood"))
+        .result
+        .expect("dogfood should load");
     let graph = Graph::build(&project.blocks).expect("dogfood should build a graph");
     let order = graph.topological_order().expect("dogfood should be a DAG");
 
@@ -76,7 +80,9 @@ fn dogfood_topological_order_respects_every_edge() {
 #[test]
 fn dogfood_objective_reaches_every_node() {
     // Arrange
-    let project = load_project(&fixture_dir("dogfood")).expect("dogfood should load");
+    let project = load_project(&fixture_dir("dogfood"))
+        .result
+        .expect("dogfood should load");
     let graph = Graph::build(&project.blocks).expect("dogfood should build a graph");
     let objective = graph.objectives()[0];
 

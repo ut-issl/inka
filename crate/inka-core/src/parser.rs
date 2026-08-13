@@ -2,7 +2,7 @@
 //!
 //! The parser's only job is to fit text into the [`crate::ast`] types. Anything
 //! the types cannot represent — a mode/property mismatch, an illegal `promote:`
-//! target, a missing or duplicated property — becomes a [`Diagnostic`] instead
+//! target, a missing or duplicated property — becomes an [`Error`] instead
 //! of aborting the parse.
 //!
 //! Recovery is per block: a malformed entry is diagnosed and the parser skips to
@@ -16,22 +16,20 @@ use crate::ast::{
     StructureBlock,
 };
 use crate::lexer::{Token, TokenKind};
-use crate::source::{FileId, Span, Spanned};
-
-pub use crate::source::Diagnostic;
+use crate::source::{Error, FileId, Span, Spanned};
 
 /// The outcome of a parse: every block that could be constructed, plus every
-/// diagnostic collected along the way. A non-empty `diagnostics` does not imply
+/// error collected along the way. A non-empty `errors` does not imply
 /// an empty `blocks`; recovery keeps producing well-formed blocks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parse {
     /// Every block that assembled cleanly enough to be represented in the AST.
     pub blocks: Vec<Block>,
     /// Every problem found, in source order.
-    pub diagnostics: Vec<Diagnostic>,
+    pub errors: Vec<Error>,
 }
 
-/// Parses a token stream into blocks and diagnostics.
+/// Parses a token stream into blocks and errors.
 #[must_use]
 pub fn parse(file_id: FileId, tokens: &[Token]) -> Parse {
     Parser::new(file_id, tokens).parse_file()
@@ -96,7 +94,7 @@ struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
     end_offset: usize,
-    diagnostics: Vec<Diagnostic>,
+    errors: Vec<Error>,
 }
 
 impl<'a> Parser<'a> {
@@ -107,7 +105,7 @@ impl<'a> Parser<'a> {
             tokens,
             pos: 0,
             end_offset,
-            diagnostics: Vec::new(),
+            errors: Vec::new(),
         }
     }
 
@@ -131,7 +129,7 @@ impl<'a> Parser<'a> {
 
         Parse {
             blocks,
-            diagnostics: self.diagnostics,
+            errors: self.errors,
         }
     }
 
@@ -700,7 +698,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&mut self, span: Span, message: impl Into<String>) {
-        self.diagnostics.push(Diagnostic::error(span, message));
+        self.errors.push(Error::new(span, message));
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -813,22 +811,18 @@ mod tests {
     }
 
     fn messages(parse: &Parse) -> Vec<&str> {
-        parse
-            .diagnostics
-            .iter()
-            .map(|d| d.message.as_str())
-            .collect()
+        parse.errors.iter().map(|d| d.message.as_str()).collect()
     }
 
     fn has_message(parse: &Parse, needle: &str) -> bool {
-        parse.diagnostics.iter().any(|d| d.message.contains(needle))
+        parse.errors.iter().any(|d| d.message.contains(needle))
     }
 
     #[test]
     fn parses_objective_with_children() {
         let parse = parse_str("objective root {\n```\nRoot claim\n```\nchildren: alpha, beta\n}\n");
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Objective(block)) = parse.blocks.first() else {
             panic!("expected an objective block, got {:?}", parse.blocks);
         };
@@ -844,7 +838,7 @@ mod tests {
         let parse =
             parse_str("structure safe_mode #safety {\n```\nSafe mode claim\n```\nchildren: a\n}\n");
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Structure(block)) = parse.blocks.first() else {
             panic!("expected a structure block");
         };
@@ -858,7 +852,7 @@ mod tests {
             "bind detumble_ok {\n```\nDetumble claim\n```\nveriq: \"aocs.verify_detumble\"\n}\n",
         );
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Bind(block)) = parse.blocks.first() else {
             panic!("expected a bind block");
         };
@@ -873,7 +867,7 @@ mod tests {
         let parse =
             parse_str("bind hashed {\n```\nHash claim\n```\nci: \"tests/hash_props.rs\"\n}\n");
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Bind(block)) = parse.blocks.first() else {
             panic!("expected a bind block");
         };
@@ -887,7 +881,7 @@ mod tests {
     fn parses_fiat_with_until_and_promote() {
         let parse = parse_str("fiat mtq_ok {\n```\nMTQ claim\n```\nuntil: FM\npromote: bind\n}\n");
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Fiat(block)) = parse.blocks.first() else {
             panic!("expected a fiat block");
         };
@@ -905,7 +899,7 @@ mod tests {
             "fiat assumed {\n```\nAssumed claim\n```\nuntil: M3\nreason: \"awaiting the test\"\n}\n",
         );
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Fiat(block)) = parse.blocks.first() else {
             panic!("expected a fiat block");
         };
@@ -922,7 +916,7 @@ mod tests {
             "objective root {\n```\nRoot claim\n```\nchildren: a\nuntil: M2\npromote: structure\n}\n",
         );
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Objective(block)) = parse.blocks.first() else {
             panic!("expected an objective block");
         };
@@ -1122,7 +1116,7 @@ mod tests {
             "objective root {\n```\nRoot\n```\nchildren: a\n}\nfiat a {\n```\nLeaf\n```\n}\n",
         );
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         assert_eq!(parse.blocks.len(), 2);
     }
 
@@ -1131,7 +1125,7 @@ mod tests {
         let parse = parse_str("");
 
         assert!(parse.blocks.is_empty());
-        assert!(parse.diagnostics.is_empty());
+        assert!(parse.errors.is_empty());
     }
 
     #[test]
@@ -1139,7 +1133,7 @@ mod tests {
         let input = "objective root {\n```\nRoot\n```\nchildren: power::x, y\n}\n";
         let parse = parse_str(input);
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Objective(block)) = parse.blocks.first() else {
             panic!("expected an objective block");
         };
@@ -1154,7 +1148,7 @@ mod tests {
     fn parses_multiple_tags() {
         let parse = parse_str("structure s #a #b {\n```\nClaim\n```\nchildren: c\n}\n");
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Structure(block)) = parse.blocks.first() else {
             panic!("expected a structure block");
         };
@@ -1168,7 +1162,7 @@ mod tests {
             "bind b {\n```\nClaim\n```\nci: \"tests/x.rs\"\nuntil: M2\nreason: \"pending rig\"\n}\n",
         );
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Bind(block)) = parse.blocks.first() else {
             panic!("expected a bind block");
         };
@@ -1184,7 +1178,7 @@ mod tests {
     fn parses_fiat_promote_to_structure() {
         let parse = parse_str("fiat f {\n```\nClaim\n```\nuntil: M2\npromote: structure\n}\n");
 
-        assert!(parse.diagnostics.is_empty(), "{:?}", messages(&parse));
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Fiat(block)) = parse.blocks.first() else {
             panic!("expected a fiat block");
         };
@@ -1235,7 +1229,7 @@ mod tests {
         let parse = parse_str(input);
 
         let diagnostic = parse
-            .diagnostics
+            .errors
             .iter()
             .find(|d| d.message.contains("duplicate property `until`"))
             .expect("a duplicate diagnostic");

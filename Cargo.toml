@@ -9,8 +9,13 @@ rust-version = "1.96"
 publish = false
 
 [workspace.dependencies]
+ariadne = "0.6"
+assert_cmd = "2"
+clap = { version = "4", features = ["derive"] }
 inka-core = { path = "crate/inka-core" }
+insta = "1"
 petgraph = { version = "0.8", default-features = false, features = ["std"] }
+predicates = "3"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = { version = "1", default-features = false, features = ["display", "parse", "serde", "std"] }

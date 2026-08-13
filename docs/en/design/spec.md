@@ -122,7 +122,7 @@ fiat <id> {
 - established: fiat = satisfied fiat approval; structure = satisfied structure
   approval ∧ all children established; bind = satisfied bind approval ∧
   evidence match; objective = satisfied objective approval ∧ all children
-  established (the root's wording is agreed inside inka like any other
+  established (each root's wording is agreed inside inka like any other
   contract).
 - blame lists only nodes whose failure cause is their own (missing / stale /
   declined / expired / evidence mismatch), not nodes failing solely through

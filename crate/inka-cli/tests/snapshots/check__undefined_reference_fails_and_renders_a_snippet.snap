@@ -1,0 +1,11 @@
+---
+source: crate/inka-cli/tests/check.rs
+expression: stderr
+---
+Error: undefined reference `missing`
+   ╭─[ ./argument/main.inka:5:13 ]
+   │
+ 5 │   children: missing
+   │             ───┬───  
+   │                ╰───── undefined reference `missing`
+───╯

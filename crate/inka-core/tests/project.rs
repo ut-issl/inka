@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use inka_core::ast::{Block, SourceRef};
-use inka_core::project::{Project, ProjectError, load_project};
+use inka_core::project::{LoadError, LoadOutcome, Project, load_project};
 use inka_core::values::ValuesError;
 
 mod common;
@@ -22,7 +22,9 @@ fn rendered_descriptions(project: &Project) -> Vec<&str> {
 #[test]
 fn loads_dogfood_project_and_interpolates_values() {
     // Arrange & Act
-    let project = load_project(&fixture_dir("dogfood")).expect("dogfood project should load");
+    let project = load_project(&fixture_dir("dogfood"))
+        .result
+        .expect("dogfood project should load");
 
     // Assert
     assert_eq!(project.manifest.project.name, "inka-dogfood");
@@ -55,7 +57,9 @@ fn loads_aocs_project_and_interpolates_all_eight_values() {
     ];
 
     // Act
-    let project = load_project(&fixture_dir("aocs")).expect("aocs project should load");
+    let project = load_project(&fixture_dir("aocs"))
+        .result
+        .expect("aocs project should load");
 
     // Assert
     let rendered = rendered_descriptions(&project);
@@ -75,8 +79,12 @@ fn loads_aocs_project_and_interpolates_all_eight_values() {
 fn loads_the_same_block_sequence_on_every_run() {
     // Arrange & Act: files are read in sorted path order, so two loads of
     // the same project must produce the same block sequence.
-    let first = load_project(&fixture_dir("dogfood")).expect("dogfood project should load");
-    let second = load_project(&fixture_dir("dogfood")).expect("dogfood project should load");
+    let first = load_project(&fixture_dir("dogfood"))
+        .result
+        .expect("dogfood project should load");
+    let second = load_project(&fixture_dir("dogfood"))
+        .result
+        .expect("dogfood project should load");
 
     // Assert
     let ids = |project: &Project| {
@@ -87,6 +95,18 @@ fn loads_the_same_block_sequence_on_every_run() {
             .collect::<Vec<_>>()
     };
     assert_eq!(ids(&first), ids(&second));
+}
+
+#[test]
+fn load_reports_warnings_alongside_the_result() {
+    // Arrange & Act: no load-stage pass emits warnings today, so the lane is
+    // empty — what matters is that it rides outside the Result, present on
+    // success and failure alike.
+    let LoadOutcome { warnings, result } = load_project(&fixture_dir("dogfood"));
+
+    // Assert
+    assert!(warnings.is_empty());
+    assert!(result.is_ok());
 }
 
 /// A throwaway project directory, removed on drop.
@@ -144,7 +164,9 @@ fn loads_bind_block_preserving_source_and_rendering_description() {
     );
 
     // Act
-    let loaded = load_project(&project.root).expect("bind project should load");
+    let loaded = load_project(&project.root)
+        .result
+        .expect("bind project should load");
 
     // Assert: the Bind arm of `with_description` must keep `source` while
     // swapping in the rendered description.
@@ -171,7 +193,9 @@ fn loads_empty_argument_directory_as_project_without_blocks() {
     project.subdir("argument");
 
     // Act
-    let loaded = load_project(&project.root).expect("empty argument/ should load");
+    let loaded = load_project(&project.root)
+        .result
+        .expect("empty argument/ should load");
 
     // Assert
     assert!(loaded.blocks.is_empty());
@@ -186,7 +210,9 @@ fn ignores_files_without_the_inka_extension() {
     project.write("argument/README.md", "notes, not part of the argument\n");
 
     // Act
-    let loaded = load_project(&project.root).expect("non-.inka files are ignored");
+    let loaded = load_project(&project.root)
+        .result
+        .expect("non-.inka files are ignored");
 
     // Assert
     assert_eq!(loaded.blocks.len(), 1);
@@ -198,10 +224,12 @@ fn reports_missing_manifest() {
     let project = TempProject::new("missing-manifest");
 
     // Act
-    let error = load_project(&project.root).expect_err("missing inka.toml should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("missing inka.toml should fail");
 
     // Assert
-    assert!(matches!(error, ProjectError::Read { .. }));
+    assert!(matches!(error, LoadError::Read { .. }));
     assert!(error.to_string().contains("inka.toml"));
 }
 
@@ -212,10 +240,12 @@ fn reports_invalid_manifest_with_its_path() {
     project.write("inka.toml", "[project]\nname = \"t\"\n");
 
     // Act
-    let error = load_project(&project.root).expect_err("incomplete inka.toml should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("incomplete inka.toml should fail");
 
     // Assert
-    assert!(matches!(error, ProjectError::Manifest { .. }));
+    assert!(matches!(error, LoadError::Manifest { .. }));
     assert!(error.to_string().contains("inka.toml"));
 }
 
@@ -232,12 +262,14 @@ fn reports_value_key_collision_across_files() {
     project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
 
     // Act
-    let error = load_project(&project.root).expect_err("colliding value key should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("colliding value key should fail");
 
     // Assert
     assert!(matches!(
         error,
-        ProjectError::Values(ValuesError::DuplicateKey { .. })
+        LoadError::Values(ValuesError::DuplicateKey { .. })
     ));
 }
 
@@ -248,10 +280,12 @@ fn reports_missing_argument_directory() {
     project.write("inka.toml", MANIFEST_WITHOUT_VALUES);
 
     // Act
-    let error = load_project(&project.root).expect_err("missing argument/ should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("missing argument/ should fail");
 
     // Assert
-    assert!(matches!(error, ProjectError::MissingArgumentDir { .. }));
+    assert!(matches!(error, LoadError::MissingArgumentDir { .. }));
     assert!(error.to_string().contains("argument"));
 }
 
@@ -264,13 +298,12 @@ fn rejects_subdirectories_under_argument() {
     project.subdir("argument/nested");
 
     // Act
-    let error = load_project(&project.root).expect_err("argument/ subdirectory should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("argument/ subdirectory should fail");
 
     // Assert
-    assert!(matches!(
-        error,
-        ProjectError::UnsupportedSubdirectory { .. }
-    ));
+    assert!(matches!(error, LoadError::UnsupportedSubdirectory { .. }));
     assert!(error.to_string().contains("nested"));
 }
 
@@ -284,7 +317,9 @@ fn reports_the_first_subdirectory_in_path_order() {
     project.subdir("argument/a-sub");
 
     // Act
-    let error = load_project(&project.root).expect_err("argument/ subdirectory should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("argument/ subdirectory should fail");
 
     // Assert
     assert!(
@@ -304,14 +339,16 @@ fn reports_undefined_variable_with_file_position() {
     );
 
     // Act
-    let error = load_project(&project.root).expect_err("undefined variable should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("undefined variable should fail");
 
     // Assert
-    let ProjectError::Diagnostics { diagnostics, .. } = &error else {
-        panic!("expected Diagnostics, got {error:?}");
+    let LoadError::Invalid { errors, .. } = &error else {
+        panic!("expected Invalid, got {error:?}");
     };
-    assert_eq!(diagnostics.len(), 1);
-    assert_eq!(diagnostics[0].message, "undefined variable `missing`");
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].message, "undefined variable `missing`");
     let message = error.to_string();
     assert!(
         message.contains("a.inka:3:"),
@@ -334,13 +371,15 @@ fn aggregates_undefined_variables_across_files() {
     );
 
     // Act
-    let error = load_project(&project.root).expect_err("undefined variables should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("undefined variables should fail");
 
     // Assert: both files are reported in one pass, each with its own position.
-    let ProjectError::Diagnostics { diagnostics, .. } = &error else {
-        panic!("expected Diagnostics, got {error:?}");
+    let LoadError::Invalid { errors, .. } = &error else {
+        panic!("expected Invalid, got {error:?}");
     };
-    assert_eq!(diagnostics.len(), 2);
+    assert_eq!(errors.len(), 2);
     let message = error.to_string();
     assert!(message.contains("a.inka:3:"), "got: {message}");
     assert!(message.contains("b.inka:3:"), "got: {message}");
@@ -357,13 +396,12 @@ fn reports_missing_values_file() {
     project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
 
     // Act
-    let error = load_project(&project.root).expect_err("missing values file should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("missing values file should fail");
 
     // Assert
-    assert!(matches!(
-        error,
-        ProjectError::Values(ValuesError::Read { .. })
-    ));
+    assert!(matches!(error, LoadError::Values(ValuesError::Read { .. })));
     assert!(error.to_string().contains("values.toml"));
 }
 
@@ -381,16 +419,18 @@ fn reports_parser_diagnostics_before_interpolation() {
     );
 
     // Act
-    let error = load_project(&project.root).expect_err("broken block should fail");
+    let error = load_project(&project.root)
+        .result
+        .expect_err("broken block should fail");
 
     // Assert
-    let ProjectError::Diagnostics { diagnostics, .. } = &error else {
-        panic!("expected Diagnostics, got {error:?}");
+    let LoadError::Invalid { errors, .. } = &error else {
+        panic!("expected Invalid, got {error:?}");
     };
     assert!(
-        diagnostics
+        errors
             .iter()
-            .all(|d| !d.message.contains("undefined variable")),
-        "interpolation must not run while syntax diagnostics exist: {diagnostics:?}"
+            .all(|error| !error.message.contains("undefined variable")),
+        "interpolation must not run while syntax errors exist: {errors:?}"
     );
 }
