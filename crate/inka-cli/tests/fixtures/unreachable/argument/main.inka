@@ -1,0 +1,16 @@
+objective root {
+  ```
+  the root claim
+  ```
+  children: a
+}
+fiat a {
+  ```
+  a supported leaf
+  ```
+}
+fiat orphan {
+  ```
+  a leaf nobody references
+  ```
+}
