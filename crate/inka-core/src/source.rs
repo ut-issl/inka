@@ -81,17 +81,76 @@ impl SourceMap {
     }
 }
 
-/// A message anchored to the span it concerns.
+/// How consequential a diagnostic is for the project as a whole.
+///
+/// Ordered so that `Warning < Error`, letting callers take the maximum
+/// severity of a batch to decide an exit status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    /// The argument is suspicious but still well-formed.
+    Warning,
+    /// The argument cannot be accepted as it stands.
+    Error,
+}
+
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Severity::Warning => f.write_str("warning"),
+            Severity::Error => f.write_str("error"),
+        }
+    }
+}
+
+/// A message about the argument, usually anchored to the span it concerns.
 ///
 /// This is the one diagnostic shape shared by every pass (lexer, parser, and
-/// later checks), so a renderer or caller handles them uniformly.
+/// later checks), so a renderer or caller handles them uniformly. Judgements
+/// about the project as a whole — a missing objective, an empty argument —
+/// have no source range to point at and carry no span.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{message}")]
+#[error("{severity}: {message}")]
 pub struct Diagnostic {
-    /// The source range the message is about.
-    pub span: Span,
+    /// The source range the message is about, or `None` for a judgement on
+    /// the project as a whole.
+    pub span: Option<Span>,
+    /// Whether the diagnostic invalidates the argument or merely flags it.
+    pub severity: Severity,
     /// Human-readable description of the problem.
     pub message: String,
+}
+
+impl Diagnostic {
+    /// An error anchored to the source range it concerns.
+    #[must_use]
+    pub fn error(span: Span, message: impl Into<String>) -> Self {
+        Self {
+            span: Some(span),
+            severity: Severity::Error,
+            message: message.into(),
+        }
+    }
+
+    /// A warning anchored to the source range it concerns.
+    #[must_use]
+    pub fn warning(span: Span, message: impl Into<String>) -> Self {
+        Self {
+            span: Some(span),
+            severity: Severity::Warning,
+            message: message.into(),
+        }
+    }
+
+    /// An error about the project as a whole, with no source range to
+    /// anchor to.
+    #[must_use]
+    pub fn unanchored_error(message: impl Into<String>) -> Self {
+        Self {
+            span: None,
+            severity: Severity::Error,
+            message: message.into(),
+        }
+    }
 }
 
 /// Half-open byte range `[start, end)` within one source file.

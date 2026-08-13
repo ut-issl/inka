@@ -10,6 +10,7 @@ publish = false
 
 [workspace.dependencies]
 inka-core = { path = "crate/inka-core" }
+petgraph = { version = "0.8", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = { version = "1", default-features = false, features = ["display", "parse", "serde", "std"] }

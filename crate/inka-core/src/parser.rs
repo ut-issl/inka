@@ -700,10 +700,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&mut self, span: Span, message: impl Into<String>) {
-        self.diagnostics.push(Diagnostic {
-            span,
-            message: message.into(),
-        });
+        self.diagnostics.push(Diagnostic::error(span, message));
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -1242,7 +1239,8 @@ mod tests {
             .iter()
             .find(|d| d.message.contains("duplicate property `until`"))
             .expect("a duplicate diagnostic");
-        assert_eq!(&input[diagnostic.span.start..diagnostic.span.end], "until");
+        let span = diagnostic.span.expect("parse errors are anchored");
+        assert_eq!(&input[span.start..span.end], "until");
     }
 
     #[test]

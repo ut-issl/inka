@@ -214,26 +214,29 @@ fn interpolate_blocks(
     (rendered, errors)
 }
 
-/// Formats diagnostics as `path:line:column: message` lines (1-based), the
-/// plain-text fallback used until the CLI grows a richer renderer.
+/// Formats diagnostics as `path:line:column: severity: message` lines
+/// (1-based), the plain-text fallback used until the CLI grows a richer
+/// renderer. Unanchored diagnostics render as `severity: message` alone.
 fn render_diagnostics(source_map: &SourceMap, diagnostics: &[Diagnostic]) -> String {
     let lines: Vec<String> = diagnostics
         .iter()
-        .map(
-            |diagnostic| match source_map.file(diagnostic.span.file_id) {
-                Some(file) => {
-                    let (line, column) = file.line_col(diagnostic.span.start);
+        .map(|diagnostic| {
+            let located = diagnostic
+                .span
+                .and_then(|span| source_map.file(span.file_id).map(|file| (file, span)));
+            match located {
+                Some((file, span)) => {
+                    let (line, column) = file.line_col(span.start);
                     format!(
-                        "{}:{}:{}: {}",
+                        "{}:{}:{}: {diagnostic}",
                         file.path.display(),
                         line + 1,
                         column + 1,
-                        diagnostic.message
                     )
                 }
-                None => diagnostic.message.clone(),
-            },
-        )
+                None => diagnostic.to_string(),
+            }
+        })
         .collect();
     lines.join("\n")
 }

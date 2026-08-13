@@ -7,8 +7,10 @@ use inka_core::lexer::Lexer;
 use inka_core::parser::parse;
 use inka_core::source::SourceMap;
 
+mod common;
+
 fn fixture_files() -> Vec<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures");
+    let root = common::fixtures_root();
     let mut files = Vec::new();
     collect(&root, &mut files);
     files.sort();

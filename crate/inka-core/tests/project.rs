@@ -2,15 +2,14 @@
 //! loader error path against synthetic projects in a temp directory.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use inka_core::ast::{Block, SourceRef};
 use inka_core::project::{Project, ProjectError, load_project};
 use inka_core::values::ValuesError;
 
-fn fixture_dir(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../tests/fixtures/{name}"))
-}
+mod common;
+use common::fixture_dir;
 
 fn rendered_descriptions(project: &Project) -> Vec<&str> {
     project
