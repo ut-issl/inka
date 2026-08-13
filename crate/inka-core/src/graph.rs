@@ -73,6 +73,17 @@ impl<'p> Graph<'p> {
     /// reference. Both passes run to completion before returning, so one
     /// bad id does not hide another.
     pub fn build(blocks: &'p [Block<RenderedDescription>]) -> Result<Self, Vec<Error>> {
+        let (graph, errors) = Self::build_collecting(blocks);
+        if errors.is_empty() {
+            Ok(graph)
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Builds the usable portion of the graph while retaining construction
+    /// errors, so `inka check` can continue with shape validation.
+    fn build_collecting(blocks: &'p [Block<RenderedDescription>]) -> (Self, Vec<Error>) {
         let mut errors = Vec::new();
 
         // Registration: the first definition of an id wins its slot; every
@@ -123,11 +134,7 @@ impl<'p> Graph<'p> {
             }
         }
 
-        if errors.is_empty() {
-            Ok(Self { graph, index })
-        } else {
-            Err(errors)
-        }
+        (Self { graph, index }, errors)
     }
 
     /// Number of nodes in the graph.
@@ -364,13 +371,20 @@ impl<'p> Graph<'p> {
 /// argument is rejected here too.
 #[must_use]
 pub fn check(project: &Project) -> Diagnostics {
-    match Graph::build(&project.blocks) {
-        Ok(graph) => graph.validate(),
-        Err(errors) => Diagnostics {
-            errors,
-            warnings: Vec::new(),
-        },
-    }
+    check_blocks(&project.blocks)
+}
+
+/// Checks graph construction and shape in one pass. A partially resolved
+/// graph is sufficient for cycle and reachability analysis, so construction
+/// errors do not hide independent shape findings.
+fn check_blocks(blocks: &[Block<RenderedDescription>]) -> Diagnostics {
+    let (graph, mut errors) = Graph::build_collecting(blocks);
+    let Diagnostics {
+        errors: shape_errors,
+        warnings,
+    } = graph.validate();
+    errors.extend(shape_errors);
+    Diagnostics { errors, warnings }
 }
 
 #[cfg(test)]
@@ -559,6 +573,52 @@ fiat a {
         assert_eq!(
             messages,
             ["duplicate id `a`", "undefined reference `ghost`"]
+        );
+    }
+
+    #[test]
+    fn check_collects_build_errors_and_shape_findings() {
+        // Arrange: the dangling reference is a construction error, while the
+        // cycle and orphan are independent findings on the resolved portion.
+        let blocks = blocks(
+            "\
+fiat orphan {
+  ```
+  orphan
+  ```
+}
+objective root {
+  ```
+  root
+  ```
+  children: a
+}
+structure a {
+  ```
+  cycle
+  ```
+  children: a, missing
+}
+",
+        );
+
+        // Act
+        let diagnostics = check_blocks(&blocks);
+
+        // Assert
+        let error_messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(
+            error_messages,
+            ["undefined reference `missing`", "dependency cycle: a → a"]
+        );
+        assert_eq!(diagnostics.warnings.len(), 1);
+        assert_eq!(
+            diagnostics.warnings[0].message,
+            "`orphan` is unreachable from any objective"
         );
     }
 

@@ -107,7 +107,7 @@ fiat <id> {
   解除は注釈の編集=契約変更+再承認のみ。
 - established: fiat = 有効な fiat 承認 / structure = 有効な structure 承認 ∧ 全子
   established / bind = 有効な bind 承認 ∧ 証拠の照合 / objective = 有効な objective
-  承認 ∧ 全子 established(ルートの文言も他の契約と同様に inka の中で合意される)。
+  承認 ∧ 全子 established(各ルートの文言も他の契約と同様に inka の中で合意される)。
 - blame は原因が自分自身にあるノードだけを列挙(不足・stale・decline・失効・証拠
   不一致)。子経由でのみ未確立のノードは出さない。
 

@@ -16,3 +16,10 @@ Error: dependency cycle: a → b → a
     │           ┬  
     │           ╰── dependency cycle: a → b → a
 ────╯
+Error: undefined reference `missing`
+    ╭─[ ./argument/main.inka:16:16 ]
+    │
+ 16 │   children: b, missing
+    │                ───┬───  
+    │                   ╰───── undefined reference `missing`
+────╯

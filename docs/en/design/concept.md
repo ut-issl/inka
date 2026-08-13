@@ -17,9 +17,10 @@ repository, evaluated by a pure function.
    natural-language contract (its description). It is *discharged* in one of
    three modes, declared as the block keyword: `structure` (decomposed into
    children), `bind` (bound to machine-verifiable evidence), or `fiat` (accepted
-   without argument; leaves only). The root is a single `objective`; its
-   wording is itself an approvable contract — agreement on the root is recorded
-   inside inka like everything else. Modes map one-to-one onto approval targets.
+   without argument; leaves only). An argument has one or more `objective`
+   roots; each root's wording is itself an approvable contract — agreement on
+   every root is recorded inside inka like everything else. Modes map
+   one-to-one onto approval targets.
 
 2. **Approvals bind to the local view.** The local view of a node is its own
    rendered description + deadline annotations + its direct children's
@@ -39,7 +40,7 @@ repository, evaluated by a pure function.
    cannot-take-responsibility. A decline on the current hash is a veto: quorum
    never overrides it. `established` is a fixpoint over the DAG (fiat approval ∨
    structure approval ∧ all children established ∨ bind approval ∧ evidence
-   pass; the objective needs its own approval plus all children). eval reads
+   pass; each objective needs its own approval plus all children). eval reads
    repository content only — no clock, no network — so the
    same commit always evaluates identically.
 

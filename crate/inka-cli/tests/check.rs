@@ -81,9 +81,10 @@ fn unreachable_node_is_a_warning_and_still_exits_zero() {
 
 #[test]
 fn errors_and_warnings_interleave_in_source_order() {
-    // Act: the fixture places the unreachable block before the undefined
-    // reference, so the warning must render first despite being the lesser
-    // finding — order follows the source, not the lane.
+    // Act: the fixture combines a build error with independently detectable
+    // shape findings. The early unreachable warning must still render first
+    // despite being the lesser finding — order follows the source, not lane or
+    // validation stage.
     let assert = inka()
         .current_dir(local_fixture("mixed"))
         .args(["check", "."])
