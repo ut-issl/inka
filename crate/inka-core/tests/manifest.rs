@@ -5,10 +5,12 @@ use std::path::Path;
 
 use inka_core::manifest::parse_manifest;
 
+mod common;
+
 #[test]
 fn dogfood_manifest_deserializes_into_manifest() {
     // Arrange
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/dogfood/inka.toml");
+    let path = common::fixture_dir("dogfood").join("inka.toml");
     let text = fs::read_to_string(&path).expect("dogfood inka.toml should read");
 
     // Act

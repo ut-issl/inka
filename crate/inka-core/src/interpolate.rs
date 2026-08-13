@@ -119,14 +119,14 @@ fn undefined_variable(
     start: usize,
     end: usize,
 ) -> Diagnostic {
-    Diagnostic {
-        span: Span {
+    Diagnostic::error(
+        Span {
             file_id: description.span.file_id,
             start: description.span.start + start,
             end: description.span.start + end,
         },
-        message: format!("undefined variable `{name}`"),
-    }
+        format!("undefined variable `{name}`"),
+    )
 }
 
 #[cfg(test)]
@@ -196,8 +196,9 @@ mod tests {
         // Assert
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].message, "undefined variable `missing`");
-        assert_eq!(errors[0].span.start, 104);
-        assert_eq!(errors[0].span.end, 114);
+        let span = errors[0].span.expect("interpolation errors are anchored");
+        assert_eq!(span.start, 104);
+        assert_eq!(span.end, 114);
     }
 
     #[test]
@@ -225,8 +226,9 @@ mod tests {
             .expect_err("undefined variable should be an error");
 
         // Assert
-        assert_eq!(errors[0].span.start, 17);
-        assert_eq!(errors[0].span.end, 21);
+        let span = errors[0].span.expect("interpolation errors are anchored");
+        assert_eq!(span.start, 17);
+        assert_eq!(span.end, 21);
     }
 
     #[test]

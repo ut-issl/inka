@@ -154,10 +154,10 @@ impl<'a> Lexer<'a> {
             self.offset = self.next_line_start(closing_line_end);
         }
 
-        Err(LexError {
-            message: "unclosed fenced description".to_owned(),
-            span: self.span(token_start, self.input.len()),
-        })
+        Err(LexError::error(
+            self.span(token_start, self.input.len()),
+            "unclosed fenced description",
+        ))
     }
 
     fn lex_identifier(&mut self) -> Token {
@@ -201,10 +201,10 @@ impl<'a> Lexer<'a> {
         }
 
         if self.offset == value_start {
-            return Err(LexError {
-                message: "expected a tag name after `#`".to_owned(),
-                span: self.span(start, self.offset),
-            });
+            return Err(LexError::error(
+                self.span(start, self.offset),
+                "expected a tag name after `#`",
+            ));
         }
 
         let value = self.input[value_start..self.offset].to_owned();
@@ -228,10 +228,10 @@ impl<'a> Lexer<'a> {
                 }
 
                 b'\n' | b'\r' => {
-                    return Err(LexError {
-                        message: "string literal must end on the same line".to_owned(),
-                        span: self.span(start, self.offset),
-                    });
+                    return Err(LexError::error(
+                        self.span(start, self.offset),
+                        "string literal must end on the same line",
+                    ));
                 }
 
                 _ => {
@@ -240,10 +240,10 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Err(LexError {
-            message: "unclosed string literal".to_owned(),
-            span: self.span(start, self.input.len()),
-        })
+        Err(LexError::error(
+            self.span(start, self.input.len()),
+            "unclosed string literal",
+        ))
     }
 
     fn skip_horizontal_whitespace(&mut self) {
@@ -285,10 +285,7 @@ impl<'a> Lexer<'a> {
             .map_or(0, char::len_utf8);
         let end = self.offset + width;
 
-        LexError {
-            message: message.into(),
-            span: self.span(self.offset, end),
-        }
+        LexError::error(self.span(self.offset, end), message)
     }
 
     fn span(&self, start: usize, end: usize) -> Span {
@@ -561,8 +558,9 @@ objective root { // opening comment
             .expect_err("an unclosed fence should be rejected");
 
         assert_eq!(error.message, "unclosed fenced description");
-        assert_eq!(error.span.start, 0);
-        assert_eq!(error.span.end, "```\ndescription\n".len());
+        let span = error.span.expect("lex errors are anchored");
+        assert_eq!(span.start, 0);
+        assert_eq!(span.end, "```\ndescription\n".len());
     }
 
     #[test]
@@ -601,8 +599,9 @@ objective root { // opening comment
         let error = lex(input).expect_err("an unclosed string literal should be rejected");
 
         assert_eq!(error.message, "unclosed string literal");
-        assert_eq!(error.span.start, "reason: ".len());
-        assert_eq!(error.span.end, input.len());
+        let span = error.span.expect("lex errors are anchored");
+        assert_eq!(span.start, "reason: ".len());
+        assert_eq!(span.end, input.len());
     }
 
     #[test]
@@ -747,8 +746,9 @@ objective root { // opening comment
         let error = lex("objective root @").expect_err("unknown characters should be rejected");
 
         assert_eq!(error.message, "unexpected character");
-        assert_eq!(error.span.start, "objective root ".len());
-        assert_eq!(error.span.end, "objective root @".len());
+        let span = error.span.expect("lex errors are anchored");
+        assert_eq!(span.start, "objective root ".len());
+        assert_eq!(span.end, "objective root @".len());
     }
 
     #[test]
@@ -795,7 +795,8 @@ objective root { // opening comment
 
         assert_eq!(error.message, "unexpected character");
         // The span must stay on char boundaries so a renderer can slice it.
-        assert_eq!(&input[error.span.start..error.span.end], "√");
+        let span = error.span.expect("lex errors are anchored");
+        assert_eq!(&input[span.start..span.end], "√");
     }
 
     #[test]

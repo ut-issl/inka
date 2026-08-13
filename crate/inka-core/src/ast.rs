@@ -38,6 +38,19 @@ impl<D> Block<D> {
         }
     }
 
+    /// Returns the child references of the block.
+    ///
+    /// Bind and fiat blocks are leaves by construction, so they yield an
+    /// empty slice rather than an `Option`.
+    #[must_use]
+    pub fn children(&self) -> &[Spanned<String>] {
+        match self {
+            Block::Objective(b) => &b.children,
+            Block::Structure(b) => &b.children,
+            Block::Bind(_) | Block::Fiat(_) => &[],
+        }
+    }
+
     /// Rebuilds the block around a new description, moving every other field.
     ///
     /// This is the only way a block changes description stage, so a stage
