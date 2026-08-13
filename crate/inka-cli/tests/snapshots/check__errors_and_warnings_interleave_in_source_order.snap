@@ -1,0 +1,18 @@
+---
+source: crate/inka-cli/tests/check.rs
+expression: stderr
+---
+Warning: `orphan` is unreachable from any objective
+   ╭─[ ./argument/main.inka:1:6 ]
+   │
+ 1 │ fiat orphan {
+   │      ───┬──  
+   │         ╰──── `orphan` is unreachable from any objective
+───╯
+Error: dependency cycle: a → b → a
+    ╭─[ ./argument/main.inka:12:11 ]
+    │
+ 12 │ structure a {
+    │           ┬  
+    │           ╰── dependency cycle: a → b → a
+────╯

@@ -1,17 +1,17 @@
-//! The `inka check` command: load a project, gather every diagnostic across
-//! the load and graph stages, render them, and report an outcome.
+//! The `inka check` command: load a project, gather every finding across the
+//! load and graph stages, render them, and report an outcome.
 //!
 //! The command is deliberately thin. All judgement lives in the core: loading
-//! surfaces syntax, value, and interpolation diagnostics, and `graph::check`
-//! adds the structural ones. This module only decides how a project directory
-//! maps to those two sources and folds the result into a single exit outcome.
+//! surfaces syntax, value, and interpolation errors plus any warnings, and
+//! `graph::check` adds the structural findings. This module only folds those
+//! sources into one rendered batch and a single exit outcome.
 
 use std::io::{self, Write};
 use std::path::Path;
 
 use inka_core::graph;
-use inka_core::project::{ProjectError, load_project};
-use inka_core::source::{Diagnostic, Severity, SourceMap};
+use inka_core::project::{LoadError, LoadOutcome, load_project};
+use inka_core::source::{Diagnostics, Error, SourceMap};
 
 use crate::render::render;
 
@@ -20,17 +20,16 @@ use crate::render::render;
 pub enum Outcome {
     /// No errors: the argument is clean or carries only warnings.
     Ok,
-    /// At least one error diagnostic, or a structural failure to load.
+    /// At least one error, or a structural failure to load.
     Failed,
 }
 
-/// Runs `inka check` against `project_dir`, writing diagnostics to `out`.
+/// Runs `inka check` against `project_dir`, writing findings to `out`.
 ///
-/// Load-stage diagnostics (syntax, values, interpolation) and graph-stage
-/// diagnostics (duplicate ids, dangling references, cycles, reachability) are
-/// rendered through the same path. A structural load failure that produces no
-/// diagnostics — a missing manifest, an unreadable file — is reported as a
-/// single error line.
+/// Load warnings are reported whether or not loading succeeded, so one run
+/// surfaces everything it saw. The outcome never inspects a severity: a
+/// loaded project fails only when the graph stage found errors, and a load
+/// failure is a failure by construction.
 ///
 /// `color` is forwarded to the renderer to colour anchored snippets; callers
 /// pass `false` when `out` is not a terminal.
@@ -39,33 +38,41 @@ pub enum Outcome {
 ///
 /// Propagates any I/O error from writing to `out`.
 pub fn run(project_dir: &Path, out: &mut impl Write, color: bool) -> io::Result<Outcome> {
-    match load_project(project_dir) {
-        Ok(project) => report(&project.source_map, &graph::check(&project), out, color),
-        Err(ProjectError::Diagnostics {
-            source_map,
-            diagnostics,
-        }) => report(&source_map, &diagnostics, out, color),
+    let LoadOutcome { warnings, result } = load_project(project_dir);
+    match result {
+        Ok(project) => {
+            let findings = graph::check(&project);
+            let diagnostics = Diagnostics {
+                errors: findings.errors,
+                warnings: [warnings, findings.warnings].concat(),
+            };
+            render(&project.source_map, &diagnostics, out, color)?;
+            Ok(verdict(&diagnostics))
+        }
+        Err(LoadError::Invalid { source_map, errors }) => {
+            let diagnostics = Diagnostics { errors, warnings };
+            render(&source_map, &diagnostics, out, color)?;
+            Ok(Outcome::Failed)
+        }
+        // A structural failure — a missing manifest, an unreadable file —
+        // becomes an unanchored error through the same rendering path.
         Err(other) => {
-            writeln!(out, "error: {other}")?;
+            let diagnostics = Diagnostics {
+                errors: vec![Error::unanchored(other.to_string())],
+                warnings,
+            };
+            render(&SourceMap::new(), &diagnostics, out, color)?;
             Ok(Outcome::Failed)
         }
     }
 }
 
-/// Renders a batch of diagnostics and derives the outcome from their severity.
-fn report(
-    source_map: &SourceMap,
-    diagnostics: &[Diagnostic],
-    out: &mut impl Write,
-    color: bool,
-) -> io::Result<Outcome> {
-    render(source_map, diagnostics, out, color)?;
-    let has_error = diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == Severity::Error);
-    Ok(if has_error {
+/// Verdict for a run whose project loaded: it fails exactly when errors were
+/// found. A future `--deny-warnings` policy belongs here and nowhere else.
+fn verdict(diagnostics: &Diagnostics) -> Outcome {
+    if diagnostics.has_errors() {
         Outcome::Failed
     } else {
         Outcome::Ok
-    })
+    }
 }

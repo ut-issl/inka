@@ -80,6 +80,24 @@ fn unreachable_node_is_a_warning_and_still_exits_zero() {
 }
 
 #[test]
+fn errors_and_warnings_interleave_in_source_order() {
+    // Act: the fixture places the unreachable block before the undefined
+    // reference, so the warning must render first despite being the lesser
+    // finding — order follows the source, not the lane.
+    let assert = inka()
+        .current_dir(local_fixture("mixed"))
+        .args(["check", "."])
+        .assert()
+        .failure()
+        .code(1);
+
+    // Assert: freeze the interleaved rendering so ordering drift is caught.
+    let stderr = String::from_utf8(assert.get_output().stderr.clone())
+        .expect("diagnostic output should be valid UTF-8");
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
 fn missing_objective_reports_an_unanchored_error() {
     inka()
         .current_dir(local_fixture("no-objective"))

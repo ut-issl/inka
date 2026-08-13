@@ -81,62 +81,27 @@ impl SourceMap {
     }
 }
 
-/// How consequential a diagnostic is for the project as a whole.
+/// A problem that invalidates the argument: whatever produced it cannot hand
+/// back a usable artifact.
 ///
-/// Ordered so that `Warning < Error`, letting callers take the maximum
-/// severity of a batch to decide an exit status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Severity {
-    /// The argument is suspicious but still well-formed.
-    Warning,
-    /// The argument cannot be accepted as it stands.
-    Error,
-}
-
-impl std::fmt::Display for Severity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Severity::Warning => f.write_str("warning"),
-            Severity::Error => f.write_str("error"),
-        }
-    }
-}
-
-/// A message about the argument, usually anchored to the span it concerns.
-///
-/// This is the one diagnostic shape shared by every pass (lexer, parser, and
-/// later checks), so a renderer or caller handles them uniformly. Judgements
-/// about the project as a whole — a missing objective, an empty argument —
-/// have no source range to point at and carry no span.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{severity}: {message}")]
-pub struct Diagnostic {
+/// Errors and artifacts are mutually exclusive by convention: a pass returns
+/// `Result<Artifact, Vec<Error>>` (or accumulates into [`Diagnostics`]), so
+/// "failed with no errors" is not a representable outcome.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Error {
     /// The source range the message is about, or `None` for a judgement on
-    /// the project as a whole.
+    /// the project as a whole — a missing objective, an empty argument.
     pub span: Option<Span>,
-    /// Whether the diagnostic invalidates the argument or merely flags it.
-    pub severity: Severity,
     /// Human-readable description of the problem.
     pub message: String,
 }
 
-impl Diagnostic {
+impl Error {
     /// An error anchored to the source range it concerns.
     #[must_use]
-    pub fn error(span: Span, message: impl Into<String>) -> Self {
+    pub fn new(span: Span, message: impl Into<String>) -> Self {
         Self {
             span: Some(span),
-            severity: Severity::Error,
-            message: message.into(),
-        }
-    }
-
-    /// A warning anchored to the source range it concerns.
-    #[must_use]
-    pub fn warning(span: Span, message: impl Into<String>) -> Self {
-        Self {
-            span: Some(span),
-            severity: Severity::Warning,
             message: message.into(),
         }
     }
@@ -144,11 +109,133 @@ impl Diagnostic {
     /// An error about the project as a whole, with no source range to
     /// anchor to.
     #[must_use]
-    pub fn unanchored_error(message: impl Into<String>) -> Self {
+    pub fn unanchored(message: impl Into<String>) -> Self {
         Self {
             span: None,
-            severity: Severity::Error,
             message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "error: {}", self.message)
+    }
+}
+
+/// A suspicion about the argument that leaves it well-formed: the artifact
+/// still exists, so warnings accompany success instead of replacing it.
+///
+/// If a finding should ever prevent the artifact from being produced, that is
+/// by definition an [`Error`] and must be emitted as one at its source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Warning {
+    /// The source range the message is about, or `None` for a judgement on
+    /// the project as a whole.
+    pub span: Option<Span>,
+    /// Human-readable description of the suspicion.
+    pub message: String,
+}
+
+impl Warning {
+    /// A warning anchored to the source range it concerns.
+    #[must_use]
+    pub fn new(span: Span, message: impl Into<String>) -> Self {
+        Self {
+            span: Some(span),
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for Warning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "warning: {}", self.message)
+    }
+}
+
+/// Findings of a pass that produces no artifact of its own, with errors and
+/// warnings in separate lanes so no caller ever inspects a severity at run
+/// time: "does this fail the check?" is [`Diagnostics::has_errors`], decided
+/// by which lane a finding was pushed into at its source.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Diagnostics {
+    pub errors: Vec<Error>,
+    pub warnings: Vec<Warning>,
+}
+
+impl Diagnostics {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether the findings invalidate the argument.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty() && self.warnings.is_empty()
+    }
+
+    /// Every finding in source order: anchored ones sorted by file and byte
+    /// range, unanchored ones after them. The sort is stable, so findings on
+    /// the same span keep errors before warnings and otherwise preserve
+    /// emission order.
+    #[must_use]
+    pub fn in_source_order(&self) -> Vec<DiagnosticRef<'_>> {
+        let mut refs: Vec<DiagnosticRef<'_>> = self
+            .errors
+            .iter()
+            .map(DiagnosticRef::Error)
+            .chain(self.warnings.iter().map(DiagnosticRef::Warning))
+            .collect();
+        refs.sort_by_key(|diagnostic| {
+            let span = diagnostic.span();
+            (
+                span.is_none(),
+                span.map(|span| (span.file_id, span.start, span.end)),
+            )
+        });
+        refs
+    }
+}
+
+/// A view of one finding for rendering, where the error/warning distinction
+/// matters only as a display kind. This is the sole place the two lanes are
+/// handled through one shape.
+#[derive(Debug, Clone, Copy)]
+pub enum DiagnosticRef<'a> {
+    Error(&'a Error),
+    Warning(&'a Warning),
+}
+
+impl<'a> DiagnosticRef<'a> {
+    #[must_use]
+    pub fn span(self) -> Option<Span> {
+        match self {
+            DiagnosticRef::Error(error) => error.span,
+            DiagnosticRef::Warning(warning) => warning.span,
+        }
+    }
+
+    #[must_use]
+    pub fn message(self) -> &'a str {
+        match self {
+            DiagnosticRef::Error(error) => &error.message,
+            DiagnosticRef::Warning(warning) => &warning.message,
+        }
+    }
+}
+
+impl std::fmt::Display for DiagnosticRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DiagnosticRef::Error(error) => error.fmt(f),
+            DiagnosticRef::Warning(warning) => warning.fmt(f),
         }
     }
 }
@@ -186,6 +273,33 @@ mod tests {
         assert_eq!(file.line_col(3), (1, 0)); // 'c'
         assert_eq!(file.line_col(7), (2, 0)); // 'e', right after CRLF
         assert_eq!(file.line_col(9), (2, 2)); // end of file is allowed
+    }
+
+    #[test]
+    fn in_source_order_interleaves_lanes_and_puts_unanchored_last() {
+        // Arrange: a warning anchored earlier in the file than an error, plus
+        // an unanchored error.
+        let mut map = SourceMap::new();
+        let file_id = map.add_file("a.inka".into(), "abcdef".to_string());
+        let span = |start, end| Span {
+            file_id,
+            start,
+            end,
+        };
+        let diagnostics = Diagnostics {
+            errors: vec![Error::unanchored("whole"), Error::new(span(4, 5), "late")],
+            warnings: vec![Warning::new(span(1, 2), "early")],
+        };
+
+        // Act
+        let ordered: Vec<String> = diagnostics
+            .in_source_order()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+
+        // Assert: file position decides, not lane; unanchored goes last.
+        assert_eq!(ordered, ["warning: early", "error: late", "error: whole"]);
     }
 
     #[test]

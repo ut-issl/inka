@@ -33,8 +33,12 @@ fn run(cli: Cli) -> io::Result<Outcome> {
     match cli.command {
         Command::Check { path } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());
-            let mut err = io::stderr().lock();
-            check::run(&path, &mut err, color)
+            // ariadne emits a report as many small writes and stderr is
+            // unbuffered, so batch them and flush once at the end.
+            let mut err = io::BufWriter::new(io::stderr().lock());
+            let outcome = check::run(&path, &mut err, color)?;
+            err.flush()?;
+            Ok(outcome)
         }
     }
 }

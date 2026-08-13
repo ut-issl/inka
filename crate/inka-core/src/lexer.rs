@@ -25,9 +25,9 @@ pub enum TokenKind {
 
 pub type Token = Spanned<TokenKind>;
 
-/// An error produced while lexing: the shared [`crate::source::Diagnostic`]
+/// An error produced while lexing: the shared [`crate::source::Error`]
 /// shape under the name callers of this module expect.
-pub type LexError = crate::source::Diagnostic;
+pub type LexError = crate::source::Error;
 
 pub struct Lexer<'a> {
     file_id: FileId,
@@ -154,7 +154,7 @@ impl<'a> Lexer<'a> {
             self.offset = self.next_line_start(closing_line_end);
         }
 
-        Err(LexError::error(
+        Err(LexError::new(
             self.span(token_start, self.input.len()),
             "unclosed fenced description",
         ))
@@ -201,7 +201,7 @@ impl<'a> Lexer<'a> {
         }
 
         if self.offset == value_start {
-            return Err(LexError::error(
+            return Err(LexError::new(
                 self.span(start, self.offset),
                 "expected a tag name after `#`",
             ));
@@ -228,7 +228,7 @@ impl<'a> Lexer<'a> {
                 }
 
                 b'\n' | b'\r' => {
-                    return Err(LexError::error(
+                    return Err(LexError::new(
                         self.span(start, self.offset),
                         "string literal must end on the same line",
                     ));
@@ -240,7 +240,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Err(LexError::error(
+        Err(LexError::new(
             self.span(start, self.input.len()),
             "unclosed string literal",
         ))
@@ -285,7 +285,7 @@ impl<'a> Lexer<'a> {
             .map_or(0, char::len_utf8);
         let end = self.offset + width;
 
-        LexError::error(self.span(self.offset, end), message)
+        LexError::new(self.span(self.offset, end), message)
     }
 
     fn span(&self, start: usize, end: usize) -> Span {
