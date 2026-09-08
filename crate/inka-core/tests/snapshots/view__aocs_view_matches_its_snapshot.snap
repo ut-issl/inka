@@ -1,0 +1,343 @@
+---
+source: crate/inka-core/tests/view.rs
+expression: "view_of(\"aocs\")"
+---
+ArgumentView {
+    nodes: [
+        ViewNode {
+            id: "actuator_authority_ok",
+            mode: Bind,
+            namespace: "pointing",
+            description: "Reaction-wheel torque and momentum capacity carry a margin of at least 30 % against sustained worst-case disturbance torque",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Veriq,
+                    target: "aocs.verify_momentum_budget",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "aocs_ok",
+            mode: Objective,
+            namespace: "objective",
+            description: "Throughout the mission, the attitude control subsystem maintains the pointing performance required for observation operations and the safety of the vehicle, including under anomalies",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "pointing_ok",
+                "detumble_ok",
+                "safe_mode_ok",
+                "momentum_ok",
+            ],
+        },
+        ViewNode {
+            id: "attitude_knowledge_ok",
+            mode: Bind,
+            namespace: "pointing",
+            description: "The attitude determination error in steady-state observation mode is at most 0.01 deg (3σ)",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Veriq,
+                    target: "aocs.verify_attitude_knowledge",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "control_law_ok",
+            mode: Bind,
+            namespace: "pointing",
+            description: "The observation-mode control law achieves a pointing control error of at most 0.05 deg (3σ) in the presence of attitude determination error 0.01 deg (3σ) and disturbance torques",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Veriq,
+                    target: "aocs.verify_pointing_control",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "detumble_convergence_ok",
+            mode: Bind,
+            namespace: "safety",
+            description: "Starting from the maximum tip-off rate 10 deg/s, B-dot control damps the body rate to a safe-mode-transition level within 2 orbits",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Veriq,
+                    target: "aocs.verify_detumble",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "detumble_ok",
+            mode: Structure,
+            namespace: "safety",
+            description: "From both post-separation and FDIR re-entry conditions, the satellite completes detumbling and reaches safe mode without external intervention",
+            tags: [
+                "safety",
+            ],
+            evidence: None,
+            deadline: None,
+            children: [
+                "detumble_convergence_ok",
+                "mtq_authority_ok",
+                "rate_sensor_available",
+            ],
+        },
+        ViewNode {
+            id: "disturbance_model_valid",
+            mode: Fiat,
+            namespace: "assumptions",
+            description: "The disturbance torque model (gravity gradient, aerodynamic, solar radiation pressure, residual magnetic moment) envelopes the disturbances actually acting in the target orbit (500-600 km altitude)",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "fdir_transition_ok",
+            mode: Fiat,
+            namespace: "safety",
+            description: "The detection conditions and transition sequence for attitude anomalies (rate exceedance, loss of attitude determination, wheel failure) guarantee safe-mode arrival within 10 min of detection",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "FM",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "mass_properties_valid",
+            mode: Fiat,
+            namespace: "assumptions",
+            description: "The inertia tensor and mass properties used for control design deviate from the real vehicle within the control system's stability margins",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "FM",
+                    reason: Some(
+                        "promote to a veriq verification once the mass-properties test has measured the real vehicle",
+                    ),
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "momentum_ok",
+            mode: Structure,
+            namespace: "momentum",
+            description: "Throughout the mission, accumulated reaction-wheel momentum never reaches saturation, and interruptions to observation operations stay within the planned unloading schedule",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "actuator_authority_ok",
+                "unloading_plan_ok",
+                "disturbance_model_valid",
+            ],
+        },
+        ViewNode {
+            id: "mtq_authority_ok",
+            mode: Fiat,
+            namespace: "safety",
+            description: "The magnetorquer dipole moment provides sufficient control torque for B-dot control across the geomagnetic field strengths of the target orbit (500-600 km altitude)",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "FM",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "pointing_ok",
+            mode: Structure,
+            namespace: "pointing",
+            description: "In steady-state observation mode, the pointing control error is at most 0.05 deg (3σ)",
+            tags: [
+                "mission",
+            ],
+            evidence: None,
+            deadline: None,
+            children: [
+                "attitude_knowledge_ok",
+                "control_law_ok",
+                "actuator_authority_ok",
+                "disturbance_model_valid",
+                "mass_properties_valid",
+            ],
+        },
+        ViewNode {
+            id: "rate_sensor_available",
+            mode: Fiat,
+            namespace: "safety",
+            description: "The rate information required for detumbling remains available under gyro failure, from redundant sensing including estimation with coarse sun sensors and magnetometers",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "safe_mode_ok",
+            mode: Structure,
+            namespace: "safety",
+            description: "In safe mode, the satellite maintains, without external intervention, a state satisfying all of the following:\n\n- The angle between the solar-array normal and the sun direction stays within 30 deg (positive power balance)\n- Mode transition completes within 10 min of anomaly detection\n- All mission equipment is off and every unit stays within its thermal safety range",
+            tags: [
+                "safety",
+            ],
+            evidence: None,
+            deadline: None,
+            children: [
+                "sun_pointing_stable",
+                "fdir_transition_ok",
+                "safemode_power_positive",
+            ],
+        },
+        ViewNode {
+            id: "safemode_power_positive",
+            mode: Fiat,
+            namespace: "safety",
+            description: "In the safe-mode configuration (all mission equipment off, sun angle within 30 deg), generated power exceeds the configuration's consumption under all orbit conditions including eclipse",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "sun_pointing_stable",
+            mode: Bind,
+            namespace: "safety",
+            description: "Safe-mode sun pointing acquires the sun starting from the residual rates left after detumbling, and thereafter keeps the sun angle within 30 deg",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Veriq,
+                    target: "aocs.verify_sun_pointing",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "unloading_plan_ok",
+            mode: Fiat,
+            namespace: "momentum",
+            description: "Periodic magnetorquer unloading has an unloading capacity exceeding the disturbance momentum accumulation rate, and is compatible with the observation schedule",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "FM",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+    ],
+    edges: [
+        ViewEdge {
+            parent: "aocs_ok",
+            child: "pointing_ok",
+        },
+        ViewEdge {
+            parent: "aocs_ok",
+            child: "detumble_ok",
+        },
+        ViewEdge {
+            parent: "aocs_ok",
+            child: "safe_mode_ok",
+        },
+        ViewEdge {
+            parent: "aocs_ok",
+            child: "momentum_ok",
+        },
+        ViewEdge {
+            parent: "detumble_ok",
+            child: "detumble_convergence_ok",
+        },
+        ViewEdge {
+            parent: "detumble_ok",
+            child: "mtq_authority_ok",
+        },
+        ViewEdge {
+            parent: "detumble_ok",
+            child: "rate_sensor_available",
+        },
+        ViewEdge {
+            parent: "momentum_ok",
+            child: "actuator_authority_ok",
+        },
+        ViewEdge {
+            parent: "momentum_ok",
+            child: "unloading_plan_ok",
+        },
+        ViewEdge {
+            parent: "momentum_ok",
+            child: "disturbance_model_valid",
+        },
+        ViewEdge {
+            parent: "pointing_ok",
+            child: "attitude_knowledge_ok",
+        },
+        ViewEdge {
+            parent: "pointing_ok",
+            child: "control_law_ok",
+        },
+        ViewEdge {
+            parent: "pointing_ok",
+            child: "actuator_authority_ok",
+        },
+        ViewEdge {
+            parent: "pointing_ok",
+            child: "disturbance_model_valid",
+        },
+        ViewEdge {
+            parent: "pointing_ok",
+            child: "mass_properties_valid",
+        },
+        ViewEdge {
+            parent: "safe_mode_ok",
+            child: "sun_pointing_stable",
+        },
+        ViewEdge {
+            parent: "safe_mode_ok",
+            child: "fdir_transition_ok",
+        },
+        ViewEdge {
+            parent: "safe_mode_ok",
+            child: "safemode_power_positive",
+        },
+    ],
+    roots: [
+        "aocs_ok",
+    ],
+}
