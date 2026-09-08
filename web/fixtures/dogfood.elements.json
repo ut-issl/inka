@@ -1,0 +1,459 @@
+[
+  {
+    "data": {
+      "id": "approvals_meaningful",
+      "mode": "structure",
+      "namespace": "approval",
+      "description": "A recorded approve expresses a judgement the approver took on based solely on the local view, and does not degenerate into formal ritual",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "approver_unforgeable",
+      "mode": "fiat",
+      "namespace": "audit",
+      "description": "Forging an approval record's approver is detected by verifying the record's signature (SSH signature (sshsig / ed25519))",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M7",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "approvers_follow_norm",
+      "mode": "fiat",
+      "namespace": "assumptions",
+      "description": "Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "assumptions_surfaced",
+      "mode": "fiat",
+      "namespace": "truth-validity",
+      "description": "Every assumption a verification result relies on is aggregated mechanically through the interfaces and presented to the boundary bind approver as the total assumption set",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M8",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "bind_validity_by_human",
+      "mode": "fiat",
+      "namespace": "truth-validity",
+      "description": "The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "description_is_contract",
+      "mode": "structure",
+      "namespace": "approval",
+      "description": "In a living argument, descriptions are maintained as contract sentences whose truth can be judged without reading the substructure",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "edit_cost_proportional",
+      "mode": "structure",
+      "namespace": "editing",
+      "description": "For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "eval_reproducible",
+      "mode": "fiat",
+      "namespace": "audit",
+      "description": "eval's input is repository content only; the result for a given commit is identical regardless of execution environment or time",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M3",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "git_hosting_intact",
+      "mode": "fiat",
+      "namespace": "assumptions",
+      "description": "The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "id_not_in_contract",
+      "mode": "fiat",
+      "namespace": "editing",
+      "description": "IDs and tags are not part of the contract: what an approver judged is the content, not its name",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "inka_ok",
+      "mode": "objective",
+      "namespace": "objective",
+      "description": "A team adopting inka can maintain meaningful approvals and auditable records over a frequently edited argument, at a cost proportional to the size of each edit",
+      "tags": [],
+      "root": true
+    }
+  },
+  {
+    "data": {
+      "id": "invalidation_exact",
+      "mode": "structure",
+      "namespace": "editing",
+      "description": "Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "labels_cover_reality",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n  - **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n  - **decline**: refuse; a veto, with a reason comment required\n  - **cannot-take-responsibility**: cannot take this on personally; a delegate may be named",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "lint_flags_leaky_contracts",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "The LLM lint returns decline when the parent claim does not follow from the children's contracts, or when wording presupposes knowledge outside the local view",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M9",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "local_view_binding",
+      "mode": "fiat",
+      "namespace": "editing",
+      "description": "Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M3",
+        "reason": "bind to the scenario test: approve, edit a grandchild, stays fresh",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "local_view_hash_sound",
+      "mode": "fiat",
+      "namespace": "editing",
+      "description": "The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M2",
+        "reason": "bind to the hash v1 golden vectors and proptests (first CI bind target)",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "log_tamper_evident",
+      "mode": "fiat",
+      "namespace": "audit",
+      "description": "Deleting or rewriting approval records (including suppressing a decline) is detected by reconciliation against the anchoring",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M7",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "policy_is_reviewable",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "Which targets need how many approvals from whom is defined by policy text in the repository, and changes to approval criteria go through PR review",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M3",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "queue_minimizes_friction",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M4",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "records_auditable",
+      "mode": "structure",
+      "namespace": "audit",
+      "description": "A third party can mechanically verify, for the approval state at any commit, who approved what, and under which policy and phase",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "surface_edits_free",
+      "mode": "structure",
+      "namespace": "editing",
+      "description": "Renaming IDs and reordering child references never invalidate any approval",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "target_unswappable",
+      "mode": "structure",
+      "namespace": "audit",
+      "description": "Swapping an approval record's target (pretending an approval covers different content) is detected by checking the view_hash",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "truth_validity_separated",
+      "mode": "structure",
+      "namespace": "truth-validity",
+      "description": "Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity \u2014 whether the verification is appropriate evidence for the proposition",
+      "tags": [],
+      "root": false
+    }
+  },
+  {
+    "data": {
+      "id": "verification_truth_by_machine",
+      "mode": "fiat",
+      "namespace": "truth-validity",
+      "description": "Verification outcomes are decided mechanically by veriq and CI; eval only reconciles the results and demands no human approval",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M8",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "approvals_meaningful->description_is_contract",
+      "source": "approvals_meaningful",
+      "target": "description_is_contract"
+    }
+  },
+  {
+    "data": {
+      "id": "approvals_meaningful->labels_cover_reality",
+      "source": "approvals_meaningful",
+      "target": "labels_cover_reality"
+    }
+  },
+  {
+    "data": {
+      "id": "approvals_meaningful->policy_is_reviewable",
+      "source": "approvals_meaningful",
+      "target": "policy_is_reviewable"
+    }
+  },
+  {
+    "data": {
+      "id": "approvals_meaningful->queue_minimizes_friction",
+      "source": "approvals_meaningful",
+      "target": "queue_minimizes_friction"
+    }
+  },
+  {
+    "data": {
+      "id": "description_is_contract->lint_flags_leaky_contracts",
+      "source": "description_is_contract",
+      "target": "lint_flags_leaky_contracts"
+    }
+  },
+  {
+    "data": {
+      "id": "description_is_contract->approvers_follow_norm",
+      "source": "description_is_contract",
+      "target": "approvers_follow_norm"
+    }
+  },
+  {
+    "data": {
+      "id": "edit_cost_proportional->invalidation_exact",
+      "source": "edit_cost_proportional",
+      "target": "invalidation_exact"
+    }
+  },
+  {
+    "data": {
+      "id": "edit_cost_proportional->surface_edits_free",
+      "source": "edit_cost_proportional",
+      "target": "surface_edits_free"
+    }
+  },
+  {
+    "data": {
+      "id": "inka_ok->edit_cost_proportional",
+      "source": "inka_ok",
+      "target": "edit_cost_proportional"
+    }
+  },
+  {
+    "data": {
+      "id": "inka_ok->approvals_meaningful",
+      "source": "inka_ok",
+      "target": "approvals_meaningful"
+    }
+  },
+  {
+    "data": {
+      "id": "inka_ok->records_auditable",
+      "source": "inka_ok",
+      "target": "records_auditable"
+    }
+  },
+  {
+    "data": {
+      "id": "inka_ok->truth_validity_separated",
+      "source": "inka_ok",
+      "target": "truth_validity_separated"
+    }
+  },
+  {
+    "data": {
+      "id": "invalidation_exact->local_view_binding",
+      "source": "invalidation_exact",
+      "target": "local_view_binding"
+    }
+  },
+  {
+    "data": {
+      "id": "invalidation_exact->local_view_hash_sound",
+      "source": "invalidation_exact",
+      "target": "local_view_hash_sound"
+    }
+  },
+  {
+    "data": {
+      "id": "records_auditable->target_unswappable",
+      "source": "records_auditable",
+      "target": "target_unswappable"
+    }
+  },
+  {
+    "data": {
+      "id": "records_auditable->approver_unforgeable",
+      "source": "records_auditable",
+      "target": "approver_unforgeable"
+    }
+  },
+  {
+    "data": {
+      "id": "records_auditable->log_tamper_evident",
+      "source": "records_auditable",
+      "target": "log_tamper_evident"
+    }
+  },
+  {
+    "data": {
+      "id": "records_auditable->eval_reproducible",
+      "source": "records_auditable",
+      "target": "eval_reproducible"
+    }
+  },
+  {
+    "data": {
+      "id": "records_auditable->git_hosting_intact",
+      "source": "records_auditable",
+      "target": "git_hosting_intact"
+    }
+  },
+  {
+    "data": {
+      "id": "surface_edits_free->local_view_hash_sound",
+      "source": "surface_edits_free",
+      "target": "local_view_hash_sound"
+    }
+  },
+  {
+    "data": {
+      "id": "surface_edits_free->id_not_in_contract",
+      "source": "surface_edits_free",
+      "target": "id_not_in_contract"
+    }
+  },
+  {
+    "data": {
+      "id": "target_unswappable->local_view_hash_sound",
+      "source": "target_unswappable",
+      "target": "local_view_hash_sound"
+    }
+  },
+  {
+    "data": {
+      "id": "truth_validity_separated->verification_truth_by_machine",
+      "source": "truth_validity_separated",
+      "target": "verification_truth_by_machine"
+    }
+  },
+  {
+    "data": {
+      "id": "truth_validity_separated->bind_validity_by_human",
+      "source": "truth_validity_separated",
+      "target": "bind_validity_by_human"
+    }
+  },
+  {
+    "data": {
+      "id": "truth_validity_separated->assumptions_surfaced",
+      "source": "truth_validity_separated",
+      "target": "assumptions_surfaced"
+    }
+  }
+]

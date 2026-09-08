@@ -1,0 +1,5 @@
+# Spelling exceptions for `typos`.
+
+[default.extend-identifiers]
+# cytoscape.js names an element collection `eles`; it is an API key, not a word.
+eles = "eles"
