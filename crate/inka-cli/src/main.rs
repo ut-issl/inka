@@ -5,6 +5,7 @@ mod cli;
 mod export;
 mod load;
 mod render;
+mod serve;
 
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
@@ -41,6 +42,19 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             let outcome = check::run(&path, &mut err, color)?;
             err.flush()?;
             Ok(outcome)
+        }
+        Command::Serve {
+            path,
+            host,
+            port,
+            assets,
+        } => {
+            let color = color_choice.resolve(no_color, io::stderr().is_terminal());
+            let options = serve::Options { host, port, assets };
+            // Unbuffered: the listening address and any warning must reach the
+            // operator before the server blocks.
+            let mut err = io::stderr().lock();
+            serve::run(&path, &options, &mut err, color)
         }
         Command::Export { path } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());

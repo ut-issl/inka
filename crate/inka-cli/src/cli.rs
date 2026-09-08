@@ -3,6 +3,7 @@
 //! Only argument parsing lives here. Each subcommand's behavior is a separate
 //! module, so the surface stays a thin description of the command tree.
 
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -35,6 +36,23 @@ pub enum Command {
         /// directory.
         #[arg(default_value = ".")]
         path: PathBuf,
+    },
+    /// Serve the interactive, read-only graph viewer for a project.
+    Serve {
+        /// Project directory holding `inka.toml`; defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Address to listen on. Loopback by default: an argument under review
+        /// is not published to the network unless that is asked for.
+        #[arg(long, default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
+        host: IpAddr,
+        /// Port to listen on; 0 lets the operating system choose one.
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        /// Directory holding the built viewer bundle; defaults to `web/dist`.
+        #[arg(long)]
+        assets: Option<PathBuf>,
     },
 }
 
