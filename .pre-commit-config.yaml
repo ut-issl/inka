@@ -41,6 +41,10 @@ repos:
         exclude: '\.snap$'
       - id: pretty-format-json
         args: ["--autofix", "--no-sort-keys"]
+        # web/fixtures/*.json is `inka export` output, kept byte-identical to
+        # the command so regenerating it is an empty diff. The hook escapes
+        # non-ASCII, which the exporter does not.
+        exclude: '^web/fixtures/.*\.json$'
       - id: check-json
       - id: check-toml
       - id: check-yaml

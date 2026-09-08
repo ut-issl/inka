@@ -136,7 +136,7 @@
       "id": "labels_cover_reality",
       "mode": "fiat",
       "namespace": "approval",
-      "description": "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n  - **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n  - **decline**: refuse; a veto, with a reason comment required\n  - **cannot-take-responsibility**: cannot take this on personally; a delegate may be named",
+      "description": "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n- **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n- **decline**: refuse; a veto, with a reason comment required\n- **cannot-take-responsibility**: cannot take this on personally; a delegate may be named",
       "tags": [],
       "root": false
     }
@@ -262,7 +262,7 @@
       "id": "truth_validity_separated",
       "mode": "structure",
       "namespace": "truth-validity",
-      "description": "Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity \u2014 whether the verification is appropriate evidence for the proposition",
+      "description": "Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity — whether the verification is appropriate evidence for the proposition",
       "tags": [],
       "root": false
     }

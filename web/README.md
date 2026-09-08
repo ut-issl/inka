@@ -72,12 +72,13 @@ no `{$var}` reaches the viewer.
 
 ### Fixtures
 
-`fixtures/*.elements.json` are the two example projects, checked in so the UI
-runs and is tested without the Rust side. Until `inka export` lands they are
-maintained by hand; once it does, regenerate them from the projects themselves:
+`fixtures/*.elements.json` are the two example projects as `inka export` writes
+them, checked in so the UI runs and is tested without the Rust side. They are
+generated, never edited — regenerate them from the repository root:
 
 ```sh
 cargo run -p inka-cli -- export tests/fixtures/aocs > web/fixtures/aocs.elements.json
+cargo run -p inka-cli -- export tests/fixtures/dogfood > web/fixtures/dogfood.elements.json
 ```
 
 `src/model/fixtures.test.ts` holds them to the contract, so drift between the

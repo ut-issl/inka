@@ -28,7 +28,7 @@
       "id": "attitude_knowledge_ok",
       "mode": "bind",
       "namespace": "pointing",
-      "description": "The attitude determination error in steady-state observation mode is at most 0.01 deg (3\u03c3)",
+      "description": "The attitude determination error in steady-state observation mode is at most 0.01 deg (3σ)",
       "tags": [],
       "root": false,
       "evidence": {
@@ -42,7 +42,7 @@
       "id": "control_law_ok",
       "mode": "bind",
       "namespace": "pointing",
-      "description": "The observation-mode control law achieves a pointing control error of at most 0.05 deg (3\u03c3) in the presence of attitude determination error 0.01 deg (3\u03c3) and disturbance torques",
+      "description": "The observation-mode control law achieves a pointing control error of at most 0.05 deg (3σ) in the presence of attitude determination error 0.01 deg (3σ) and disturbance torques",
       "tags": [],
       "root": false,
       "evidence": {
@@ -145,7 +145,7 @@
       "id": "pointing_ok",
       "mode": "structure",
       "namespace": "pointing",
-      "description": "In steady-state observation mode, the pointing control error is at most 0.05 deg (3\u03c3)",
+      "description": "In steady-state observation mode, the pointing control error is at most 0.05 deg (3σ)",
       "tags": [
         "mission"
       ],
@@ -167,7 +167,7 @@
       "id": "safe_mode_ok",
       "mode": "structure",
       "namespace": "safety",
-      "description": "In safe mode, the satellite maintains, without external intervention, a state satisfying all of the following:\n\n  - The angle between the solar-array normal and the sun direction stays within 30 deg (positive power balance)\n  - Mode transition completes within 10 min of anomaly detection\n  - All mission equipment is off and every unit stays within its thermal safety range",
+      "description": "In safe mode, the satellite maintains, without external intervention, a state satisfying all of the following:\n\n- The angle between the solar-array normal and the sun direction stays within 30 deg (positive power balance)\n- Mode transition completes within 10 min of anomaly detection\n- All mission equipment is off and every unit stays within its thermal safety range",
       "tags": [
         "safety"
       ],
