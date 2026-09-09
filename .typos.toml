@@ -1,6 +1,8 @@
 [default.extend-words]
 # Rust TUI crate, not a misspelling of "ratatouille"
 ratatui = "ratatui"
+# cytoscape.js names an element collection `eles`; an API key, not a word
+eles = "eles"
 
 [files]
 extend-exclude = [".git"]
