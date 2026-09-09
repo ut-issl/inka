@@ -8,6 +8,7 @@ pub mod parser;
 pub mod project;
 pub mod source;
 pub mod values;
+pub mod view;
 
 /// Returns the version of the inka core library.
 #[must_use]

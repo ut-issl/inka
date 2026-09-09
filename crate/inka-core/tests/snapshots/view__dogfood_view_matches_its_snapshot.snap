@@ -1,0 +1,471 @@
+---
+source: crate/inka-core/tests/view.rs
+expression: "view_of(\"dogfood\")"
+---
+ArgumentView {
+    nodes: [
+        ViewNode {
+            id: "approvals_meaningful",
+            mode: Structure,
+            namespace: "approval",
+            description: "A recorded approve expresses a judgement the approver took on based solely on the local view, and does not degenerate into formal ritual",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "description_is_contract",
+                "labels_cover_reality",
+                "policy_is_reviewable",
+                "queue_minimizes_friction",
+            ],
+        },
+        ViewNode {
+            id: "approver_unforgeable",
+            mode: Fiat,
+            namespace: "audit",
+            description: "Forging an approval record's approver is detected by verifying the record's signature (SSH signature (sshsig / ed25519))",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M7",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "approvers_follow_norm",
+            mode: Fiat,
+            namespace: "assumptions",
+            description: "Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "assumptions_surfaced",
+            mode: Fiat,
+            namespace: "truth-validity",
+            description: "Every assumption a verification result relies on is aggregated mechanically through the interfaces and presented to the boundary bind approver as the total assumption set",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M8",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "bind_validity_by_human",
+            mode: Fiat,
+            namespace: "truth-validity",
+            description: "The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "description_is_contract",
+            mode: Structure,
+            namespace: "approval",
+            description: "In a living argument, descriptions are maintained as contract sentences whose truth can be judged without reading the substructure",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "lint_flags_leaky_contracts",
+                "approvers_follow_norm",
+            ],
+        },
+        ViewNode {
+            id: "edit_cost_proportional",
+            mode: Structure,
+            namespace: "editing",
+            description: "For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "invalidation_exact",
+                "surface_edits_free",
+            ],
+        },
+        ViewNode {
+            id: "eval_reproducible",
+            mode: Fiat,
+            namespace: "audit",
+            description: "eval's input is repository content only; the result for a given commit is identical regardless of execution environment or time",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M3",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "git_hosting_intact",
+            mode: Fiat,
+            namespace: "assumptions",
+            description: "The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "id_not_in_contract",
+            mode: Fiat,
+            namespace: "editing",
+            description: "IDs and tags are not part of the contract: what an approver judged is the content, not its name",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "inka_ok",
+            mode: Objective,
+            namespace: "objective",
+            description: "A team adopting inka can maintain meaningful approvals and auditable records over a frequently edited argument, at a cost proportional to the size of each edit",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "edit_cost_proportional",
+                "approvals_meaningful",
+                "records_auditable",
+                "truth_validity_separated",
+            ],
+        },
+        ViewNode {
+            id: "invalidation_exact",
+            mode: Structure,
+            namespace: "editing",
+            description: "Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "local_view_binding",
+                "local_view_hash_sound",
+            ],
+        },
+        ViewNode {
+            id: "labels_cover_reality",
+            mode: Fiat,
+            namespace: "approval",
+            description: "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n- **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n- **decline**: refuse; a veto, with a reason comment required\n- **cannot-take-responsibility**: cannot take this on personally; a delegate may be named",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
+            id: "lint_flags_leaky_contracts",
+            mode: Fiat,
+            namespace: "approval",
+            description: "The LLM lint returns decline when the parent claim does not follow from the children's contracts, or when wording presupposes knowledge outside the local view",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M9",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "local_view_binding",
+            mode: Fiat,
+            namespace: "editing",
+            description: "Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M3",
+                    reason: Some(
+                        "bind to the scenario test: approve, edit a grandchild, stays fresh",
+                    ),
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "local_view_hash_sound",
+            mode: Fiat,
+            namespace: "editing",
+            description: "The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M2",
+                    reason: Some(
+                        "bind to the hash v1 golden vectors and proptests (first CI bind target)",
+                    ),
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "log_tamper_evident",
+            mode: Fiat,
+            namespace: "audit",
+            description: "Deleting or rewriting approval records (including suppressing a decline) is detected by reconciliation against the anchoring",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M7",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "policy_is_reviewable",
+            mode: Fiat,
+            namespace: "approval",
+            description: "Which targets need how many approvals from whom is defined by policy text in the repository, and changes to approval criteria go through PR review",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M3",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "queue_minimizes_friction",
+            mode: Fiat,
+            namespace: "approval",
+            description: "An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M4",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+        ViewNode {
+            id: "records_auditable",
+            mode: Structure,
+            namespace: "audit",
+            description: "A third party can mechanically verify, for the approval state at any commit, who approved what, and under which policy and phase",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "target_unswappable",
+                "approver_unforgeable",
+                "log_tamper_evident",
+                "eval_reproducible",
+                "git_hosting_intact",
+            ],
+        },
+        ViewNode {
+            id: "surface_edits_free",
+            mode: Structure,
+            namespace: "editing",
+            description: "Renaming IDs and reordering child references never invalidate any approval",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "local_view_hash_sound",
+                "id_not_in_contract",
+            ],
+        },
+        ViewNode {
+            id: "target_unswappable",
+            mode: Structure,
+            namespace: "audit",
+            description: "Swapping an approval record's target (pretending an approval covers different content) is detected by checking the view_hash",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "local_view_hash_sound",
+            ],
+        },
+        ViewNode {
+            id: "truth_validity_separated",
+            mode: Structure,
+            namespace: "truth-validity",
+            description: "Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity — whether the verification is appropriate evidence for the proposition",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "verification_truth_by_machine",
+                "bind_validity_by_human",
+                "assumptions_surfaced",
+            ],
+        },
+        ViewNode {
+            id: "verification_truth_by_machine",
+            mode: Fiat,
+            namespace: "truth-validity",
+            description: "Verification outcomes are decided mechanically by veriq and CI; eval only reconciles the results and demands no human approval",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M8",
+                    reason: None,
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+        },
+    ],
+    edges: [
+        ViewEdge {
+            parent: "approvals_meaningful",
+            child: "description_is_contract",
+        },
+        ViewEdge {
+            parent: "approvals_meaningful",
+            child: "labels_cover_reality",
+        },
+        ViewEdge {
+            parent: "approvals_meaningful",
+            child: "policy_is_reviewable",
+        },
+        ViewEdge {
+            parent: "approvals_meaningful",
+            child: "queue_minimizes_friction",
+        },
+        ViewEdge {
+            parent: "description_is_contract",
+            child: "lint_flags_leaky_contracts",
+        },
+        ViewEdge {
+            parent: "description_is_contract",
+            child: "approvers_follow_norm",
+        },
+        ViewEdge {
+            parent: "edit_cost_proportional",
+            child: "invalidation_exact",
+        },
+        ViewEdge {
+            parent: "edit_cost_proportional",
+            child: "surface_edits_free",
+        },
+        ViewEdge {
+            parent: "inka_ok",
+            child: "edit_cost_proportional",
+        },
+        ViewEdge {
+            parent: "inka_ok",
+            child: "approvals_meaningful",
+        },
+        ViewEdge {
+            parent: "inka_ok",
+            child: "records_auditable",
+        },
+        ViewEdge {
+            parent: "inka_ok",
+            child: "truth_validity_separated",
+        },
+        ViewEdge {
+            parent: "invalidation_exact",
+            child: "local_view_binding",
+        },
+        ViewEdge {
+            parent: "invalidation_exact",
+            child: "local_view_hash_sound",
+        },
+        ViewEdge {
+            parent: "records_auditable",
+            child: "target_unswappable",
+        },
+        ViewEdge {
+            parent: "records_auditable",
+            child: "approver_unforgeable",
+        },
+        ViewEdge {
+            parent: "records_auditable",
+            child: "log_tamper_evident",
+        },
+        ViewEdge {
+            parent: "records_auditable",
+            child: "eval_reproducible",
+        },
+        ViewEdge {
+            parent: "records_auditable",
+            child: "git_hosting_intact",
+        },
+        ViewEdge {
+            parent: "surface_edits_free",
+            child: "local_view_hash_sound",
+        },
+        ViewEdge {
+            parent: "surface_edits_free",
+            child: "id_not_in_contract",
+        },
+        ViewEdge {
+            parent: "target_unswappable",
+            child: "local_view_hash_sound",
+        },
+        ViewEdge {
+            parent: "truth_validity_separated",
+            child: "verification_truth_by_machine",
+        },
+        ViewEdge {
+            parent: "truth_validity_separated",
+            child: "bind_validity_by_human",
+        },
+        ViewEdge {
+            parent: "truth_validity_separated",
+            child: "assumptions_surfaced",
+        },
+    ],
+    roots: [
+        "inka_ok",
+    ],
+}
