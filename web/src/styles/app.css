@@ -1,0 +1,318 @@
+/* Presentation only: colours, spacing and sizes are tuning parameters. */
+
+:root {
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --parent: #3b82f6;
+  --child: #22c55e;
+  --focus: #6366f1;
+
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-soft);
+}
+
+.viewer {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  gap: 12px;
+  padding: 12px;
+  height: 100vh;
+}
+
+.viewer__list,
+.viewer__side {
+  min-height: 0;
+  overflow: auto;
+}
+
+.viewer__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- Node list ---------------------------------------------------------- */
+
+.node-list {
+  height: 100%;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.node-list__group {
+  margin-bottom: 8px;
+}
+
+.node-list__header,
+.node-list__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.node-list__header {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 8px;
+  background: var(--surface-soft);
+  border-left: 5px solid var(--line);
+}
+
+.node-list__item {
+  font-size: 12px;
+  padding: 5px 8px 5px 20px;
+  border-left: 4px solid transparent;
+}
+
+.node-list__header:hover,
+.node-list__item:hover {
+  background: #f1f5f9;
+}
+
+.node-list__item.is-focused,
+.node-list__header.is-focused {
+  background: #e0e7ff;
+  border-color: var(--focus);
+  font-weight: 600;
+}
+
+.node-list__item.is-parent {
+  background: #eff6ff;
+  border-left-color: var(--parent);
+}
+
+.node-list__item.is-child {
+  background: #f0fdf4;
+  border-left-color: var(--child);
+}
+
+.node-list__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.node-list__label {
+  overflow-wrap: anywhere;
+}
+
+/* ---- Graph -------------------------------------------------------------- */
+
+.graph {
+  position: relative;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.graph__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.badges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.badge {
+  position: absolute;
+  display: none;
+  transform: translate(-100%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font: 700 10px/1.5 inherit;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.tooltip {
+  position: absolute;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 25%);
+}
+
+.tooltip p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+
+/* ---- Side panel --------------------------------------------------------- */
+
+.legend,
+.detail {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.legend__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legend__hint {
+  display: block;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.legend__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.legend__parent {
+  color: var(--parent);
+  font-weight: 600;
+}
+
+.legend__child {
+  color: var(--child);
+  font-weight: 600;
+}
+
+.detail__title {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.detail__meta {
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail__tag {
+  margin-left: 6px;
+}
+
+.detail__row {
+  margin: 0 0 8px;
+}
+
+.detail__row--deadline {
+  color: #b45309;
+}
+
+.detail__label {
+  font-weight: 600;
+  margin: 10px 0 4px;
+}
+
+.detail__reason {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail__contract {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.detail code {
+  overflow-wrap: anywhere;
+}
+
+/* ---- Notices ------------------------------------------------------------ */
+
+.notice {
+  margin: 24px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.notice--error {
+  border-color: #fca5a5;
+}
+
+.notice pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  background: var(--surface-soft);
+  border-radius: 6px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* ---- Narrow windows ------------------------------------------------------ */
+
+@media (max-width: 1200px) {
+  .viewer {
+    grid-template-columns: 220px minmax(0, 1fr) 260px;
+  }
+}
+
+/* Below this the three columns leave the graph unusably narrow, so they
+   stack and the graph takes a screen of its own. */
+@media (max-width: 960px) {
+  .viewer {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .viewer__list {
+    max-height: 40vh;
+  }
+
+  .graph {
+    height: 70vh;
+  }
+}
