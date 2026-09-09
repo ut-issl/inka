@@ -11,6 +11,7 @@ publish = false
 [workspace.dependencies]
 ariadne = "0.6"
 assert_cmd = "2"
+axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 inka-core = { path = "crate/inka-core" }
 insta = "1"
@@ -19,7 +20,10 @@ predicates = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
 toml = { version = "1", default-features = false, features = ["display", "parse", "serde", "std"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7", features = ["fs"] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
