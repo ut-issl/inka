@@ -2,6 +2,8 @@
 
 mod check;
 mod cli;
+mod export;
+mod load;
 mod render;
 
 use std::io::{self, IsTerminal, Write};
@@ -38,6 +40,15 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             let mut err = io::BufWriter::new(io::stderr().lock());
             let outcome = check::run(&path, &mut err, color)?;
             err.flush()?;
+            Ok(outcome)
+        }
+        Command::Export { path } => {
+            let color = color_choice.resolve(no_color, io::stderr().is_terminal());
+            let mut out = io::BufWriter::new(io::stdout().lock());
+            let mut err = io::BufWriter::new(io::stderr().lock());
+            let outcome = export::run(&path, &mut out, &mut err, color)?;
+            err.flush()?;
+            out.flush()?;
             Ok(outcome)
         }
     }

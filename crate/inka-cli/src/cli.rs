@@ -29,6 +29,13 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    /// Write the argument to standard output as cytoscape `elements` JSON.
+    Export {
+        /// Project directory holding `inka.toml`; defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 /// When diagnostic snippets should be coloured.
