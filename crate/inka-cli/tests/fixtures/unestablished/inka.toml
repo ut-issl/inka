@@ -1,0 +1,13 @@
+# A project in which nothing is established, one failure kind per node:
+# a missing approval, a stale approval, a decline, an expired deadline, and a bind
+# awaiting the CI provider.
+
+[project]
+name = "unestablished"
+
+[phases]
+order = ["M1", "M2", "M3"]
+current = "M3"
+
+[values]
+files = []

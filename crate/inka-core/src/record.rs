@@ -113,12 +113,7 @@ pub struct InvalidTarget(pub String);
 
 /// The spelling of a mode inside a target, matching the DSL keywords.
 fn kind_name(kind: Mode) -> &'static str {
-    match kind {
-        Mode::Objective => "objective",
-        Mode::Structure => "structure",
-        Mode::Bind => "bind",
-        Mode::Fiat => "fiat",
-    }
+    kind.name()
 }
 
 fn parse_kind(text: &str) -> Option<Mode> {

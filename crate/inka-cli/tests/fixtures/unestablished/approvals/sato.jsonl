@@ -1,0 +1,1 @@
+{"v":1,"target":"fiat:declined_leaf","view_hash":"sha256:d6865c8ef284817834733c0158e42f8fc94eaaafc52cb4a9c1dfcb7305ff4bd7","label":"decline","comment":"the margin calculation omits thermal losses","approver":"sato","key_id":"sato-2026","timestamp":"2026-01-01T00:00:00Z","phase":"M1","until":null,"policy_hash":null,"sig":""}

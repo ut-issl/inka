@@ -16,17 +16,25 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use inka_core::graph::Graph;
+use inka_core::manifest::Manifest;
 use inka_core::project::{LoadError, LoadOutcome, load_project};
 use inka_core::source::{Diagnostics, Error, SourceMap, Warning};
 use inka_core::view::ArgumentView;
 
 use crate::render::render;
 
+/// A loaded project reduced to what commands consume: the manifest's rule-side
+/// state and the shared argument view.
+#[derive(Debug, Clone)]
+pub struct ProjectView {
+    pub manifest: Manifest,
+    pub view: ArgumentView,
+}
+
 /// Loads and projects the project rooted at `project_dir`.
 ///
-/// Returns `None` when the argument cannot be rendered, having already written
-/// the reason to `err`. Warnings are written whether or not the load succeeded,
-/// so one run surfaces everything it saw.
+/// The view-only convenience over [`load_project_view`], for commands that
+/// render the argument and never read the manifest.
 ///
 /// # Errors
 ///
@@ -36,6 +44,24 @@ pub fn load_view(
     err: &mut impl Write,
     color: bool,
 ) -> io::Result<Option<ArgumentView>> {
+    Ok(load_project_view(project_dir, err, color)?.map(|loaded| loaded.view))
+}
+
+/// Loads and projects the project rooted at `project_dir`, keeping the
+/// manifest alongside the view.
+///
+/// Returns `None` when the argument cannot be rendered, having already written
+/// the reason to `err`. Warnings are written whether or not the load succeeded,
+/// so one run surfaces everything it saw.
+///
+/// # Errors
+///
+/// Propagates any I/O error from writing to `err`.
+pub fn load_project_view(
+    project_dir: &Path,
+    err: &mut impl Write,
+    color: bool,
+) -> io::Result<Option<ProjectView>> {
     let LoadOutcome { warnings, result } = load_project(project_dir);
     let project = match result {
         Ok(project) => project,
@@ -76,7 +102,11 @@ pub fn load_view(
         warnings: [warnings, shape.warnings].concat(),
     };
     render(&project.source_map, &diagnostics, err, color)?;
-    Ok(Some(ArgumentView::build(&graph, &project.source_map)))
+    let view = ArgumentView::build(&graph, &project.source_map);
+    Ok(Some(ProjectView {
+        manifest: project.manifest,
+        view,
+    }))
 }
 
 /// Renders one batch of findings and reports that there is no view.
@@ -86,7 +116,7 @@ fn report(
     warnings: Vec<Warning>,
     err: &mut impl Write,
     color: bool,
-) -> io::Result<Option<ArgumentView>> {
+) -> io::Result<Option<ProjectView>> {
     render(source_map, &Diagnostics { errors, warnings }, err, color)?;
     Ok(None)
 }
