@@ -45,6 +45,20 @@ pub enum Mode {
     Fiat,
 }
 
+impl Mode {
+    /// The mode's one spelling everywhere it is written down: the DSL
+    /// keyword, the `<kind>` of a record target, and the JSON serialization.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Mode::Objective => "objective",
+            Mode::Structure => "structure",
+            Mode::Bind => "bind",
+            Mode::Fiat => "fiat",
+        }
+    }
+}
+
 /// The scheme of a bind block's evidence reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]

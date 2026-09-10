@@ -1,0 +1,102 @@
+---
+source: crate/inka-cli/tests/eval.rs
+expression: stdout
+---
+{
+  "established": 0,
+  "total": 6,
+  "nodes": [
+    {
+      "id": "branch",
+      "mode": "structure",
+      "established": false
+    },
+    {
+      "id": "declined_leaf",
+      "mode": "fiat",
+      "established": false
+    },
+    {
+      "id": "expired_leaf",
+      "mode": "fiat",
+      "established": false
+    },
+    {
+      "id": "leaf",
+      "mode": "fiat",
+      "established": false
+    },
+    {
+      "id": "root",
+      "mode": "objective",
+      "established": false
+    },
+    {
+      "id": "tested",
+      "mode": "bind",
+      "established": false
+    }
+  ],
+  "blame": [
+    {
+      "node": "branch",
+      "mode": "structure",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        }
+      ]
+    },
+    {
+      "node": "declined_leaf",
+      "mode": "fiat",
+      "reasons": [
+        {
+          "cause": "declined",
+          "by": "sato",
+          "comment": "the margin calculation omits thermal losses"
+        }
+      ]
+    },
+    {
+      "node": "expired_leaf",
+      "mode": "fiat",
+      "reasons": [
+        {
+          "cause": "until_expired",
+          "until": "M2"
+        }
+      ]
+    },
+    {
+      "node": "leaf",
+      "mode": "fiat",
+      "reasons": [
+        {
+          "cause": "stale_approval",
+          "approvers": [
+            "iwata"
+          ]
+        }
+      ]
+    },
+    {
+      "node": "root",
+      "mode": "objective",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        }
+      ]
+    },
+    {
+      "node": "tested",
+      "mode": "bind",
+      "reasons": [
+        {
+          "cause": "bind_not_evaluated"
+        }
+      ]
+    }
+  ]
+}

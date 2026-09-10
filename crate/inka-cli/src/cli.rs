@@ -30,6 +30,16 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    /// Evaluate the argument: is it currently valid, and if not, why not.
+    Eval {
+        /// Project directory holding `inka.toml`; defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Write the evaluation as JSON instead of the human summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Write the argument to standard output as cytoscape `elements` JSON.
     Export {
         /// Project directory holding `inka.toml`; defaults to the current

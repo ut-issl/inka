@@ -2,6 +2,7 @@
 
 mod check;
 mod cli;
+mod eval;
 mod export;
 mod load;
 mod render;
@@ -55,6 +56,15 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             // operator before the server blocks.
             let mut err = io::stderr().lock();
             serve::run(&path, &options, &mut err, color)
+        }
+        Command::Eval { path, json } => {
+            let color = color_choice.resolve(no_color, io::stderr().is_terminal());
+            let mut out = io::BufWriter::new(io::stdout().lock());
+            let mut err = io::BufWriter::new(io::stderr().lock());
+            let outcome = eval::run(&path, json, &mut out, &mut err, color)?;
+            err.flush()?;
+            out.flush()?;
+            Ok(outcome)
         }
         Command::Export { path } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());

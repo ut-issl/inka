@@ -1,0 +1,39 @@
+objective root {
+  ```
+  the mission succeeds
+  ```
+  children: branch, declined_leaf, expired_leaf, tested
+}
+
+structure branch {
+  ```
+  the subsystem works
+  ```
+  children: leaf
+}
+
+fiat leaf {
+  ```
+  taken as given
+  ```
+}
+
+fiat expired_leaf {
+  ```
+  holds until the design freeze
+  ```
+  until: M2
+}
+
+bind tested {
+  ```
+  checked in CI
+  ```
+  ci: "tests/hash_props.rs"
+}
+
+fiat declined_leaf {
+  ```
+  the margin is sufficient
+  ```
+}

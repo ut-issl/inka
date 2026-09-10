@@ -1,6 +1,7 @@
 //! Core library for inka: structured argumentation with accountable approvals.
 pub mod approvals;
 pub mod ast;
+pub mod eval;
 pub mod graph;
 pub mod hash;
 pub mod interpolate;
