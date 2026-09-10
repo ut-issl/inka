@@ -1,0 +1,11 @@
+# The full deadline group, which is contract content: `until:` is a
+# jointly-approved decline placed toward the future.
+kind = "fiat"
+description = "the mass properties match the flight model"
+normalized = "the mass properties match the flight model"
+view_hash = "sha256:59481b66866b8ca5f21be852caa2f692a757841d5f58221fa189b2e12a6b42a5"
+
+[annotations]
+until = "M3"
+reason = "awaiting the mass-properties test"
+promote = "bind"

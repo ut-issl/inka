@@ -42,6 +42,7 @@ jobs:
               - '**/Cargo.toml'
               - Cargo.lock
               - rust-toolchain.toml
+              - 'tests/golden/**'
               - .github/workflows/rust.yaml
 
   check:

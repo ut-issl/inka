@@ -1,0 +1,4 @@
+kind = "fiat"
+description = "the battery is charged at separation"
+normalized = "the battery is charged at separation"
+view_hash = "sha256:f69033e13f9255e74730ef36582a0f0b42286937b6f91c312e5d26f186e4ce39"

@@ -17,8 +17,10 @@
 //! file layout.
 //!
 //! Descriptions are post-interpolation by construction: the view is built from
-//! [`RenderedDescription`] blocks, so no `{$var}` can reach a consumer. They are
-//! also normalized here, once, rather than by each formatter in turn.
+//! [`RenderedDescription`] blocks, so no `{$var}` can reach a consumer. They
+//! also arrive in the canonical form [`normalize::description`] defines, once,
+//! rather than each formatter dedenting for itself — and that is the same form
+//! hashing reads, so what a reviewer sees is what their approval is bound to.
 
 use serde::Serialize;
 
@@ -27,6 +29,7 @@ use crate::ast::{
 };
 use crate::graph::{Graph, NodeId};
 use crate::interpolate::RenderedDescription;
+use crate::normalize;
 use crate::source::SourceMap;
 
 /// The four ways a proposition is discharged.
@@ -164,7 +167,7 @@ fn project_node(graph: &Graph<'_>, source_map: &SourceMap, node: NodeId) -> View
         id: common.id.value.clone(),
         mode: mode_of(block),
         namespace: namespace_of(source_map, block),
-        description: normalize_description(common.description.rendered()),
+        description: normalize::description(common.description.rendered()),
         tags: common.tags.iter().map(|tag| tag.value.clone()).collect(),
         evidence: evidence_of(block),
         deadline: deadline_of(block),
@@ -174,56 +177,6 @@ fn project_node(graph: &Graph<'_>, source_map: &SourceMap, node: NodeId) -> View
             .map(|child| child.value.clone())
             .collect(),
     }
-}
-
-/// Normalizes a rendered description for display.
-///
-/// A fenced description carries the indentation of the block it sits in, so
-/// the raw text would render as a code block wherever Markdown is involved and
-/// would show ragged leading spaces everywhere else. `spec.md` already defines
-/// the normal form a contract is read in — CRLF/CR to LF, per-line trailing
-/// whitespace stripped, leading and trailing blank lines dropped, the common
-/// space indent removed — and this applies it, so every output shows the same
-/// text and none of them has to dedent for itself.
-///
-/// The spec opens that list with NFC, which is left out here: Unicode
-/// normalization arrives with the hashing pass that needs it, and it will own
-/// the canonical normalizer this function then defers to. The steps below are
-/// whitespace-only and idempotent either way.
-fn normalize_description(text: &str) -> String {
-    let unified = text.replace("\r\n", "\n").replace('\r', "\n");
-    let trimmed: Vec<&str> = unified.lines().map(str::trim_end).collect();
-
-    // Blank lines around the contract are fence padding, not content.
-    let Some(first) = trimmed.iter().position(|line| !line.is_empty()) else {
-        return String::new();
-    };
-    let last = trimmed
-        .iter()
-        .rposition(|line| !line.is_empty())
-        .unwrap_or(first);
-    let lines = &trimmed[first..=last];
-
-    // Every non-blank line keeps at least this indent, so the slicing below
-    // always lands on a character boundary.
-    let indent = lines
-        .iter()
-        .filter(|line| !line.is_empty())
-        .map(|line| line.len() - line.trim_start_matches(' ').len())
-        .min()
-        .unwrap_or(0);
-
-    lines
-        .iter()
-        .map(|line| {
-            if line.is_empty() {
-                line
-            } else {
-                &line[indent..]
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 fn mode_of(block: &Block<RenderedDescription>) -> Mode {
@@ -658,25 +611,6 @@ fiat leaf {
                 "In safe mode the satellite holds:\n\n- the sun angle within 30 deg\n  - measured from the array normal"
             )
         );
-    }
-
-    #[test]
-    fn normalization_is_idempotent_and_whitespace_only() {
-        // Arrange: CRLF, trailing spaces, and blank padding lines.
-        let raw = "\r\n  first line   \r\n\r\n    second line\r\n  \r\n";
-
-        // Act
-        let once = normalize_description(raw);
-        let twice = normalize_description(&once);
-
-        // Assert
-        assert_eq!(once, "first line\n\n  second line");
-        assert_eq!(twice, once);
-    }
-
-    #[test]
-    fn a_description_of_only_blank_lines_normalizes_to_nothing() {
-        assert_eq!(normalize_description("\n   \n\n"), "");
     }
 
     #[test]

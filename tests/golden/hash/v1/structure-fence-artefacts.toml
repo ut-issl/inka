@@ -1,0 +1,8 @@
+# Everything a fence and a checkout can add to a description — CRLF line
+# endings, block indentation, trailing spaces, blank padding — reduced away,
+# with the relative indent of the nested list kept as contract content.
+kind = "structure"
+description = "\r\n  In safe mode the satellite holds:\r\n\r\n  - the sun angle within 30 deg   \r\n    - measured from the array normal\r\n  \r\n"
+normalized = "In safe mode the satellite holds:\n\n- the sun angle within 30 deg\n  - measured from the array normal"
+children = ["the sun sensor is calibrated", "a control loop runs at 10 Hz"]
+view_hash = "sha256:c4b8b2e4572c6a0e8b0a737115c49b014dc7ae145781fdaa10070e1f106b03fe"
