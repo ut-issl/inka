@@ -57,6 +57,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::normalize;
@@ -85,6 +86,23 @@ impl ViewHash {
 impl fmt::Display for ViewHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_prefixed_hex(f, &self.0)
+    }
+}
+
+/// Reads the `sha256:<hex>` spelling an approval record stores.
+impl FromStr for ViewHash {
+    type Err = InvalidDigest;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        parse_digest(text).map(Self)
+    }
+}
+
+/// Serializes as the `sha256:<hex>` string, so a record carrying a view hash
+/// writes the exact spelling the spec fixes.
+impl Serialize for ViewHash {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
     }
 }
 
@@ -124,22 +142,27 @@ impl FromStr for InterfaceHash {
     type Err = InvalidDigest;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let invalid = || InvalidDigest(text.to_owned());
-        let hex = text.strip_prefix(DIGEST_PREFIX).ok_or_else(invalid)?;
-        if hex.len() != DIGEST_LEN * 2 {
-            return Err(invalid());
-        }
-
-        let mut bytes = [0u8; DIGEST_LEN];
-        for (byte, pair) in bytes.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
-            // Digit by digit rather than through an integer parser, which
-            // would also accept a signed `+ff` as a byte.
-            let high = hex_digit(pair[0]).ok_or_else(invalid)?;
-            let low = hex_digit(pair[1]).ok_or_else(invalid)?;
-            *byte = (high << 4) | low;
-        }
-        Ok(Self(bytes))
+        parse_digest(text).map(Self)
     }
+}
+
+/// Reads `sha256:` followed by 64 hex digits into the raw digest.
+fn parse_digest(text: &str) -> Result<[u8; DIGEST_LEN], InvalidDigest> {
+    let invalid = || InvalidDigest(text.to_owned());
+    let hex = text.strip_prefix(DIGEST_PREFIX).ok_or_else(invalid)?;
+    if hex.len() != DIGEST_LEN * 2 {
+        return Err(invalid());
+    }
+
+    let mut bytes = [0u8; DIGEST_LEN];
+    for (byte, pair) in bytes.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
+        // Digit by digit rather than through an integer parser, which
+        // would also accept a signed `+ff` as a byte.
+        let high = hex_digit(pair[0]).ok_or_else(invalid)?;
+        let low = hex_digit(pair[1]).ok_or_else(invalid)?;
+        *byte = (high << 4) | low;
+    }
+    Ok(bytes)
 }
 
 /// The value of one lowercase or uppercase ASCII hex digit.
