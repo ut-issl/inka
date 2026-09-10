@@ -1,0 +1,5 @@
+# A decline: a veto regardless of quorum, and its mandatory comment saying
+# why. The label is the only place a decline differs from an approval in the
+# layout.
+line = "{\"v\":1,\"target\":\"bind:power::margin\",\"view_hash\":\"sha256:59481b66866b8ca5f21be852caa2f692a757841d5f58221fa189b2e12a6b42a5\",\"label\":\"decline\",\"comment\":\"the margin math is wrong\",\"approver\":\"tanaka\",\"key_id\":\"tanaka-2026\",\"timestamp\":\"2026-09-11T00:15:00Z\",\"phase\":\"M3\",\"until\":null,\"policy_hash\":null,\"sig\":\"\"}"
+canonical = "{\"approver\":\"tanaka\",\"comment\":\"the margin math is wrong\",\"key_id\":\"tanaka-2026\",\"label\":\"decline\",\"phase\":\"M3\",\"policy_hash\":null,\"target\":\"bind:power::margin\",\"timestamp\":\"2026-09-11T00:15:00Z\",\"until\":null,\"v\":1,\"view_hash\":\"sha256:59481b66866b8ca5f21be852caa2f692a757841d5f58221fa189b2e12a6b42a5\"}"

@@ -1,0 +1,5 @@
+# Every optional field present: an approve-side comment, an approver-side
+# `until` reservation, a policy hash, a namespace-qualified target, and a
+# fractional-second timestamp.
+line = "{\"v\":1,\"target\":\"structure:aocs::detumble\",\"view_hash\":\"sha256:db198aa9fbb57599d6e4e63581ae1622b9ea1ccbe3610c6c3211b766019d1643\",\"label\":\"approve\",\"comment\":\"checked against the sim campaign\",\"approver\":\"suzuki\",\"key_id\":\"suzuki-ops-1\",\"timestamp\":\"2026-09-10T23:59:59.500Z\",\"phase\":\"M3\",\"until\":\"FM\",\"policy_hash\":\"sha256:00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff\",\"sig\":\"\"}"
+canonical = "{\"approver\":\"suzuki\",\"comment\":\"checked against the sim campaign\",\"key_id\":\"suzuki-ops-1\",\"label\":\"approve\",\"phase\":\"M3\",\"policy_hash\":\"sha256:00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff\",\"target\":\"structure:aocs::detumble\",\"timestamp\":\"2026-09-10T23:59:59.500Z\",\"until\":\"FM\",\"v\":1,\"view_hash\":\"sha256:db198aa9fbb57599d6e4e63581ae1622b9ea1ccbe3610c6c3211b766019d1643\"}"

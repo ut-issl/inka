@@ -1,0 +1,4 @@
+# The smallest approval: every optional field absent, stored as null. The
+# canonical signing bytes sort the keys and drop `sig`.
+line = "{\"v\":1,\"target\":\"fiat:mass_margin\",\"view_hash\":\"sha256:59481b66866b8ca5f21be852caa2f692a757841d5f58221fa189b2e12a6b42a5\",\"label\":\"approve\",\"comment\":null,\"approver\":\"iwata\",\"key_id\":\"iwata-2026\",\"timestamp\":\"2026-09-10T08:30:00Z\",\"phase\":\"M3\",\"until\":null,\"policy_hash\":null,\"sig\":\"\"}"
+canonical = "{\"approver\":\"iwata\",\"comment\":null,\"key_id\":\"iwata-2026\",\"label\":\"approve\",\"phase\":\"M3\",\"policy_hash\":null,\"target\":\"fiat:mass_margin\",\"timestamp\":\"2026-09-10T08:30:00Z\",\"until\":null,\"v\":1,\"view_hash\":\"sha256:59481b66866b8ca5f21be852caa2f692a757841d5f58221fa189b2e12a6b42a5\"}"

@@ -1,0 +1,5 @@
+# Non-ASCII comment content is stored as UTF-8, never as JSON \u escapes, in
+# both the line and the canonical bytes. The characters are written as TOML
+# escapes here so an editor cannot silently recompose what is being frozen.
+line = "{\"v\":1,\"target\":\"objective:safety\",\"view_hash\":\"sha256:ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100\",\"label\":\"approve\",\"comment\":\"the d\u00E9bris budget holds a 30\u00B0 margin\",\"approver\":\"iwata\",\"key_id\":\"iwata-2026\",\"timestamp\":\"2026-09-12T12:00:00Z\",\"phase\":\"M3\",\"until\":null,\"policy_hash\":null,\"sig\":\"\"}"
+canonical = "{\"approver\":\"iwata\",\"comment\":\"the d\u00E9bris budget holds a 30\u00B0 margin\",\"key_id\":\"iwata-2026\",\"label\":\"approve\",\"phase\":\"M3\",\"policy_hash\":null,\"target\":\"objective:safety\",\"timestamp\":\"2026-09-12T12:00:00Z\",\"until\":null,\"v\":1,\"view_hash\":\"sha256:ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100\"}"
