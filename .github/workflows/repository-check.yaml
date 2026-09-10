@@ -343,6 +343,46 @@ jobs:
           fail_level: error
           yamllint_flags: .
 
+  check-golden-vectors:
+    name: Check golden vectors are append-only
+    # Always compare the trees so deletions and type changes cannot skip protection.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A recorded vector is the frozen meaning of every approval hashed under
+      # it, so the directory only ever grows. A layout that must change ships
+      # as a parallel version with its own vectors instead.
+      - name: Verify no recorded vector was changed
+        env:
+          BASE_SHA: >-
+            ${{ github.event_name == 'pull_request'
+            && github.event.pull_request.base.sha
+            || github.event.before }}
+        run: |
+          empty_tree='0000000000000000000000000000000000000000'
+          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "${empty_tree}" ]; then
+            echo 'No base commit to compare against; nothing to verify.'
+            exit 0
+          fi
+          touched=$(git diff --name-status --diff-filter=MDRT \
+            "${BASE_SHA}" HEAD -- tests/golden)
+          if [ -n "${touched}" ]; then
+            echo "::error title=Golden vectors::tests/golden is append-only;\
+             the entries below were modified, renamed, or deleted."
+            printf '%s\n' "${touched}"
+            exit 1
+          fi
+          echo 'tests/golden only gained entries.'
+
   check-prek:
     name: Check prek
     runs-on: ubuntu-latest
@@ -398,6 +438,7 @@ jobs:
       - lint-json5
       - lint-toml
       - lint-yaml
+      - check-golden-vectors
       - check-prek
       - check-typos
     if: ${{ !cancelled() }}

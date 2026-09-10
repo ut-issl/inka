@@ -1,0 +1,8 @@
+# The `e` of the description is deliberately left decomposed with a combining
+# acute, and its normal form composed. Writing both as escapes keeps the NFC
+# step under test where a literal could be silently recomposed by an editor.
+kind = "objective"
+description = "the de\u0301bris budget holds"
+normalized = "the d\u00E9bris budget holds"
+children = ["the pointing error stays below 0.1\u00B0"]
+view_hash = "sha256:db198aa9fbb57599d6e4e63581ae1622b9ea1ccbe3610c6c3211b766019d1643"

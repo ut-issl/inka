@@ -1,0 +1,10 @@
+# A bind, whose hash also covers the evidence interface hash and the empty
+# assumption slot.
+kind = "bind"
+description = "normalization-equivalent local views yield the same hash"
+normalized = "normalization-equivalent local views yield the same hash"
+interface_hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+view_hash = "sha256:0007b72d5d7e1d4c8e30705bc27466b8364fc9ed57b75af3c9ba738708855e42"
+
+[annotations]
+until = "M7"
