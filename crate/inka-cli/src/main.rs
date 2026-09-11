@@ -7,6 +7,7 @@ mod eval;
 mod export;
 mod load;
 mod render;
+mod rust_evidence;
 mod serve;
 
 use std::io::{self, IsTerminal, Write};

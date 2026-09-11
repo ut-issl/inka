@@ -29,6 +29,8 @@ pub struct PlanTarget {
     pub id: String,
     pub file: PathBuf,
     pub required: Vec<String>,
+    #[serde(default)]
+    pub selector: Option<String>,
 }
 
 /// Local pre-run receipt; only its bundle is delivered to the consumer.
@@ -136,7 +138,7 @@ impl Receipt {
     }
 }
 
-fn prepare(plan_path: &Path, out: &Path) -> io::Result<()> {
+fn prepare(plan_path: &Path, out: &Path, rust: bool) -> io::Result<()> {
     let plan: Plan = read(plan_path)?;
     if plan.v != 1 {
         return Err(io::Error::other("unsupported preparation plan version"));
@@ -157,11 +159,35 @@ fn prepare(plan_path: &Path, out: &Path) -> io::Result<()> {
         let path = base.join(spec.file);
         // Read a guard first; validation below catches a change between reads.
         receipt.files.push(guard(&path)?);
+        let source = fs::read_to_string(&path)?;
+        if spec.selector.as_ref().is_some_and(|selector| {
+            spec.required.iter().any(|case| {
+                case.split_once('/')
+                    .is_none_or(|(_, name)| name != selector)
+            })
+        }) {
+            return Err(io::Error::other(
+                "Rust function required cases must use ENVIRONMENT/SELECTOR and match the selected function",
+            ));
+        }
+        let (kind, profile, content) = match spec.selector.as_deref() {
+            Some(selector) if rust => (
+                Kind::Function,
+                "rust-source:v1",
+                crate::rust_evidence::extract(&source, selector)?,
+            ),
+            Some(_) => {
+                return Err(io::Error::other(
+                    "a function selector requires a language-specific preparation command",
+                ));
+            }
+            None => (Kind::File, "file-source:v1", source),
+        };
         let mut target = Target {
             id: spec.id,
-            kind: Kind::File,
-            profile: "file-source:v1".into(),
-            content: fs::read_to_string(&path)?,
+            kind,
+            profile: profile.into(),
+            content,
             interface_hash: String::new(),
             required: spec.required,
             results: Vec::new(),
@@ -227,8 +253,17 @@ pub fn finish(mut receipt: Receipt, results: Results, out: &Path) -> io::Result<
 
 pub fn run(command: CiExportCommand) -> io::Result<Outcome> {
     match command {
+        CiExportCommand::PrepareRust { plan, out } => {
+            prepare(&plan, &out, true)?;
+            Ok(Outcome::Ok)
+        }
+        CiExportCommand::FinishRust {
+            receipt,
+            report,
+            out,
+        } => crate::rust_evidence::finish_rust(&receipt, &report, &out),
         CiExportCommand::Prepare { plan, out } => {
-            prepare(&plan, &out)?;
+            prepare(&plan, &out, false)?;
             Ok(Outcome::Ok)
         }
         CiExportCommand::Finish {
