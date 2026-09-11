@@ -116,6 +116,8 @@ tags
 .ionide
 
 ### Python ###
+__pycache__/
+*.egg-info/
 # Virtual environment
 /.venv
 
