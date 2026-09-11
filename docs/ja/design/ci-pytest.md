@@ -1,5 +1,7 @@
 # pytest証拠アダプター
 
+実装状況: 以下の例は試作・内部IFの説明であり、通常の導入手順ではない。現在の設計は[連携契約](test-evidence-integration.md)を参照。通常の導入では手書きの対象計画、prepare/finish操作、プロジェクトのテスト設定変更を要求しない。独立した既存テストの自動収集とworkflow内だけの設定は未実装。
+
 証拠元のPython環境へ`adapters/pytest`をインストールする。inka自体がpytestの環境を
 用意するわけではない。完全な設定例は[英語README](../../../adapters/pytest/README.md)を参照。
 
