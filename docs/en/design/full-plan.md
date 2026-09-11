@@ -35,7 +35,7 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    count + hash chain) to make deletion tamper-evident; phase transitions as
    approvable events (`eval-clean` predicate + promotion attestations).
 6. **Evidence-provider extensions.** Function-granularity test evidence
-   (opt-in marker carrying the statement; normalized-AST interface hash);
+   (automatic framework discovery; reviewable source with CRLF-only normalization);
    execution-closure hashing recorded per evidence item, surfacing
    effective-content changes behind a stable interface as an eval warning,
    with an opt-in `closure-fresh` policy predicate for selective strictness.
