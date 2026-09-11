@@ -1,0 +1,745 @@
+[
+  {
+    "name": "file-pass",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "function-pass",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs::works",
+          "kind": "function",
+          "profile": "rust-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:5351065a33d7ce65686efe77d3d623f7ab6a7240709ca00f9e952ff730bfc108"
+        }
+      ]
+    }
+  },
+  {
+    "name": "crlf-equivalent",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\r\nfn works() { assert_eq!(2 + 2, 4); }\r\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "source-identity",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/other",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:46b60f215d67c0adbe20f1a10e2f96cf78ddff464a526882aef6fcab29aa1e69"
+        }
+      ]
+    }
+  },
+  {
+    "name": "target-identity",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/renamed.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:36c54a843044f98cb8f43c9ae6dc1b382fdfcb027761368333ec930ae309d69e"
+        }
+      ]
+    }
+  },
+  {
+    "name": "required-set",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "windows/works",
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            },
+            {
+              "case": "windows/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:0eeb686bb4300d002fdc2db43d97c49538f95bab20cdf033c5b7bdc72e768067"
+        }
+      ]
+    }
+  },
+  {
+    "name": "required-order-equivalent",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works",
+            "windows/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            },
+            {
+              "case": "windows/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:0eeb686bb4300d002fdc2db43d97c49538f95bab20cdf033c5b7bdc72e768067"
+        }
+      ]
+    }
+  },
+  {
+    "name": "fail",
+    "valid": true,
+    "status": "fail",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "fail"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "skip",
+    "valid": true,
+    "status": "skip",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "skip"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "cancelled",
+    "valid": true,
+    "status": "cancelled",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "cancelled"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing-result",
+    "valid": true,
+    "status": "missing",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "optional-environment",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ],
+      "environment": {
+        "lockfile_hash": "opaque-optional-metadata",
+        "os": "linux"
+      }
+    }
+  },
+  {
+    "name": "wrong-version",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 1,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown-field",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ],
+      "extra": true
+    }
+  },
+  {
+    "name": "duplicate-target",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        },
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate-result",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            },
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "unselected-result",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/not-selected",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "content-mismatch",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "changed",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty-required",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate-required",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works",
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  },
+  {
+    "name": "zero-attempt",
+    "valid": false,
+    "status": null,
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 0
+      },
+      "targets": [
+        {
+          "id": "tests/example.rs",
+          "kind": "file",
+          "profile": "file-source:v1",
+          "content": "#[test]\nfn works() { assert_eq!(2 + 2, 4); }\n",
+          "required": [
+            "linux/works"
+          ],
+          "results": [
+            {
+              "case": "linux/works",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:ffd25b80164322b1708fa02b22d3f635488f219f63915d0ee982bf9901489994"
+        }
+      ]
+    }
+  }
+]

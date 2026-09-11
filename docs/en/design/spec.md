@@ -97,7 +97,8 @@ fiat <id> {
     assumption list (empty until assumption aggregation lands; the slot exists
     so filling it later is not a layout change)
 - Excluded from hashes: IDs, tags, comments, `test:` / `veriq:` reference strings.
-  Included: deadline annotations. Interpolation happens before normalization
+  Included: deadline annotations. CI source/target identity is bound through the
+  provider interface digest; the local routing alias remains excluded. Interpolation happens before normalization
   and hashing — hashes never see placeholders.
 
 ## Approval records (v1)
@@ -134,10 +135,26 @@ fiat <id> {
 
 ## Test evidence provider
 
-The [semantic contract](ci-evidence.md) and [integration contract](test-evidence-integration.md) define
-source-owned independent test execution, automatic publication and offline evaluation of imported content.
-They supersede worktree-file matching and mandatory environment hashes. Concrete v2 serialization is specified
-in #66.
+- Evidence producers deliver reviewable source content and results for files or
+  individual tests. They own execution and language-specific extraction; inka
+  evaluates the imported version without source checkout or external APIs.
+- The [semantic contract](ci-evidence.md) and
+  [bundle v2 wire format](ci-evidence-format.md) define identities, hashing,
+  selection, result aggregation and error classification.
+- The optional `[evidence.sources.<alias>]` manifest entries specify `id` and
+  imported `file`. `test: "<alias>/<target-id>"` resolves within that source.
+- Recompute the interface digest from source identity, target identity, kind,
+  extraction profile, normalized delivered content and the required-case set.
+  The bind v1 layout consumes this digest without changing its framing.
+- Source/target/content/required-set changes require fresh approval. Run, result
+  and optional environment metadata do not alter that approval contract.
+- Establishment requires a satisfied approval and passing results for every
+  required case. Missing, skipped, cancelled or failing results are bind blame;
+  malformed or inconsistent bundles abort evaluation. No attempt is selected
+  by searching for a previous success.
+- Evaluation concerns only imported data. Unimported upstream edits have no
+  effect, and the source commit is not compared with the argument repository's
+  HEAD. Environment hashes are optional; closure tracking is separate work.
 
 ## Repository conventions
 
