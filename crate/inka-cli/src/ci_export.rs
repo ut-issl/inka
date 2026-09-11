@@ -21,6 +21,8 @@ pub struct Plan {
     pub source: Source,
     pub execution: Execution,
     pub targets: Vec<PlanTarget>,
+    #[serde(default)]
+    pub guards: Vec<FileGuard>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +33,10 @@ pub struct PlanTarget {
     pub required: Vec<String>,
     #[serde(default)]
     pub selector: Option<String>,
+    #[serde(default)]
+    pub kind: Option<Kind>,
+    #[serde(default)]
+    pub profile: Option<String>,
 }
 
 /// Local pre-run receipt; only its bundle is delivered to the consumer.
@@ -153,13 +159,18 @@ fn prepare(plan_path: &Path, out: &Path, rust: bool) -> io::Result<()> {
             environment: None,
             targets: Vec::new(),
         },
-        files: Vec::new(),
+        files: plan.guards,
     };
     for spec in plan.targets {
         let path = base.join(spec.file);
         // Read a guard first; validation below catches a change between reads.
         receipt.files.push(guard(&path)?);
         let source = fs::read_to_string(&path)?;
+        if spec.kind == Some(Kind::Function) && spec.profile.is_none() {
+            return Err(io::Error::other(
+                "extracted function content requires an explicit extraction profile",
+            ));
+        }
         if spec.selector.as_ref().is_some_and(|selector| {
             spec.required.iter().any(|case| {
                 case.split_once('/')
@@ -181,7 +192,11 @@ fn prepare(plan_path: &Path, out: &Path, rust: bool) -> io::Result<()> {
                     "a function selector requires a language-specific preparation command",
                 ));
             }
-            None => (Kind::File, "file-source:v1", source),
+            None => (
+                spec.kind.unwrap_or(Kind::File),
+                spec.profile.as_deref().unwrap_or("file-source:v1"),
+                source,
+            ),
         };
         let mut target = Target {
             id: spec.id,
