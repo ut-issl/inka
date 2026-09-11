@@ -1,0 +1,61 @@
+---
+name: Receive inka evidence
+
+"on":
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: Evidence source owner/repo
+        required: true
+        type: string
+      run_id:
+        description: Explicit source workflow run ID
+        required: true
+        type: string
+      artifact_id:
+        description: Exact artifact ID from the selected run attempt (not a name pattern)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout receiving inka project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          path: project
+          persist-credentials: false
+      - name: Checkout reviewed inka tool implementation
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          repository: ut-issl/inka
+          ref: c6135a56d14f1c97b006ad717d2883b196ef92fa
+          path: tools/inka
+          persist-credentials: false
+      - name: Set up inka build environment
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659  # v1.17.0
+      - name: Build inka CLI
+        working-directory: tools/inka
+        run: cargo build -p inka-cli --locked
+      - name: Download the explicitly selected source artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          github-token: ${{ secrets.SOURCE_ACTIONS_READ_TOKEN }}
+          repository: ${{ inputs.source_repository }}
+          run-id: ${{ inputs.run_id }}
+          artifact-ids: ${{ inputs.artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/imported-evidence
+      - name: Validate and install the imported version
+        env:
+          IMPORTED: ${{ runner.temp }}/imported-evidence/evidence.json
+        run: |
+          tools/inka/target/debug/inka ci-export validate "$IMPORTED"
+          mkdir -p project/evidence
+          cp -- "$IMPORTED" project/evidence/upstream.json
+      - name: Evaluate the receiving argument offline
+        run: tools/inka/target/debug/inka eval --json project

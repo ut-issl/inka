@@ -14,6 +14,95 @@ use inka_core::record::{Record, RecordFields, Target};
 use inka_core::view::ArgumentView;
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn separate_producer_and_receiver_evaluate_only_the_explicitly_imported_version() {
+    let mut receiver = Project::new();
+    let producer = receiver.path.with_extension("producer");
+    fs::create_dir_all(&producer).unwrap();
+    let produce = |content: &str, outcome: &str| {
+        fs::write(producer.join("test.txt"), content).unwrap();
+        fs::write(
+            producer.join("plan.json"),
+            serde_json::json!({"v":1,
+                "source":{"id":"github:example/source","revision":"captured-version"},
+                "execution":{"id":"explicit-run","attempt":1},
+                "targets":[{"id":"tests/example.rs","file":"test.txt","required":["linux/case"]}]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        Command::cargo_bin("inka")
+            .unwrap()
+            .current_dir(&producer)
+            .args([
+                "ci-export",
+                "prepare",
+                "--plan",
+                "plan.json",
+                "--out",
+                "receipt.json",
+            ])
+            .assert()
+            .success();
+        let receipt: serde_json::Value =
+            serde_json::from_slice(&fs::read(producer.join("receipt.json")).unwrap()).unwrap();
+        fs::write(producer.join("results.json"), serde_json::json!({"v":1,
+            "source":receipt["bundle"]["source"], "execution":receipt["bundle"]["execution"],
+            "targets":[{"id":"tests/example.rs","interface_hash":receipt["bundle"]["targets"][0]["interface_hash"],
+                "results":[{"case":"linux/case","result":outcome}]}]
+        }).to_string()).unwrap();
+        let mut cmd = Command::cargo_bin("inka").unwrap();
+        let assertion = cmd
+            .current_dir(&producer)
+            .args([
+                "ci-export",
+                "finish",
+                "--receipt",
+                "receipt.json",
+                "--results",
+                "results.json",
+                "--out",
+                "evidence.json",
+            ])
+            .assert();
+        if outcome == "pass" {
+            assertion.success();
+        } else {
+            assertion.failure().stderr("");
+        }
+        Bundle::parse(&fs::read_to_string(producer.join("evidence.json")).unwrap()).unwrap()
+    };
+    receiver.bundle = produce("test contract version one\n", "pass");
+    receiver.write_bundle();
+    receiver.approve();
+    assert_eq!(receiver.eval(true)["established"], 2);
+
+    let next = produce("test contract version two\n", "pass");
+    assert_eq!(receiver.eval(true)["established"], 2); // no implicit upstream following
+    receiver.bundle = next;
+    receiver.write_bundle();
+    assert!(
+        receiver.eval(false)["blame"]
+            .to_string()
+            .contains("stale_approval")
+    );
+    receiver.approve();
+    assert_eq!(receiver.eval(true)["established"], 2);
+
+    receiver.bundle = produce("test contract version two\n", "fail");
+    receiver.write_bundle();
+    assert!(
+        receiver.eval(false)["blame"]
+            .to_string()
+            .contains("evidence_not_passed")
+    );
+    receiver.bundle = produce("test contract version two\n", "pass");
+    receiver.write_bundle();
+    fs::remove_dir_all(&producer).unwrap(); // receiver needs no access to the source
+    assert_eq!(receiver.eval(true)["established"], 2);
+}
+
 struct Project {
     path: PathBuf,
     bundle: Bundle,
