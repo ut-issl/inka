@@ -1,5 +1,10 @@
 # Explicit cross-repository evidence import
 
+Implementation status: this prototype does not yet implement the revised
+[workflow-only integration contract](../../docs/en/design/test-evidence-integration.md).
+The receiver procedure is reusable; update the pinned tool revision and source
+onboarding before treating it as the new integration example.
+
 Copy [receive-evidence.yaml](receive-evidence.yaml) into the receiving repository's
 `.github/workflows/`. Its root is an inka project; its source can be any separate
 repository using the producer IF and publish Action. Review and update the pinned
