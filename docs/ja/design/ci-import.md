@@ -1,5 +1,7 @@
 # 別リポジトリからの証拠取り込み
 
+受信側の取り込み手順は再利用できる。証拠元の導入は[連携契約](test-evidence-integration.md)に従う。新しい収集実装に合わせて例のツール参照commitを更新する。参照先の試作はworkflow内だけの自動収集を実装していない。
+
 [取り込み例](../../../examples/ci/README.md) と
 [workflow](../../../examples/ci/receive-evidence.yaml) を受信側リポジトリに配置します。
 証拠元リポジトリ・run ID・artifact ID を明示して、公式 download-artifact Action
