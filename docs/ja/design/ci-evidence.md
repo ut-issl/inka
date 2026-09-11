@@ -1,4 +1,6 @@
-# CI証拠の契約
+# テスト証拠の契約
+
+[連携契約](test-evidence-integration.md)がworkflow内の導入、自動公開、`test:`への移行を定義する。証拠元の責務とはinka提供の内部処理を証拠元で動かすことであり、テスト作成者にIFを手書きさせることではない。既存テストは独立したstepで実行し続ける。
 
 [#21](https://github.com/ut-issl/inka/issues/21)配下の
 [#65](https://github.com/ut-issl/inka/issues/65)の意味論の設計。

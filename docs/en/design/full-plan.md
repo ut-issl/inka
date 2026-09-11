@@ -1,5 +1,9 @@
 # inka — Full Implementation Plan (beyond the PoC)
 
+Test evidence integration follows the [confirmed integration contract](test-evidence-integration.md).
+Framework discovery is automatic; no per-test markers or manual export plans are required for normal
+onboarding. Low-level producer commands below are internal building blocks.
+
 Capability areas that build on the PoC. The ordering below is
 dependency-informed, **not a schedule**; nothing here commits to dates or
 sequence beyond the stated dependencies.
@@ -30,7 +34,7 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    canonical record bytes; `eval --verify`; lightweight anchoring (record
    count + hash chain) to make deletion tamper-evident; phase transitions as
    approvable events (`eval-clean` predicate + promotion attestations).
-6. **Evidence-provider extensions.** Function-granularity CI evidence
+6. **Evidence-provider extensions.** Function-granularity test evidence
    (opt-in marker carrying the statement; normalized-AST interface hash);
    execution-closure hashing recorded per evidence item, surfacing
    effective-content changes behind a stable interface as an eval warning,

@@ -1,5 +1,9 @@
 # inka — Decided Specification
 
+Test evidence uses the intended `test:` syntax. Current code still implements `ci:`; migration and its
+retirement are pending (#66/#73). The [integration contract](test-evidence-integration.md) states confirmed
+requirements and implementation status. Protocol hash identifiers do not change merely with terminology.
+
 Everything on this page is settled. Hash and record layouts become frozen the
 moment their golden vectors land (append-only from then on; incompatible
 changes ship as a parallel v2). Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/design/spec/).
@@ -16,7 +20,7 @@ structure <id> #tag1 #tag2 {
 
 bind <id> {
   ```...```
-  ci: "<test-target>"   // or veriq: "<module>.<name>"
+  test: "<test-target>"   // or veriq: "<module>.<name>"
 }
 
 fiat <id> {
@@ -35,7 +39,7 @@ fiat <id> {
 - Exactly one fenced description per block. Fence info strings are accepted and
   reserved. Inside fences: natural language only; outside: keywords only.
 - Mode-required properties, enforced at parse time: `structure`/`objective` →
-  `children:` required; `bind` → exactly one of `ci:` / `veriq:` required;
+  `children:` required; `bind` → exactly one of `test:` / `veriq:` required;
   `fiat` → neither allowed.
 - Annotations form a group anchored on `until:` — `reason:` and `promote:` may
   only appear together with `until:`. `until: <phase>` and `reason: "<short
@@ -43,9 +47,9 @@ fiat <id> {
   optional (an `until:` without `promote:` is plain expiry): on fiat the
   target is `structure` or `bind`; on the objective it is `structure` only.
   structure and bind take no `promote:` — announcing a mode change there is
-  not supported. The `reason`, `ci:`, and `veriq:` properties take a
+  not supported. The `reason`, `test:`, and `veriq:` properties take a
   double-quoted, single-line string value with no escape sequences — the only
-  quoted values in the language. A `ci:` / `veriq:` value is the opaque
+  quoted values in the language. A `test:` / `veriq:` value is the opaque
   evidence target, which `check` does not interpret. Descriptions never use
   quotes.
 - `//` line comments; dropped at the lexer, never hashed.
@@ -59,7 +63,7 @@ fiat <id> {
   same-namespace references may omit the prefix; `::` cannot be written inside
   an ID; policy selectors use the same notation (`power::*`); `veriq:`
   references keep Python's dotted `module.function` names.
-- `ci:` / `veriq:` references get a format check only at `check` time;
+- `test:` / `veriq:` references get a format check only at `check` time;
   existence and pass/fail are eval's job.
 
 ## Project layout
@@ -92,7 +96,7 @@ fiat <id> {
   - bind = tag ‖ desc ‖ annotations ‖ interface_hash (raw 32 bytes) ‖
     assumption list (empty until assumption aggregation lands; the slot exists
     so filling it later is not a layout change)
-- Excluded from hashes: IDs, tags, comments, `ci:` / `veriq:` reference strings.
+- Excluded from hashes: IDs, tags, comments, `test:` / `veriq:` reference strings.
   Included: deadline annotations. Interpolation happens before normalization
   and hashing — hashes never see placeholders.
 
@@ -128,20 +132,12 @@ fiat <id> {
   declined / expired / evidence mismatch), not nodes failing solely through
   their children.
 
-## CI evidence provider (test-target granularity)
+## Test evidence provider
 
-- Provider contract — any evidence provider supplies: a content-addressed
-  interface hash; a human-readable statement of what passing establishes;
-  commit-bound results delivered as repository content (eval calls no external
-  APIs); an environment hash.
-- `ci-export.json` v1: `commit`; `environment.lockfile_hash`; `targets[]` with
-  `id` (a test target such as `tests/hash_props.rs`), `interface_hash`
-  (file-content hash, CRLF→LF normalization only), `result` (`pass` | `fail`).
-- eval matching for a `ci: "<id>"` reference: the export has an entry for `<id>`; the
-  current worktree file's interface hash equals the export's; the bind
-  approval's view_hash recomputes against the current description + interface
-  hash; the result is pass. An export commit mismatch is a warning (content
-  equality is already covered by the interface hash).
+The [semantic contract](ci-evidence.md) and [integration contract](test-evidence-integration.md) define
+source-owned independent test execution, automatic publication and offline evaluation of imported content.
+They supersede worktree-file matching and mandatory environment hashes. Concrete v2 serialization is specified
+in #66.
 
 ## Repository conventions
 

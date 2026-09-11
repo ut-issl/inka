@@ -1,5 +1,7 @@
 # inka — PoC 実装方針
 
+テスト証拠の導入は[確定した連携契約](test-evidence-integration.md)に従う。通常の導入では個別マーカー・手書きのexport計画を要求せず、自動収集する。以下の低水準生成処理は内部部品として扱う。
+
 一人で inka のシステムを端から端まで体験できる最小の実装。
 英語版(正): [English](https://www.space.t.u-tokyo.ac.jp/inka/design/poc-plan/)
 
@@ -39,9 +41,7 @@
   decline 拒否権、宣言されたフェーズ順序に対するノード側 `until:` のハード失効
   (期限後に付けた承認もカウントしない)、原因別の blame 出力、clean でなければ
   非ゼロ終了。
-- **CI evidence provider(テストターゲット粒度)**: `ci: "<target>"`、CI で
-  生成する `ci-export.json`(生成は `inka ci-export` サブコマンドが望ましい)、
-  eval 側の照合。
+- **テスト証拠provider**: `test: "<source>/<target>"`。独立した既存テストの結果をworkflow連携で収集し、取り込んだ証拠をオフライン評価する。`ci:`は移行後に廃止する。実装状況と範囲は連携契約に記録する。
 
 ## 明示的にスコープ外
 

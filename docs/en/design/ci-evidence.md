@@ -1,4 +1,9 @@
-# CI evidence contracts
+# Test evidence contracts
+
+The [integration contract](test-evidence-integration.md) defines the required workflow-only onboarding,
+automatic test publication and `test:` migration. Source-side responsibility means inka-maintained machinery
+running in the source environment, not handwritten integration by each test author. Existing tests remain
+independently runnable.
 
 Semantic design for [#65](https://github.com/ut-issl/inka/issues/65), under
 [#21](https://github.com/ut-issl/inka/issues/21).

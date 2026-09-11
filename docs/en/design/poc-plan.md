@@ -1,5 +1,9 @@
 # inka — PoC Implementation Plan
 
+Test evidence integration follows the [confirmed integration contract](test-evidence-integration.md).
+Framework discovery is automatic; no per-test markers or manual export plans are required for normal
+onboarding. Low-level producer commands below are internal building blocks.
+
 The smallest implementation with which one person can experience the inka
 system end to end.
 Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/design/poc-plan/).
@@ -44,9 +48,9 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   approval); stale detection; decline veto; hard node-side `until:` expiry
   against the declared phase order (post-deadline approvals do not count
   either); blame output with per-cause reasons; non-zero exit when not clean.
-- **CI evidence provider (test-target granularity)**: `ci: "<target>"`;
-  `ci-export.json` generated in CI (an `inka ci-export` subcommand is the
-  preferred generator); eval-side matching.
+- **Test evidence provider**: `test: "<source>/<target>"`; collect existing independent test executions
+  through workflow integration and evaluate imported evidence offline. Migrate and retire `ci:`;
+  implementation status and scope are recorded in the integration contract.
 
 ## Explicitly out of scope
 
