@@ -1,5 +1,10 @@
 # dogfood: inka's own design argument
 
+Implementation status: this prototype does not yet implement the revised
+[workflow-only integration contract](../../../docs/en/design/test-evidence-integration.md).
+The replacement must reuse an existing independent test job. The passing
+prototype workflow does not validate the revised onboarding requirements.
+
 inka's own design claims written in the inka DSL (ut-issl/inka#6).
 This is the canonical example project and the primary fixture for the PoC
 ([docs/en/design/poc-plan.md](../../docs/en/design/poc-plan.md)): the goal loop —
