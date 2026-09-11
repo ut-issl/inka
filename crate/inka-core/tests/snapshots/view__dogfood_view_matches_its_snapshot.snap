@@ -254,6 +254,21 @@ ArgumentView {
             children: [],
         },
         ViewNode {
+            id: "normalization_idempotent",
+            mode: Bind,
+            namespace: "editing",
+            description: "For the selected generated inputs, applying description normalization twice gives the same result as applying it once",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Ci,
+                    target: "inka/hash_props::normalization_is_idempotent",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
             id: "policy_is_reviewable",
             mode: Fiat,
             namespace: "approval",
@@ -316,6 +331,7 @@ ArgumentView {
             children: [
                 "local_view_hash_sound",
                 "id_not_in_contract",
+                "normalization_idempotent",
             ],
         },
         ViewNode {
@@ -447,6 +463,10 @@ ArgumentView {
         ViewEdge {
             parent: "surface_edits_free",
             child: "id_not_in_contract",
+        },
+        ViewEdge {
+            parent: "surface_edits_free",
+            child: "normalization_idempotent",
         },
         ViewEdge {
             parent: "target_unswappable",

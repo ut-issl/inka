@@ -1,0 +1,35 @@
+{
+  "v": 1,
+  "source": {
+    "id": "github:ut-issl/inka",
+    "revision": "SET_TO_CAPTURED_REVISION"
+  },
+  "execution": {
+    "id": "SET_TO_EXPLICIT_RUN_ID",
+    "attempt": 1
+  },
+  "targets": [
+    {
+      "id": "hash_props",
+      "file": "../../crate/inka-core/tests/hash_props.rs",
+      "required": [
+        "linux/normalization_is_idempotent",
+        "linux/a_normalized_contract_is_its_own_normal_form",
+        "linux/the_fence_indent_does_not_reach_the_hash",
+        "linux/line_endings_do_not_reach_the_hash",
+        "linux/trailing_whitespace_and_fence_padding_do_not_reach_the_hash",
+        "linux/contracts_that_differ_after_normalization_hash_differently",
+        "linux/joining_two_lines_changes_the_hash",
+        "linux/child_order_does_not_reach_the_hash"
+      ]
+    },
+    {
+      "id": "hash_props::normalization_is_idempotent",
+      "file": "../../crate/inka-core/tests/hash_props.rs",
+      "selector": "normalization_is_idempotent",
+      "required": [
+        "linux/normalization_is_idempotent"
+      ]
+    }
+  ]
+}

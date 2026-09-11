@@ -27,9 +27,19 @@ inka 自身の設計主張を inka DSL で書いたもの(ut-issl/inka#6)。
 (`until:` / `promote:`)、markdown を含む description(`labels_cover_reality`)、
 値埋め込み(`approver_unforgeable`)。
 
-機械検証に昇格予定の主張はすべて `fiat` ブロック+`until: <マイルストーン>` /
-`promote: bind` — concept §2.1 の fiat→bind ライフサイクルの可視化。最初の本物の
-bind は CI provider(対象は `local_view_hash_sound`)で入る。
+最初の CI bind は `normalization_idempotent` です。
+選択した生成入力に対する正規化の冪等性に主張を限定し、`hash_props.rs` の
+関数本文と実行結果を証拠にします。広い主張 `local_view_hash_sound` は fiat のままです。
+
+[dogfood workflow](../../../.github/workflows/dogfood-evidence.yaml) が証拠元で
+ファイル・関数の本文を記録して8件の proptest を実行し、公式 Artifact Actions で
+配送・取り込みを行います。取り込む `evidence/ci.json` は Git の管理外です。
+証拠がなければ missing evidence、pass の証拠があっても未承認なら未成立です。
+workflow は人間の承認を生成しません。
+
+CLI 結合テストは一時コピーに明示的な合成承認を置き、実テストからの証拠生成・
+成立・変更による失効・再承認と、不成立結果・入力エラーを確認します。
+他の機械検証に昇格予定の主張は、期限付き fiat として残しています。
 
 ## 設計の正はどこにあるか
 
