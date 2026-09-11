@@ -1,5 +1,11 @@
 # inka pytest adapter
 
+Implementation status: this prototype does not yet implement the revised
+[workflow-only integration contract](../../docs/en/design/test-evidence-integration.md).
+Manual plans, explicit producer commands and project reporter/plugin setup
+below describe internal/prototype interfaces, not the required onboarding.
+Existing test steps must remain independently runnable.
+
 Install this directory in the **source project's** environment:
 
 ```sh
