@@ -32,6 +32,8 @@ jobs:
         env:
           INKA_BIN: ${{ github.workspace }}/target/debug/inka
         run: target/pytest-env/bin/python -m unittest discover -s adapters/pytest/tests -v
+      - name: Test publish validation
+        run: python3 -m unittest discover -s actions/publish-evidence/tests -v
 
   vitest:
     name: Verify Vitest evidence adapter
