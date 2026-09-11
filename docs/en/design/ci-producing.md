@@ -1,5 +1,11 @@
 # Producing CI evidence
 
+Implementation status: the examples below describe reusable prototype/internal interfaces, not the required
+user onboarding. Follow the [integration contract](test-evidence-integration.md) for the current design.
+Normal onboarding must not require handwritten target plans, explicit prepare/finish commands or project
+test-config changes. Existing tests execute independently; automatic collection and workflow-only setup still
+need implementation.
+
 The source project owns test execution. The inka CLI records content before the
 run and combines it with independently supplied results after the run.
 Japanese translation: [日本語版](../../ja/design/ci-producing.md).
