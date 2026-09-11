@@ -72,6 +72,23 @@ pub enum Command {
 /// Source-side evidence operations around an existing test run.
 #[derive(Debug, Subcommand)]
 pub enum CiExportCommand {
+    /// Capture a selected Rust test or proptest contract before execution.
+    PrepareRust {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Adapt captured libtest pretty reports from the prepared execution.
+    FinishRust {
+        #[arg(long)]
+        receipt: PathBuf,
+        /// One test binary's captured output per environment: ENV=PATH.
+        #[arg(long, required = true)]
+        report: Vec<String>,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Capture selected file contracts and required cases before execution.
     Prepare {
         #[arg(long)]
