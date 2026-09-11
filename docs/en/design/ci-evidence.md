@@ -52,8 +52,9 @@ digest. The consumer exposes that content to the approval interface.
 The interface hash binds the source identity, target identity and reviewable
 content. Source content is normalized by replacing CRLF with LF only: a lone CR,
 comments, Unicode normalization, indentation and trailing whitespace remain
-content. The precise framing, extraction-profile identity and domain tag are
-specified by the wire contract, not inferred independently by each adapter.
+content. The required-case/environment set also enters the interface hash, so weakening
+test selection requires fresh approval. The framing and extraction-profile
+identity are specified in the [wire contract](ci-evidence-format.md).
 
 The bind view hash keeps its frozen v1 layout: the proposition description and
 annotations, the raw interface digest, and the currently empty assumption list.
