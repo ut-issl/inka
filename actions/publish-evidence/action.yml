@@ -1,0 +1,39 @@
+---
+name: Publish inka evidence
+description: Validate an existing CI evidence v2 bundle and upload it as a GitHub artifact
+inputs:
+  bundle:
+    description: Path to the generated v2 JSON bundle for this execution
+    required: true
+  inka:
+    description: Inka CLI executable already available on the source runner
+    default: inka
+  name:
+    description: Artifact name, unique for this source, run attempt and matrix entry
+    required: true
+outputs:
+  artifact-id:
+    description: GitHub artifact ID
+    value: ${{ steps.upload.outputs.artifact-id }}
+  artifact-digest:
+    description: GitHub artifact digest
+    value: ${{ steps.upload.outputs.artifact-digest }}
+runs:
+  using: composite
+  steps:
+    - name: Validate and stage the bundle
+      id: validate
+      shell: bash
+      env:
+        INKA_BUNDLE: ${{ inputs.bundle }}
+        INKA_BIN: ${{ inputs.inka }}
+        INKA_ACTION_PATH: ${{ github.action_path }}
+      run: bash "$INKA_ACTION_PATH/validate.sh"
+    - name: Upload validated evidence
+      id: upload
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ steps.validate.outputs.directory }}/evidence.json
+        if-no-files-found: error
+        overwrite: false
