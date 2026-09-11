@@ -1,6 +1,10 @@
 # テスト証拠bundle v2
 
-自動公開は[連携契約](test-evidence-integration.md)に従う。この形式は収集方式に依存せず再利用できる。以下の `ci:` は現行実装の表記であり、目標は `test:`、移行後に `ci:` を廃止する。改名では版付きdigest domainと凍結ベクタを変えない。自動生成IDと移行時期は#66の具体案で確認する。
+自動公開は[連携契約](test-evidence-integration.md)に従う。
+この形式は収集方式に依存せず再利用できる。
+以下の `ci:` は現行実装の表記であり、目標は `test:`、移行後に `ci:` を廃止する。
+改名では版付きdigest domainと凍結ベクタを変えない。
+自動生成IDと移行時期は#66の具体案で確認する。
 
 [証拠の意味論](ci-evidence.md)を具体化する配送契約。
 英語版（正）: [English](../../en/design/ci-evidence-format.md)。
