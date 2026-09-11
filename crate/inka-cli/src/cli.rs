@@ -23,6 +23,9 @@ pub struct Cli {
 /// A top-level `inka` subcommand.
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Prepare, finish or validate CI evidence; never execute tests.
+    #[command(subcommand)]
+    CiExport(CiExportCommand),
     /// Load a project and report every structural problem in its argument.
     Check {
         /// Project directory holding `inka.toml`; defaults to the current
@@ -64,6 +67,29 @@ pub enum Command {
         #[arg(long)]
         assets: Option<PathBuf>,
     },
+}
+
+/// Source-side evidence operations around an existing test run.
+#[derive(Debug, Subcommand)]
+pub enum CiExportCommand {
+    /// Capture selected file contracts and required cases before execution.
+    Prepare {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Bind supplied results to prepared content; write failures too.
+    Finish {
+        #[arg(long)]
+        receipt: PathBuf,
+        #[arg(long)]
+        results: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Check bundle integrity without requiring its tests to pass.
+    Validate { file: PathBuf },
 }
 
 /// When diagnostic snippets should be coloured.
