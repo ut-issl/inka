@@ -19,5 +19,9 @@ current = "M0"
 # Values files resolving {$var} in descriptions
 files = ["values.toml"]
 
+[evidence.sources.inka]
+id = "github:ut-issl/inka"
+file = "evidence/ci.json"
+
 # [policy]
 # Policy location and format are settled in M3 (undecided).

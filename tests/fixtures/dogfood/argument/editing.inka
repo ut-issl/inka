@@ -38,11 +38,18 @@ structure surface_edits_free {
   ```
   Renaming IDs and reordering child references never invalidate any approval
   ```
-  children: local_view_hash_sound, id_not_in_contract
+  children: local_view_hash_sound, id_not_in_contract, normalization_idempotent
 }
 
 fiat id_not_in_contract {
   ```
   IDs and tags are not part of the contract: what an approver judged is the content, not its name
   ```
+}
+
+bind normalization_idempotent {
+  ```
+  For the selected generated inputs, applying description normalization twice gives the same result as applying it once
+  ```
+  ci: "inka/hash_props::normalization_is_idempotent"
 }

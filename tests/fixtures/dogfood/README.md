@@ -28,10 +28,22 @@ Multi-file split with cross-file references; DAG sharing (`local_view_hash_sound
 has three parents); deadline annotations (`until:` / `promote:`); a markdown
 description (`labels_cover_reality`); value interpolation (`approver_unforgeable`).
 
-Every machine-verifiable claim is currently a `fiat` block carrying
-`until: <milestone>` / `promote: bind` — the fiat→bind lifecycle of concept §2.1
-made visible. The first real bind lands with the CI provider
-(target: `local_view_hash_sound`).
+The first CI bind, `normalization_idempotent`, states only the normalization
+property checked for the selected generated inputs. It references a function
+contract extracted from `crate/inka-core/tests/hash_props.rs`. The broader
+`local_view_hash_sound` claim remains fiat: a passing property test does not
+prove a general one-to-one correspondence between all contracts and hashes.
+
+The [dogfood workflow](../../../.github/workflows/dogfood-evidence.yaml) prepares
+file and function contracts, runs the eight proptests in the source job, then
+publishes and imports the v2 bundle through official Artifact Actions.
+`evidence/ci.json` is a local import, excluded from Git. Without an import the
+bind reports missing evidence; with a passing import it still requires approval.
+The workflow never writes human approvals. The CLI integration test uses
+explicitly synthetic records in a temporary copy to verify pass → approve →
+established → changed contract → stale → reapprove, plus nonpass/input errors.
+
+The remaining machine-verifiable claims retain `fiat` with milestone annotations.
 
 ## Where the authoritative design lives
 

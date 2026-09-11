@@ -1,0 +1,106 @@
+name: Dogfood CI evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  produce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      artifact-id: ${{ steps.publish.outputs.artifact-id }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up source Rust environment
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      - name: Build source-side inka CLI
+        run: cargo build -p inka-cli --locked
+      - name: Prepare selected file and function contracts
+        id: prepare
+        env:
+          EVIDENCE_RUN_ID: github-actions:${{ github.run_id }}
+          EVIDENCE_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p target/dogfood-evidence
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          plan = json.loads(pathlib.Path('examples/ci/dogfood-plan.json').read_text())
+          plan['source']['revision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          plan['execution'] = {'id': os.environ['EVIDENCE_RUN_ID'], 'attempt': int(os.environ['EVIDENCE_ATTEMPT'])}
+          for target in plan['targets']:
+              target['file'] = str(pathlib.Path('crate/inka-core/tests/hash_props.rs').resolve())
+          pathlib.Path('target/dogfood-evidence/plan.json').write_text(json.dumps(plan))
+          PY
+          target/debug/inka ci-export prepare-rust --plan target/dogfood-evidence/plan.json \
+            --out target/dogfood-evidence/receipt.json
+      - name: Run the source project's chosen tests
+        run: >-
+          cargo test -p inka-core --test hash_props --locked -- --format pretty --color never
+          > target/dogfood-evidence/libtest.txt
+      - name: Finish evidence even after test failure
+        id: finish
+        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        run: >-
+          target/debug/inka ci-export finish-rust
+          --receipt target/dogfood-evidence/receipt.json
+          --report linux=target/dogfood-evidence/libtest.txt
+          --out target/dogfood-evidence/evidence.json
+      - name: Publish generated evidence
+        id: publish
+        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        uses: ./actions/publish-evidence
+        with:
+          bundle: target/dogfood-evidence/evidence.json
+          inka: ./target/debug/inka
+          name: inka-dogfood-${{ github.run_id }}-${{ github.run_attempt }}-linux
+
+  consume:
+    needs: produce
+    if: ${{ always() && needs.produce.outputs.artifact-id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout receiving argument and inka tool
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up inka build environment
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      - name: Build inka CLI
+        run: cargo build -p inka-cli --locked
+      - name: Download the explicit artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.produce.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/dogfood-import
+      - name: Validate and import into the receiving fixture
+        env:
+          IMPORTED: ${{ runner.temp }}/dogfood-import/evidence.json
+        run: |
+          target/debug/inka ci-export validate "$IMPORTED"
+          mkdir -p tests/fixtures/dogfood/evidence
+          cp -- "$IMPORTED" tests/fixtures/dogfood/evidence/ci.json
+      - name: Check offline evaluation and keep human approval separate
+        run: |
+          set +e
+          target/debug/inka eval --json tests/fixtures/dogfood > target/dogfood-eval.json
+          status=$?
+          set -e
+          test "$status" = 1
+          python3 - <<'PY'
+          import json, pathlib
+          report = json.loads(pathlib.Path('target/dogfood-eval.json').read_text())
+          bind = next(item for item in report['blame'] if item['node'] == 'normalization_idempotent')
+          assert [reason['cause'] for reason in bind['reasons']] == ['missing_approval'], bind
+          PY

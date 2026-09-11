@@ -201,6 +201,20 @@
   },
   {
     "data": {
+      "id": "normalization_idempotent",
+      "mode": "bind",
+      "namespace": "editing",
+      "description": "For the selected generated inputs, applying description normalization twice gives the same result as applying it once",
+      "tags": [],
+      "root": false,
+      "evidence": {
+        "kind": "ci",
+        "target": "inka/hash_props::normalization_is_idempotent"
+      }
+    }
+  },
+  {
+    "data": {
       "id": "policy_is_reviewable",
       "mode": "fiat",
       "namespace": "approval",
@@ -426,6 +440,13 @@
       "id": "surface_edits_free->id_not_in_contract",
       "source": "surface_edits_free",
       "target": "id_not_in_contract"
+    }
+  },
+  {
+    "data": {
+      "id": "surface_edits_free->normalization_idempotent",
+      "source": "surface_edits_free",
+      "target": "normalization_idempotent"
     }
   },
   {
