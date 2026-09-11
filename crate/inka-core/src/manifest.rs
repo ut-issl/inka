@@ -22,6 +22,8 @@ pub struct Manifest {
     pub project: ProjectSection,
     pub phases: PhasesSection,
     pub values: ValuesSection,
+    #[serde(default)]
+    pub evidence: crate::evidence::EvidenceConfig,
 }
 
 /// The `[project]` section. `name` is only used for display today.
@@ -65,6 +67,8 @@ pub struct ValuesSection {
 /// A reason an `inka.toml` file was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ManifestError {
+    #[error("invalid evidence configuration: {0}")]
+    Evidence(#[from] crate::evidence::EvidenceError),
     #[error("invalid inka.toml: {0}")]
     Toml(#[from] toml::de::Error),
     #[error("project.name must not be empty")]
@@ -94,6 +98,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, ManifestError> {
 }
 
 fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
+    manifest.evidence.validate()?;
     if manifest.project.name.trim().is_empty() {
         return Err(ManifestError::EmptyProjectName);
     }
