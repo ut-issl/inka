@@ -9,4 +9,4 @@ blame:
   fiat:expired_leaf: approvals no longer count: the current phase is past until:M2
   fiat:leaf: approvals are stale: iwata approved an earlier version
   objective:root: no approval covers the current content
-  bind:tested: bind evidence is not evaluated yet: the CI provider has not landed
+  bind:tested: unknown evidence source alias `tests`
