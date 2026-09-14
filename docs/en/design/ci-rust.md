@@ -1,10 +1,8 @@
 # Rust evidence adapter
 
-Implementation status: the examples below describe reusable prototype/internal interfaces, not the required
-user onboarding. Follow the [integration contract](test-evidence-integration.md) for the current design.
-Normal onboarding must not require handwritten target plans, explicit prepare/finish commands or project
-test-config changes. Existing tests execute independently; automatic collection and workflow-only setup still
-need implementation.
+This page describes the internal collection interface. The [integration design](test-evidence-integration.md)
+defines workflow onboarding; preparation, target discovery and report assembly are performed by the
+integration, not manually by test authors.
 
 The source-side CLI supports ordinary `#[test]` functions and declarations in
 `proptest!` blocks, including inline modules. It parses Rust syntax and token
