@@ -78,8 +78,8 @@ src/
   hash/      // normalization and view_hash (frozen)
   record/    // approval records (frozen)
   eval/      // established fixpoint, blame, built-in policy
-  provider/  // ci-export.json reading and matching
-  cli/       // check / hash / approve / eval / ci-export
+  provider/  // test-export.json reading and matching
+  cli/       // check / hash / approve / eval / test-export
 tests/
   golden/    // hash and record vectors (append-only)
   fixtures/  // dogfood, aocs, broken variants

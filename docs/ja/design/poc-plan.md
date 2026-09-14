@@ -68,8 +68,8 @@ src/
   hash/      // 正規化と view_hash(凍結対象)
   record/    // 承認レコード(凍結対象)
   eval/      // established 不動点・blame・組み込みポリシー
-  provider/  // ci-export.json の読み込みと照合
-  cli/       // check / hash / approve / eval / ci-export
+  provider/  // test-export.json の読み込みと照合
+  cli/       // check / hash / approve / eval / test-export
 tests/
   golden/    // ハッシュ・レコードのベクタ(追記専用)
   fixtures/  // dogfood, aocs, 壊しバリアント

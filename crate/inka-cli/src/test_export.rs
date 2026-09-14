@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 
 use crate::check::Outcome;
-use crate::cli::CiExportCommand;
+use crate::cli::TestExportCommand;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,10 +25,31 @@ pub struct Plan {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PlanTarget {
+pub struct FileTarget {
     pub id: String,
     pub file: PathBuf,
     pub required: Vec<String>,
+}
+
+/// Collection integrations either request a full file or supply an extracted
+/// contract. Extraction and declaration/case discovery stay outside this module.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PlanTarget {
+    File(FileTarget),
+    Extracted(ExtractedTarget),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtractedTarget {
+    pub id: String,
+    pub kind: Kind,
+    pub profile: String,
+    pub content: String,
+    pub required: Vec<String>,
+    /// Hash the exact bytes used for extraction, before tests execute.
+    pub source_guards: Vec<FileGuard>,
 }
 
 /// Local pre-run receipt; only its bundle is delivered to the consumer.
@@ -154,17 +175,43 @@ fn prepare(plan_path: &Path, out: &Path) -> io::Result<()> {
         files: Vec::new(),
     };
     for spec in plan.targets {
-        let path = base.join(spec.file);
-        // Read a guard first; validation below catches a change between reads.
-        receipt.files.push(guard(&path)?);
-        let mut target = Target {
-            id: spec.id,
-            kind: Kind::File,
-            profile: "file-source:v1".into(),
-            content: fs::read_to_string(&path)?,
-            interface_hash: String::new(),
-            required: spec.required,
-            results: Vec::new(),
+        let mut target = match spec {
+            PlanTarget::File(spec) => {
+                let path = base.join(spec.file);
+                // Read a guard first; validation below catches a change between reads.
+                receipt.files.push(guard(&path)?);
+                Target {
+                    id: spec.id,
+                    kind: Kind::File,
+                    profile: "file-source:v1".into(),
+                    content: fs::read_to_string(&path)?,
+                    interface_hash: String::new(),
+                    required: spec.required,
+                    results: Vec::new(),
+                }
+            }
+            PlanTarget::Extracted(spec) => {
+                if spec.source_guards.is_empty() {
+                    return Err(io::Error::other(
+                        "an extracted target requires source guards",
+                    ));
+                }
+                for file in spec.source_guards {
+                    receipt.files.push(FileGuard {
+                        path: fs::canonicalize(base.join(file.path))?,
+                        sha256: file.sha256,
+                    });
+                }
+                Target {
+                    id: spec.id,
+                    kind: spec.kind,
+                    profile: spec.profile,
+                    content: spec.content,
+                    interface_hash: String::new(),
+                    required: spec.required,
+                    results: Vec::new(),
+                }
+            }
         };
         target.interface_hash = target.hash(&receipt.bundle.source.id).to_string();
         receipt.bundle.targets.push(target);
@@ -225,18 +272,18 @@ pub fn finish(mut receipt: Receipt, results: Results, out: &Path) -> io::Result<
     Ok(if passed { Outcome::Ok } else { Outcome::Failed })
 }
 
-pub fn run(command: CiExportCommand) -> io::Result<Outcome> {
+pub fn run(command: TestExportCommand) -> io::Result<Outcome> {
     match command {
-        CiExportCommand::Prepare { plan, out } => {
+        TestExportCommand::Prepare { plan, out } => {
             prepare(&plan, &out)?;
             Ok(Outcome::Ok)
         }
-        CiExportCommand::Finish {
+        TestExportCommand::Finish {
             receipt,
             results,
             out,
         } => finish(read(&receipt)?, read(&results)?, &out),
-        CiExportCommand::Validate { file } => {
+        TestExportCommand::Validate { file } => {
             Bundle::parse(&fs::read_to_string(file)?).map_err(io::Error::other)?;
             Ok(Outcome::Ok)
         }

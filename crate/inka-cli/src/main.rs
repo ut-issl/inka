@@ -1,13 +1,13 @@
 //! Command-line interface for inka.
 
 mod check;
-mod ci_export;
 mod cli;
 mod eval;
 mod export;
 mod load;
 mod render;
 mod serve;
+mod test_export;
 
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
@@ -36,7 +36,7 @@ fn run(cli: Cli) -> io::Result<Outcome> {
     let no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
     let color_choice = cli.color;
     match cli.command {
-        Command::CiExport(command) => ci_export::run(command),
+        Command::TestExport(command) => test_export::run(command),
         Command::Check { path } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());
             // ariadne emits a report as many small writes and stderr is
