@@ -1,8 +1,7 @@
 # inka — Decided Specification
 
-Test evidence uses the intended `test:` syntax. Current code still implements `ci:`; migration and its
-retirement are pending (#66/#73). The [integration contract](test-evidence-integration.md) states confirmed
-requirements and implementation status. Protocol hash identifiers do not change merely with terminology.
+Test evidence uses `test:`. The [integration design](test-evidence-integration.md) defines automatic
+collection from independently executed tests.
 
 Everything on this page is settled. Hash and record layouts become frozen the
 moment their golden vectors land (append-only from then on; incompatible

@@ -1,19 +1,9 @@
 # Test evidence contracts
 
-The [integration contract](test-evidence-integration.md) defines the required workflow-only onboarding,
-automatic test publication and `test:` migration. Source-side responsibility means inka-maintained machinery
-running in the source environment, not handwritten integration by each test author. Existing tests remain
-independently runnable.
-
-Semantic design for [#65](https://github.com/ut-issl/inka/issues/65), under
-[#21](https://github.com/ut-issl/inka/issues/21).
 Japanese translation: [日本語版](../../ja/design/ci-evidence.md).
-
-The responsibility boundary, source-content contracts, identity-sensitive
-approval and strict result aggregation below have been confirmed by the
-maintainer. The [decided specification](spec.md) is updated together with the
-wire format and conformance vectors in
-[#66](https://github.com/ut-issl/inka/issues/66).
+The [integration design](test-evidence-integration.md) defines workflow-only onboarding and automatic test
+publication. Source-side processing is inka-maintained machinery running alongside independently executed
+tests.
 
 ## Responsibility boundary
 
@@ -46,19 +36,16 @@ reliably, or guess a function boundary using a line-oriented regular expression.
 For example, a Rust proptest contract includes the selected macro test's
 parameter strategies and body. A Python contract includes the selected test's
 decorators. A JavaScript test callback includes the surrounding test declaration
-needed to explain the selected case. Exact extraction profiles are decisions
-for the corresponding language-adapter issues; these examples do not prescribe
-their parser or result-capture mechanism.
+needed to explain the selected case. Extraction profiles define precise boundaries independently of the parser
+or result-capture mechanism.
 
-External helper bodies are not implicitly part of the interface. Changes to
-captured execution dependencies are the separate subject of
-[#39](https://github.com/ut-issl/inka/issues/39). A producer must document context
+External helper bodies are not implicitly part of the interface. Capturing changes to execution dependencies
+is a separate responsibility. A producer must document context
 that its extraction omits, including fixture bodies or dynamically generated
 inputs where applicable.
 
 The content must be available for human review, not only represented by a
-digest. This work exposes that content to the consumer; the review CLI remains
-[#27](https://github.com/ut-issl/inka/issues/27).
+digest. The consumer exposes that content to the approval interface.
 
 ## Content addressing
 
@@ -100,8 +87,7 @@ or look for a successful older run when the selected evidence fails.
 
 Provenance is descriptive metadata in this unsigned protocol. Recomputing a
 digest detects inconsistent content; it does not authenticate who ran the test
-or prove that a producer reported every execution. Signed attestations are
-separate work under [#38](https://github.com/ut-issl/inka/issues/38).
+or prove that a producer reported every execution. Signed attestations provide a separate authentication mechanism.
 
 ## Execution coverage and outcomes
 
@@ -170,5 +156,5 @@ does not claim to capture the full execution environment.
 
 Initial adapters target Rust/proptest, Python/pytest and JavaScript/TypeScript
 with Vitest. Their extraction boundaries and runner integration are specified
-in the corresponding implementation issues. No adapter may silently broaden a
+by each framework integration. No adapter may silently broaden a
 passing result to tests that were not executed.

@@ -1,10 +1,8 @@
-# Test evidence: integration contract and implementation status
+# Test evidence integration
 
-Confirmed with the maintainer on 2026-09-11, under [#21](https://github.com/ut-issl/inka/issues/21).
 Japanese translation: [日本語版](../../ja/design/test-evidence-integration.md).
-This document defines the integration requirements. The [semantic contract](ci-evidence.md)
-defines approval and evaluation. Implementation examples must be read together
-with the status below; a working prototype is not evidence of meeting these requirements.
+The [evidence contract](ci-evidence.md) defines approval and evaluation; this document defines how existing
+tests supply that evidence.
 
 ## Purpose and terminology
 
@@ -14,14 +12,8 @@ interfaces and their connections; test evidence supplies reviewable tests and
 actual outcomes. CI is an execution context, and GitHub Actions is a collection
 and transport mechanism, not a kind of evidence.
 
-The public concept is **test evidence** and the intended DSL keyword is `test:`.
-Migrate existing `ci:` references and retire `ci:` after migration; it is not a
-permanent alias. Syntax implementation, fixture migration and removal timing
-belong to #66/#73. Current implementation branches still accept `ci:`; do not
-present `test:` examples as executable before that implementation lands.
-A terminology change alone must not alter frozen hash bytes, record layouts or
-bundle versions. Internal versioned identifiers containing `ci` are protocol
-identifiers, not a reason to invalidate approvals.
+The provider is called **test evidence**, selected with the DSL keyword `test:`.
+Versioned protocol identifiers and hash framing are stable independently of display names.
 
 ## Required user experience
 
@@ -85,13 +77,13 @@ execution, never as evidence from the original CI run. Do not rerun silently.
   publication scope or become pass evidence. Document the limitation and surface
   an error; an explicit publication filter can narrow the supported scope.
 
-## Agreements retained
+## Evidence semantics
 
-Both file and function contracts are supported. Initial frameworks remain
+Both file and function contracts are supported. Supported framework integrations cover
 Rust/libtest/proptest, Python/pytest and JavaScript/TypeScript/Vitest; initial
 Actions support Linux. Exact extraction profiles include relevant attributes or
 decorators and test declarations. External helper/fixture bodies are outside the
-function contract; execution-dependency coverage remains #39.
+function contract; execution-dependency coverage is a separate concern.
 
 Source ID, target ID, kind, extraction profile, CRLF-only normalized content and
 the required-case set determine the interface hash. Identity or required-set
@@ -101,46 +93,14 @@ input error; valid missing/nonpassing evidence is bind blame.
 
 Evaluation uses the imported version offline. No upstream checkout, test runner
 or network is required. Unimported upstream edits have no effect. Environment
-and lockfile metadata remain optional. Signatures (#38), review CLI (#27), auto
+and lockfile metadata remain optional. Signatures, approval interfaces, auto
 synchronization and dependency-closure policies remain separate work.
 
-## Delivery plan and current implementation status
+## Validation principles
 
-| Issue | PR | Disposition and remaining work |
-| --- | --- | --- |
-| #65 | #76 | Retain: this integration contract and evidence semantics |
-| #66 | #77 | Retain Draft: v2 format; add `test:` migration and catalog identity examples |
-| #72 | #79 | Retain Draft: offline loading/validation; align terminology as needed |
-| #73 | #80 | Retain Draft: approval/evidence evaluation; implement syntax migration |
-| #67 | #81 | Retain Draft: prepare/finish primitives are internal machinery, not onboarding |
-| #68 | #82 | Close without merge: replace explicit selection with automatic Rust collection |
-| #69 | #83 | Close without merge: provide workflow-only pytest integration and discovery |
-| #70 | #84 | Close without merge: remove required project reporter edits; automatic collection |
-| #71 | #85 | Close without merge: implement preparation/collection and tool setup, not only upload |
-| #74 | #86 | Retain Draft: receiver import is reusable; update source integration and tool revision |
-| #75 | #87 | Close without merge: demonstrate reuse of an existing independent test job |
+Integration tests exercise an independent existing test step, automatic publication of newly collected tests,
+source/result correspondence, preservation of test failure and offline evaluation after transport. Distinguish
+same-job collection, cross-job artifact transfer and cross-repository import.
 
-Closed implementations may supply reusable parser/validation code, but are not
-the replacement design. Their issues stay open. Retained code PRs are not
-merge-ready merely because prototype tests passed. Rebuild the dependency chain
-before merging descendants of closed PRs; do not merge a closed layer transitively.
-
-Logical dependencies: #65 -> #66 -> #67 and #72; #67 -> #68/#69/#70;
-Issues #72 -> #73; #71 uses #66/#67 and a supported framework integration;
-Issues #71 + #73 -> #74; #68 + #71 + #73 + #74 -> #75.
-Design the Action-facing integration before implementing framework onboarding;
-framework feasibility work can proceed before the complete Action is finished.
-
-Dogfood retains the broad `local_view_hash_sound` fiat and adds only a narrowly
-scoped normalization-idempotence bind. Synthetic approvals belong only in tests.
-The existing prototype passed a same-repository artifact round trip; it did not
-validate this revised onboarding experience or a distinct receiver repository.
-
-## Decisions still required before implementation
-
-The product requirements above are confirmed. Exact Action names/inputs and
-packaging, per-framework report/hook mechanisms, stable automatic target/case ID
-rules, supported execution topologies (including containers/multiple binaries),
-and the `ci:` removal release/timing require concrete proposals and maintainer
-confirmation. Do not silently decide them from prototype behavior. Preserve these
-questions in the responsible issues (#66, #68–#71) as implementation progresses.
+A property test supports only its scoped proposition, not general hash soundness. Use synthetic approvals only
+inside tests; publishing evidence never grants human approval.

@@ -1,6 +1,6 @@
 # inka — Full Implementation Plan (beyond the PoC)
 
-Test evidence integration follows the [confirmed integration contract](test-evidence-integration.md).
+Test evidence integration follows the [integration design](test-evidence-integration.md).
 Framework discovery is automatic; no per-test markers or manual export plans are required for normal
 onboarding. Low-level producer commands below are internal building blocks.
 
