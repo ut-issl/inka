@@ -1,4 +1,4 @@
-//! Imported CI evidence. Producers and consumers share the v2 contract, while
+//! Imported test evidence. Producers and consumers share the v2 contract, while
 //! execution and language-specific extraction remain outside evaluation.
 
 use std::collections::{BTreeMap, HashSet};
@@ -322,7 +322,7 @@ pub struct CaseFailure {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
 #[serde(tag = "cause", rename_all = "snake_case")]
 pub enum MissingEvidence {
-    #[error("invalid CI reference `{reference}`: expected <alias>/<target-id>")]
+    #[error("invalid test evidence reference `{reference}`: expected <alias>/<target-id>")]
     InvalidReference { reference: String },
     #[error("unknown evidence source alias `{alias}`")]
     UnknownSource { alias: String },

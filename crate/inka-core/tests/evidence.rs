@@ -10,10 +10,13 @@ use inka_core::evidence::{
 };
 
 fn vectors() -> Vec<serde_json::Value> {
-    serde_json::from_str(include_str!(
-        "../../../tests/golden/evidence/v2/contracts.json"
-    ))
-    .unwrap()
+    [
+        include_str!("../../../tests/golden/evidence/v2/contracts.json"),
+        include_str!("../../../tests/golden/evidence/v2/automatic-catalog.json"),
+    ]
+    .into_iter()
+    .flat_map(|text| serde_json::from_str::<Vec<serde_json::Value>>(text).unwrap())
+    .collect()
 }
 
 fn passing() -> Bundle {
@@ -203,4 +206,96 @@ file = "import.json"
         "{config}\n[evidence.sources.second]\nid = \"github:example/source\"\nfile = \"other.json\"\n"
     );
     assert!(inka_core::manifest::parse_manifest(&duplicate).is_err());
+}
+
+#[test]
+fn automatic_catalog_preserves_only_unchanged_approval_contracts() {
+    let bundles: BTreeMap<String, Bundle> = vectors()
+        .into_iter()
+        .filter(|vector| vector["valid"] == true)
+        .map(|vector| {
+            (
+                vector["name"].as_str().unwrap().to_owned(),
+                Bundle::parse(&vector["bundle"].to_string()).unwrap(),
+            )
+        })
+        .collect();
+    let base = &bundles["parameterized-function"];
+    let hash = base.targets[0].hash(&base.source.id);
+    for name in ["case-order", "parameter-missing"] {
+        let bundle = &bundles[name];
+        assert_eq!(hash, bundle.targets[0].hash(&bundle.source.id), "{name}");
+    }
+    for name in [
+        "case-added",
+        "case-removed",
+        "declaration-renamed",
+        "file-moved",
+        "parameter-renamed",
+    ] {
+        let bundle = &bundles[name];
+        assert_ne!(hash, bundle.targets[0].hash(&bundle.source.id), "{name}");
+    }
+    let failures = bundles["parameter-missing"].targets[0].failures();
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].case, "linux/test_add[one]");
+    assert_eq!(failures[0].result, None);
+}
+
+#[test]
+fn publishing_unrelated_targets_preserves_the_selected_contract() {
+    let original = passing();
+    let mut expanded = original.clone();
+    let mut unrelated = original.targets[0].clone();
+    unrelated.id = "tests/unrelated.rs::works".into();
+    unrelated.interface_hash = unrelated.hash(&expanded.source.id).to_string();
+    expanded.targets.insert(0, unrelated);
+    // A newer imported revision/attempt may also contain unrelated targets.
+    expanded.source.revision = "next-revision".into();
+    expanded.execution.attempt += 1;
+    let mut set = EvidenceSet::default();
+    set.insert(
+        "upstream".into(),
+        expanded.source.id.clone(),
+        Some(expanded),
+    )
+    .unwrap();
+    let (source, target) = set.resolve("upstream/tests/example.rs").unwrap();
+    assert_eq!(target, &original.targets[0]);
+    assert_eq!(
+        target.hash(&source.id),
+        original.targets[0].hash(&original.source.id)
+    );
+}
+
+#[test]
+fn target_ids_are_opaque_and_are_not_percent_decoded_or_normalized() {
+    let mut bundle = passing();
+    let template = bundle.targets[0].clone();
+    let ids = [
+        "tests/math.test.ts::adds%3A%3Avalues",
+        "tests/math.test.ts::adds::values",
+        "tests/math.test.ts::adds%253A%253Avalues",
+        "explicit legacy target",
+    ];
+    bundle.targets = ids
+        .iter()
+        .map(|id| {
+            let mut target = template.clone();
+            target.id = (*id).into();
+            target.interface_hash = target.hash(&bundle.source.id).to_string();
+            target
+        })
+        .collect();
+    let mut set = EvidenceSet::default();
+    set.insert("upstream".into(), bundle.source.id.clone(), Some(bundle))
+        .unwrap();
+    for id in ids {
+        let (_, target) = set.resolve(&format!("upstream/{id}")).unwrap();
+        assert_eq!(target.id, id);
+    }
+    assert!(matches!(
+        set.resolve("upstream/tests/math.test.ts::adds%3a%3avalues"),
+        Err(MissingEvidence::MissingTarget { .. })
+    ));
 }
