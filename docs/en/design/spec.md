@@ -135,8 +135,7 @@ fiat <id> {
 
 The [semantic contract](ci-evidence.md) and [integration contract](test-evidence-integration.md) define
 source-owned independent test execution, automatic publication and offline evaluation of imported content.
-They supersede worktree-file matching and mandatory environment hashes. Concrete v2 serialization is specified
-in #66.
+Evaluation matches delivered content. Environment metadata is optional.
 
 ## Repository conventions
 
