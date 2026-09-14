@@ -49,8 +49,7 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   against the declared phase order (post-deadline approvals do not count
   either); blame output with per-cause reasons; non-zero exit when not clean.
 - **Test evidence provider**: `test: "<source>/<target>"`; collect existing independent test executions
-  through workflow integration and evaluate imported evidence offline. Migrate and retire `ci:`;
-  implementation status and scope are recorded in the integration contract.
+  through workflow integration and evaluate imported evidence offline.
 
 ## Explicitly out of scope
 

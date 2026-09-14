@@ -2,7 +2,7 @@
 
 A second example argument, modelling a satellite attitude-control subsystem (AOCS).
 It deliberately exercises the DSL features the dogfood argument (inka's meta
-argument) leaves unloaded: **bind with `ci:`/`veriq:`, tags, numeric value
+argument) leaves unloaded: **bind with `test:`/`veriq:`, tags, numeric value
 interpolation, and DAG sharing of a bind node**.
 
 Japanese version: [README_ja.md](README_ja.md)
@@ -35,7 +35,7 @@ Settled since this example was written — now part of the decided specification
   references keep Python's dotted `module.function` names.
 - **Tags** are free vocabulary; `check` says nothing about them (typo detection
   arrives with policy selectors in M3).
-- **Unresolvable `ci:`/`veriq:` references** get a format check only at `check` time;
+- **Unresolvable `test:`/`veriq:` references** get a format check only at `check` time;
   existence is eval's job.
 
 Still open / standing observations:

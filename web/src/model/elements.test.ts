@@ -32,6 +32,20 @@ describe('parseElements', () => {
     })
   })
 
+  test('accepts test evidence and rejects the retired ci kind', () => {
+    const payload = [
+      node('a', {
+        mode: 'bind',
+        evidence: { kind: 'test', target: 'upstream/tests/math.py::test_add' },
+      }),
+    ]
+    expect(parseElements(payload)[0]?.data).toMatchObject({
+      evidence: { kind: 'test', target: 'upstream/tests/math.py::test_add' },
+    })
+    const retired = [{ data: { ...payload[0]!.data, evidence: { kind: 'ci', target: 'x' } } }]
+    expect(() => parseElements(retired)).toThrow(ElementsError)
+  })
+
   test('distinguishes edge payloads from node payloads', () => {
     const parsed = parseElements([node('a'), edge('a', 'b')])
 

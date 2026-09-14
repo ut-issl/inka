@@ -179,8 +179,8 @@ pub enum SourceRef {
     ///
     /// The dotted Python name is preserved verbatim.
     Veriq(String),
-    /// A `ci: "<test-target>"` reference, such as `ci: "tests/hash_props.rs"`.
-    Ci(String),
+    /// A `test: "<test-target>"` reference, such as `test: "tests/hash_props.rs"`.
+    Test(String),
 }
 
 /// The root block of an argument.

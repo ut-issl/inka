@@ -96,7 +96,7 @@ fiat <id> {
     assumption list (empty until assumption aggregation lands; the slot exists
     so filling it later is not a layout change)
 - Excluded from hashes: IDs, tags, comments, `test:` / `veriq:` reference strings.
-  Included: deadline annotations. CI source/target identity is bound through the
+  Included: deadline annotations. Test evidence source/target identity is bound through the
   provider interface digest; the local routing alias remains excluded. Interpolation happens before normalization
   and hashing — hashes never see placeholders.
 

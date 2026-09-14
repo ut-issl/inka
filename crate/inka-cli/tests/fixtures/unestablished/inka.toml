@@ -1,6 +1,6 @@
 # A project in which nothing is established, one failure kind per node:
 # a missing approval, a stale approval, a decline, an expired deadline, and a bind
-# awaiting the CI provider.
+# awaiting imported test evidence.
 
 [project]
 name = "unestablished"

@@ -236,11 +236,11 @@ bind checked {
   ```
   established by the detumble test
   ```
-  ci: \"tests/detumble.rs\"
+  test: \"tests/detumble.rs\"
 }
 ";
     let renamed = source.replace(
-        "ci: \"tests/detumble.rs\"",
+        "test: \"tests/detumble.rs\"",
         "veriq: \"aocs.verify_detumble\"",
     );
 

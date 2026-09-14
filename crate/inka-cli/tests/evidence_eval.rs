@@ -27,7 +27,7 @@ impl Project {
         ));
         fs::create_dir_all(path.join("argument")).unwrap();
         fs::write(path.join("inka.toml"), "[project]\nname = 'ci'\n[phases]\norder = ['M0', 'M1']\ncurrent = 'M0'\n[values]\nfiles = []\n[evidence.sources.upstream]\nid = 'github:example/source'\nfile = 'import.json'\n").unwrap();
-        fs::write(path.join("argument/main.inka"), "objective root {\n```\nThe selected property holds\n```\nchildren: tested\n}\nbind tested {\n```\nThe arithmetic property holds\n```\nci: \"upstream/tests/example.rs\"\n}\n").unwrap();
+        fs::write(path.join("argument/main.inka"), "objective root {\n```\nThe selected property holds\n```\nchildren: tested\n}\nbind tested {\n```\nThe arithmetic property holds\n```\ntest: \"upstream/tests/example.rs\"\n}\n").unwrap();
         let vectors: Vec<serde_json::Value> = serde_json::from_str(include_str!(
             "../../../tests/golden/evidence/v2/contracts.json"
         ))
@@ -242,4 +242,42 @@ fn valid_evidence_does_not_override_decline_or_expiry() {
         expired.eval(false)["blame"][0]["reasons"][0]["cause"],
         "until_expired"
     );
+}
+
+#[test]
+fn test_evidence_exports_its_public_kind_and_rejects_old_dsl_syntax() {
+    let project = Project::new();
+    let output = Command::cargo_bin("inka")
+        .unwrap()
+        .arg("export")
+        .arg(&project.path)
+        .assert()
+        .success();
+    let elements: Vec<serde_json::Value> =
+        serde_json::from_slice(&output.get_output().stdout).unwrap();
+    let tested = elements
+        .iter()
+        .find(|element| element["data"]["id"] == "tested")
+        .unwrap();
+    assert_eq!(tested["data"]["evidence"]["kind"], "test");
+    assert_eq!(
+        tested["data"]["evidence"]["target"],
+        "upstream/tests/example.rs"
+    );
+
+    let argument = project.path.join("argument/main.inka");
+    fs::write(
+        &argument,
+        fs::read_to_string(&argument)
+            .unwrap()
+            .replace("test:", "ci:"),
+    )
+    .unwrap();
+    Command::cargo_bin("inka")
+        .unwrap()
+        .arg("check")
+        .arg(&project.path)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("unknown property `ci`"));
 }

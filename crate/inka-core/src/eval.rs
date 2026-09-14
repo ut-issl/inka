@@ -482,7 +482,7 @@ fn judge(
                 }],
             ));
         };
-        if reference.kind != EvidenceKind::Ci {
+        if reference.kind != EvidenceKind::Test {
             return Ok((
                 false,
                 vec![BlameReason::UnsupportedEvidence {
@@ -553,7 +553,7 @@ mod tests {
             tags: Vec::new(),
             evidence: match mode {
                 Mode::Bind => Some(Evidence {
-                    kind: EvidenceKind::Ci,
+                    kind: EvidenceKind::Test,
                     target: "tests/x.rs".to_owned(),
                 }),
                 _ => None,

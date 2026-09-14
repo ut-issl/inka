@@ -64,7 +64,7 @@ impl Mode {
 #[serde(rename_all = "lowercase")]
 pub enum EvidenceKind {
     Veriq,
-    Ci,
+    Test,
 }
 
 /// A bind block's machine-verifiable evidence target.
@@ -224,8 +224,8 @@ fn evidence_of(block: &Block<RenderedDescription>) -> Option<Evidence> {
             kind: EvidenceKind::Veriq,
             target: target.clone(),
         },
-        SourceRef::Ci(target) => Evidence {
-            kind: EvidenceKind::Ci,
+        SourceRef::Test(target) => Evidence {
+            kind: EvidenceKind::Test,
             target: target.clone(),
         },
     })
@@ -503,7 +503,7 @@ bind tested {
   ```
   checked in CI
   ```
-  ci: \"tests/hash_props.rs\"
+  test: \"tests/hash_props.rs\"
 }
 ",
         );
@@ -511,7 +511,7 @@ bind tested {
         assert_eq!(
             view.node("tested").and_then(|node| node.evidence.clone()),
             Some(Evidence {
-                kind: EvidenceKind::Ci,
+                kind: EvidenceKind::Test,
                 target: "tests/hash_props.rs".to_owned(),
             })
         );
