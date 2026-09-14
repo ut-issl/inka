@@ -1,0 +1,310 @@
+[
+  {
+    "name": "parameterized-function",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[zero]",
+            "linux/test_add[one]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[one]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:38198364f54b94e50bb27c31066abf71bdfc3df33da5b2e18eaec855b731e173"
+        }
+      ]
+    }
+  },
+  {
+    "name": "case-order",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[one]",
+            "linux/test_add[zero]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[one]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:38198364f54b94e50bb27c31066abf71bdfc3df33da5b2e18eaec855b731e173"
+        }
+      ]
+    }
+  },
+  {
+    "name": "case-added",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[zero]",
+            "linux/test_add[one]",
+            "linux/test_add[two]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[one]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[two]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:1c1eeffce25f2ab97e33e0ebb13d46a8f15a4a8b806ae02b0be614c456e9bb30"
+        }
+      ]
+    }
+  },
+  {
+    "name": "case-removed",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[zero]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:216721a9373650a7d9f6cfb5cad410c5c00fcb1ed9ca2eee556277b8546ee8f5"
+        }
+      ]
+    }
+  },
+  {
+    "name": "declaration-renamed",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_identity",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[zero]",
+            "linux/test_add[one]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[one]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:2ce3e1efea1952642440c712f766770a6e35a39543b5d45647480bcf43c5d071"
+        }
+      ]
+    }
+  },
+  {
+    "name": "file-moved",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/arithmetic/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[zero]",
+            "linux/test_add[one]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[one]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:5486691e1fd5045b096a9a165daaa310f41832db62b54d16f8b66a5dba465644"
+        }
+      ]
+    }
+  },
+  {
+    "name": "parameter-renamed",
+    "valid": true,
+    "status": "pass",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[0]",
+            "linux/test_add[one]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[0]",
+              "result": "pass"
+            },
+            {
+              "case": "linux/test_add[one]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:7c58fb6b4e69ab51286cfd04978706d8904851f5d1f3afc0aa3d42e30a09a22d"
+        }
+      ]
+    }
+  },
+  {
+    "name": "parameter-missing",
+    "valid": true,
+    "status": "missing",
+    "bundle": {
+      "v": 2,
+      "source": {
+        "id": "github:example/source",
+        "revision": "abc123"
+      },
+      "execution": {
+        "id": "github-actions:100",
+        "attempt": 1
+      },
+      "targets": [
+        {
+          "id": "tests/test_math.py::TestMath::test_add",
+          "kind": "function",
+          "profile": "pytest-source:v1",
+          "content": "def test_add(self, value):\n    assert value + 0 == value\n",
+          "required": [
+            "linux/test_add[zero]",
+            "linux/test_add[one]"
+          ],
+          "results": [
+            {
+              "case": "linux/test_add[zero]",
+              "result": "pass"
+            }
+          ],
+          "interface_hash": "sha256:38198364f54b94e50bb27c31066abf71bdfc3df33da5b2e18eaec855b731e173"
+        }
+      ]
+    }
+  }
+]
