@@ -115,7 +115,7 @@ fiat <id> {
 
 ## テスト証拠provider
 
-[意味論](ci-evidence.md)と[連携契約](test-evidence-integration.md)が、独立した既存テストの実行、自動公開、取り込んだ内容のオフライン評価を定義する。worktreeのファイル照合や環境hashの必須化は採用しない。配送形式は確認可能な本文と対応する実行結果を運ぶ。
+[意味論](test-evidence.md)と[連携契約](test-evidence-integration.md)が、独立した既存テストの実行、自動公開、取り込んだ内容のオフライン評価を定義する。worktreeのファイル照合や環境hashの必須化は採用しない。配送形式は確認可能な本文と対応する実行結果を運ぶ。
 
 ## リポジトリ規約
 

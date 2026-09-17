@@ -133,7 +133,7 @@ fiat <id> {
 
 ## Test evidence provider
 
-The [semantic contract](ci-evidence.md) and [integration contract](test-evidence-integration.md) define
+The [semantic contract](test-evidence.md) and [integration contract](test-evidence-integration.md) define
 source-owned independent test execution, automatic publication and offline evaluation of imported content.
 Evaluation matches delivered content. Environment metadata is optional.
 

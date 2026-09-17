@@ -1,7 +1,7 @@
 # Test evidence integration
 
 Japanese translation: [日本語版](../../ja/design/test-evidence-integration.md).
-The [evidence contract](ci-evidence.md) defines approval and evaluation; this document defines how existing
+The [evidence contract](test-evidence.md) defines approval and evaluation; this document defines how existing
 tests supply that evidence.
 
 ## Purpose and terminology

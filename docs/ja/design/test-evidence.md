@@ -1,6 +1,6 @@
 # テスト証拠の契約
 
-英語版（正）: [English](../../en/design/ci-evidence.md)。
+英語版（正）: [English](../../en/design/test-evidence.md)。
 [連携設計](test-evidence-integration.md)がworkflow内での導入とテストの自動公開を定義する。証拠元で動かす収集処理はinka側が保守し、テストは独立して実行する。
 
 ## 責務分担

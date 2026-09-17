@@ -1,6 +1,6 @@
 # Test evidence contracts
 
-Japanese translation: [日本語版](../../ja/design/ci-evidence.md).
+Japanese translation: [日本語版](../../ja/design/test-evidence.md).
 The [integration design](test-evidence-integration.md) defines workflow-only onboarding and automatic test
 publication. Source-side processing is inka-maintained machinery running alongside independently executed
 tests.

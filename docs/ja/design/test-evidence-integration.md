@@ -1,7 +1,7 @@
 # テスト証拠の連携設計
 
 英語版（正）: [English](../../en/design/test-evidence-integration.md)。
-[証拠の契約](ci-evidence.md)が承認と評価を、本書が既存テストから証拠を収集する構成を定義する。
+[証拠の契約](test-evidence.md)が承認と評価を、本書が既存テストから証拠を収集する構成を定義する。
 
 ## 目的と名称
 
