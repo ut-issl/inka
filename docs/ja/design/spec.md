@@ -115,7 +115,10 @@ fiat <id> {
 
 ## テスト証拠provider
 
-[テスト証拠の契約](test-evidence.md)が責務分担を定義する。ソースレポジトリがテストを実行して証拠jsonを出力し、capsulaが保存と配送を担い、inkaは設定されたパスの証拠jsonをオフラインで評価する。worktreeのファイル照合や環境hashの必須化は採用しない。証拠jsonは確認可能な契約本文と対応する実行結果を運ぶ。
+[テスト証拠の契約](test-evidence.md)が責務分担を定義する。ソースレポジトリがテストを実行して証拠jsonを出力し、
+capsulaが保存と配送を担い、inkaは設定されたパスの証拠jsonをオフラインで評価する。
+worktreeのファイル照合や環境hashの必須化は採用しない。証拠jsonは確認可能な契約本文と対応する実行結果を運び、
+`schemas/test-evidence-v1.schema.json` に従う。
 
 ## リポジトリ規約
 

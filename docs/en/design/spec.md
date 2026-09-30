@@ -137,7 +137,7 @@ The [test evidence contracts](test-evidence.md) define the responsibility bounda
 repository executes tests and emits evidence JSON, capsula stores and delivers it, and inka evaluates
 the evidence JSON at a configured path offline. Worktree file matching and mandatory environment
 hashes are not adopted. The evidence JSON carries the reviewable contract body and the corresponding
-execution results.
+execution results, and follows `schemas/test-evidence-v1.schema.json`.
 
 ## Repository conventions
 

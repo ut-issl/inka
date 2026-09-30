@@ -38,21 +38,45 @@ contains a repository prefix is internal structure inka does not interpret:
 inka only needs the evidence to be uniquely identifiable. Duplicate test-ids in
 loaded evidence are an input error.
 
-For each test-id the evidence JSON records at least the following. The exact
-schema and field names are specified in a follow-up PR.
+The evidence JSON follows `schemas/test-evidence-v1.schema.json` at the
+repository root. For each test-id it records:
 
-- **test-id** — the identifier binds reference.
-- **Contract body** — the human-reviewable source string of the test (nonempty
-  UTF-8). How much to include (attributes, decorators, parameters) is the
-  source-side adapter's extraction responsibility; inka never parses or
-  executes language-specific syntax.
-- **Required executions and their outcomes** — the declared set of executions
-  (cases) required for this test-id to pass, with each outcome.
-- **Provenance** — descriptive metadata such as the tested source revision or
-  the capsula run ID. Not part of the approval contract.
+- **id** — the test-id binds reference.
+- **body** — the human-reviewable source string of the test (nonempty UTF-8).
+  How much to include (attributes, decorators, parameters) is the source-side
+  adapter's extraction responsibility; inka never parses or executes
+  language-specific syntax.
+- **executions** — the declared executions required for this test to pass,
+  with their results. The whole list is the required set; an entry whose
+  `outcome` (pass / fail / skip / cancelled) is omitted is a declared
+  execution whose result is missing. At least one entry is required, and
+  duplicate execution IDs are an input error.
+
+The file-level **provenance** object records descriptive metadata such as the
+tested source revision or the capsula run ID. It is not part of the approval
+contract, and inka ignores unknown keys.
+
+```json
+{
+  "v": 1,
+  "provenance": {
+    "source_revision": "4f2a1c9",
+    "capsula_run_id": "01K8WSYC91YAE21R7CWHQ4KYN2"
+  },
+  "tests": [
+    {
+      "id": "example-repo/tests/hash_props.rs::roundtrip",
+      "body": "#[test]\nfn roundtrip() { /* ... */ }",
+      "executions": [{ "id": "default", "outcome": "pass" }]
+    }
+  ]
+}
+```
 
 The contract body is included in reviewable form, not only as a digest. Inka
-presents it to the approval interface.
+presents it to the approval interface. The evidence JSON carries no declared
+digest: inka computes the interface hash at load time, and verifying content
+in transit is capsula's responsibility.
 
 The required execution set is declared by the evidence JSON itself. It must not
 be inferred from successful results alone, shrunk by an aborted run, or
@@ -60,17 +84,29 @@ assembled from successes across different runs.
 
 ## Content hashing and reapproval
 
-The interface hash covers the test-id and the contract body. Body normalization
-replaces CRLF with LF only; comments, Unicode normalization state, indentation
-and trailing whitespace remain content. Exact framing and the domain tag are
-fixed when the schema is specified.
+The interface hash covers the test-id, the contract body and the required
+execution ID set. Body normalization replaces CRLF with LF only; comments,
+Unicode normalization state, indentation and trailing whitespace remain
+content. Framing uses the same rules as the view hash in the
+[specification](spec.md) (`field` / `list` with u64-LE length prefixes).
+
+```text
+preimage = field("inka:test-evidence:v1") ‖ field(test-id)
+           ‖ field(normalized body) ‖ list(required execution IDs)
+interface_hash = SHA-256(preimage)
+```
+
+Required execution IDs are sorted bytewise: reordering `executions` is not an
+edit. Outcomes do not enter the hash.
 
 The bind view hash keeps its frozen v1 layout: the proposition description and
 annotations, the raw interface digest, and the currently empty assumption list.
 Run IDs, outcomes and environment metadata do not enter the approval contract.
 
-Changing the contract body or the test-id requires fresh approval. A new result
-for the same test-id and body can be evaluated with the existing approval.
+Changing the contract body, the test-id or the required execution set requires
+fresh approval: silently dropping a failing case from the required set cannot
+keep looking like a pass under the existing approval. A new result for the
+same interface can be evaluated with the existing approval.
 Stale approvals and execution failures are reported as independent causes: do
 not call a stale approval an execution failure, or request reapproval just
 because a test with the same contract body started failing.
@@ -105,10 +141,12 @@ quorum, veto and expiry rules continue to apply.
 | Same body A, new failing execution | Approval stays valid; unestablished |
 | Source repository edited; imported body is still A | Same result as before the edit |
 | Same body under a different test-id | Unestablished until the changed interface is approved |
+| Same body, changed required execution set | Unestablished until the changed interface is approved |
 
 ## Out of scope / follow-up work
 
-- The exact evidence JSON schema and golden vectors.
+- Golden vectors for the interface hash, frozen together with the consumer
+  implementation that computes it.
 - Per-language/framework adapters (Rust/proptest, Python/pytest,
   JavaScript/TypeScript with Vitest, ...): extraction rules and runner
   integration.
