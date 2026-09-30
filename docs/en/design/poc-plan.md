@@ -1,8 +1,8 @@
 # inka — PoC Implementation Plan
 
-Test evidence integration follows the [integration design](test-evidence-integration.md).
-Framework discovery is automatic; no per-test markers or manual export plans are required for normal
-onboarding. Low-level producer commands below are internal building blocks.
+Test evidence follows the [test evidence contracts](test-evidence.md). Producing and delivering
+evidence JSON is the responsibility of the source repository and capsula; inka evaluates imported
+evidence.
 
 The smallest implementation with which one person can experience the inka
 system end to end.
@@ -48,9 +48,9 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   approval); stale detection; decline veto; hard node-side `until:` expiry
   against the declared phase order (post-deadline approvals do not count
   either); blame output with per-cause reasons; non-zero exit when not clean.
-- **Test evidence provider**: `test: "<source>/<target>"`; collect existing independent test executions
-  through workflow integration and evaluate imported evidence offline. Migrate and retire `ci:`;
-  implementation status and scope are recorded in the integration contract.
+- **Test evidence provider**: `test: "<test-id>"`; receive evidence JSON produced by source
+  repositories and delivered through capsula, and evaluate imported evidence offline. Migrate and
+  retire `ci:`. The [test evidence contracts](test-evidence.md) define the responsibility boundary.
 
 ## Explicitly out of scope
 

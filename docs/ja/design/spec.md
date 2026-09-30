@@ -1,6 +1,6 @@
 # inka — 確定仕様
 
-テスト証拠は `test:` で参照する。[連携設計](test-evidence-integration.md)が独立した既存テストからの自動収集を定義する。
+テスト証拠は `test:` で参照する。[テスト証拠の契約](test-evidence.md)が責務分担と証拠jsonの意味論を定義する。
 
 このページの内容はすべて確定済み。ハッシュとレコードのレイアウトは、ゴールデンベクタが
 入った時点で凍結される(以後追記専用。非互換の変更は v2 として並存)。
@@ -18,7 +18,7 @@ structure <id> #tag1 #tag2 {
 
 bind <id> {
   ```...```
-  test: "<test-target>"   // または veriq: "<module>.<name>"
+  test: "<test-id>"   // または veriq: "<module>.<name>"
 }
 
 fiat <id> {
@@ -115,7 +115,7 @@ fiat <id> {
 
 ## テスト証拠provider
 
-[意味論](test-evidence.md)と[連携契約](test-evidence-integration.md)が、独立した既存テストの実行、自動公開、取り込んだ内容のオフライン評価を定義する。worktreeのファイル照合や環境hashの必須化は採用しない。配送形式は確認可能な本文と対応する実行結果を運ぶ。
+[テスト証拠の契約](test-evidence.md)が責務分担を定義する。ソースレポジトリがテストを実行して証拠jsonを出力し、capsulaが保存と配送を担い、inkaは設定されたパスの証拠jsonをオフラインで評価する。worktreeのファイル照合や環境hashの必須化は採用しない。証拠jsonは確認可能な契約本文と対応する実行結果を運ぶ。
 
 ## リポジトリ規約
 

@@ -1,6 +1,6 @@
 # inka — PoC 実装方針
 
-テスト証拠の導入は[連携設計](test-evidence-integration.md)に従う。通常の導入では個別マーカー・手書きのexport計画を要求せず、自動収集する。以下の低水準生成処理は内部部品として扱う。
+テスト証拠は[テスト証拠の契約](test-evidence.md)に従う。証拠jsonの生成と配送はソースレポジトリ側とcapsulaの責務であり、inkaは取り込んだ証拠を評価する。
 
 一人で inka のシステムを端から端まで体験できる最小の実装。
 英語版(正): [English](https://www.space.t.u-tokyo.ac.jp/inka/design/poc-plan/)
@@ -41,7 +41,7 @@
   decline 拒否権、宣言されたフェーズ順序に対するノード側 `until:` のハード失効
   (期限後に付けた承認もカウントしない)、原因別の blame 出力、clean でなければ
   非ゼロ終了。
-- **テスト証拠provider**: `test: "<source>/<target>"`。独立した既存テストの結果をworkflow連携で収集し、取り込んだ証拠をオフライン評価する。連携設計が収集の責務と範囲を定義する。
+- **テスト証拠provider**: `test: "<test-id>"`。ソースレポジトリが実行したテストの証拠jsonをcapsula経由で受け取り、取り込んだ証拠をオフライン評価する。責務分担は[テスト証拠の契約](test-evidence.md)が定義する。
 
 ## 明示的にスコープ外
 

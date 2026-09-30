@@ -1,7 +1,7 @@
 # inka — Decided Specification
 
-Test evidence uses `test:`. The [integration design](test-evidence-integration.md) defines automatic
-collection from independently executed tests.
+Test evidence uses `test:`. The [test evidence contracts](test-evidence.md) define the responsibility
+boundary and the evidence JSON semantics.
 
 Everything on this page is settled. Hash and record layouts become frozen the
 moment their golden vectors land (append-only from then on; incompatible
@@ -19,7 +19,7 @@ structure <id> #tag1 #tag2 {
 
 bind <id> {
   ```...```
-  test: "<test-target>"   // or veriq: "<module>.<name>"
+  test: "<test-id>"   // or veriq: "<module>.<name>"
 }
 
 fiat <id> {
@@ -133,9 +133,11 @@ fiat <id> {
 
 ## Test evidence provider
 
-The [semantic contract](test-evidence.md) and [integration contract](test-evidence-integration.md) define
-source-owned independent test execution, automatic publication and offline evaluation of imported content.
-Evaluation matches delivered content. Environment metadata is optional.
+The [test evidence contracts](test-evidence.md) define the responsibility boundary: the source
+repository executes tests and emits evidence JSON, capsula stores and delivers it, and inka evaluates
+the evidence JSON at a configured path offline. Worktree file matching and mandatory environment
+hashes are not adopted. The evidence JSON carries the reviewable contract body and the corresponding
+execution results.
 
 ## Repository conventions
 
