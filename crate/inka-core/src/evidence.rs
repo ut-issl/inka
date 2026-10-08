@@ -111,7 +111,7 @@ impl TestEvidence {
 }
 
 /// Every test loaded from the configured evidence files, keyed by test-id.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EvidenceSet {
     tests: BTreeMap<String, TestEvidence>,
 }
@@ -142,6 +142,10 @@ impl EvidenceSet {
 /// whitespace stay content. Execution IDs are sorted bytewise, so reordering
 /// the declared executions is not an edit; adding, removing or renaming one
 /// is. Outcomes never enter the hash.
+///
+/// `execution_ids` must not contain duplicates; [`load_files`] validates that
+/// before hashing. A duplicate would be framed twice and silently widen the
+/// preimage instead of erroring.
 #[must_use]
 pub fn interface_hash(test_id: &str, body: &str, execution_ids: &[&str]) -> InterfaceHash {
     let normalized = normalize::evidence_body(body);
@@ -168,7 +172,10 @@ pub enum EvidenceError {
         #[source]
         source: io::Error,
     },
-    #[error("test evidence file `{}` is not valid v1 JSON: {source}", path.display())]
+    #[error(
+        "test evidence file `{}` is not valid v{SUPPORTED_VERSION} JSON: {source}",
+        path.display()
+    )]
     Malformed {
         path: PathBuf,
         #[source]
@@ -243,12 +250,13 @@ pub fn load_files(base_dir: &Path, files: &[PathBuf]) -> Result<EvidenceSet, Evi
                 path: path.clone(),
                 reason,
             })?;
-            if tests.insert(id.clone(), loaded).is_some() {
+            if tests.contains_key(&id) {
                 return Err(EvidenceError::Invalid {
                     path,
                     reason: InvalidEvidence::DuplicateTest { test_id: id },
                 });
             }
+            tests.insert(id, loaded);
         }
     }
     Ok(EvidenceSet { tests })
