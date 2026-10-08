@@ -59,7 +59,7 @@ const VALID: &str = r##"{
     {
       "id": "example-repo/tests/hash_props.rs::roundtrip",
       "body": "#[test]\nfn roundtrip() {}\n",
-      "executions": [{ "id": "default", "outcome": "pass" }]
+      "executions": [{ "case": "default", "outcome": "pass" }]
     }
   ]
 }"##;
@@ -88,7 +88,7 @@ fn provenance_is_optional_and_its_unknown_keys_are_ignored() {
     let scratch = Scratch::new("no-provenance");
     let file = scratch.write(
         "evidence.json",
-        r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": [{"id": "e"}]}]}"#,
+        r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": [{"case": "e"}]}]}"#,
     );
 
     let set = scratch
@@ -108,15 +108,15 @@ fn establishes_only_when_every_required_execution_passes() {
           "v": 1,
           "tests": [
             {"id": "all-pass", "body": "b", "executions": [
-              {"id": "a", "outcome": "pass"}, {"id": "b", "outcome": "pass"}]},
+              {"case": "a", "outcome": "pass"}, {"case": "b", "outcome": "pass"}]},
             {"id": "one-fail", "body": "b", "executions": [
-              {"id": "a", "outcome": "pass"}, {"id": "b", "outcome": "fail"}]},
+              {"case": "a", "outcome": "pass"}, {"case": "b", "outcome": "fail"}]},
             {"id": "one-skip", "body": "b", "executions": [
-              {"id": "a", "outcome": "pass"}, {"id": "b", "outcome": "skip"}]},
+              {"case": "a", "outcome": "pass"}, {"case": "b", "outcome": "skip"}]},
             {"id": "one-cancelled", "body": "b", "executions": [
-              {"id": "a", "outcome": "pass"}, {"id": "b", "outcome": "cancelled"}]},
+              {"case": "a", "outcome": "pass"}, {"case": "b", "outcome": "cancelled"}]},
             {"id": "one-missing", "body": "b", "executions": [
-              {"id": "a", "outcome": "pass"}, {"id": "b"}]}
+              {"case": "a", "outcome": "pass"}, {"case": "b"}]}
           ]
         }"#,
     );
@@ -191,7 +191,7 @@ fn unknown_fields_outside_provenance_are_rejected() {
     let file = scratch.write(
         "evidence.json",
         r#"{"v": 1, "tests": [{"id": "t", "body": "b", "interface_hash": "sha256:00",
-            "executions": [{"id": "e"}]}]}"#,
+            "executions": [{"case": "e"}]}]}"#,
     );
 
     let error = scratch
@@ -210,19 +210,19 @@ fn blank_identifiers_and_empty_shapes_are_rejected() {
     let cases = [
         (
             "blank-test-id.json",
-            r#"{"v": 1, "tests": [{"id": "  ", "body": "b", "executions": [{"id": "e"}]}]}"#,
+            r#"{"v": 1, "tests": [{"id": "  ", "body": "b", "executions": [{"case": "e"}]}]}"#,
         ),
         (
             "empty-body.json",
-            r#"{"v": 1, "tests": [{"id": "t", "body": "", "executions": [{"id": "e"}]}]}"#,
+            r#"{"v": 1, "tests": [{"id": "t", "body": "", "executions": [{"case": "e"}]}]}"#,
         ),
         (
             "no-executions.json",
             r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": []}]}"#,
         ),
         (
-            "blank-execution-id.json",
-            r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": [{"id": " "}]}]}"#,
+            "blank-case.json",
+            r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": [{"case": " "}]}]}"#,
         ),
     ];
 
@@ -237,12 +237,12 @@ fn blank_identifiers_and_empty_shapes_are_rejected() {
 }
 
 #[test]
-fn duplicate_execution_ids_within_a_test_are_rejected() {
+fn duplicate_cases_within_a_test_are_rejected() {
     let scratch = Scratch::new("dup-execution");
     let file = scratch.write(
         "evidence.json",
         r#"{"v": 1, "tests": [{"id": "t", "body": "b",
-            "executions": [{"id": "e", "outcome": "pass"}, {"id": "e", "outcome": "fail"}]}]}"#,
+            "executions": [{"case": "e", "outcome": "pass"}, {"case": "e", "outcome": "fail"}]}]}"#,
     );
 
     let error = scratch
@@ -262,16 +262,16 @@ fn duplicate_test_ids_are_rejected_within_and_across_files() {
     let twice = scratch.write(
         "twice.json",
         r#"{"v": 1, "tests": [
-            {"id": "t", "body": "b", "executions": [{"id": "e"}]},
-            {"id": "t", "body": "b", "executions": [{"id": "e"}]}]}"#,
+            {"id": "t", "body": "b", "executions": [{"case": "e"}]},
+            {"id": "t", "body": "b", "executions": [{"case": "e"}]}]}"#,
     );
     let first = scratch.write(
         "first.json",
-        r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": [{"id": "e"}]}]}"#,
+        r#"{"v": 1, "tests": [{"id": "t", "body": "b", "executions": [{"case": "e"}]}]}"#,
     );
     let second = scratch.write(
         "second.json",
-        r#"{"v": 1, "tests": [{"id": "t", "body": "other", "executions": [{"id": "e"}]}]}"#,
+        r#"{"v": 1, "tests": [{"id": "t", "body": "other", "executions": [{"case": "e"}]}]}"#,
     );
 
     // Act & Assert

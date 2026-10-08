@@ -49,8 +49,8 @@ repository root. For each test-id it records:
 - **executions** — the declared executions required for this test to pass,
   with their results. The whole list is the required set; an entry whose
   `outcome` (pass / fail / skip / cancelled) is omitted is a declared
-  execution whose result is missing. At least one entry is required, and
-  duplicate execution IDs are an input error.
+  execution whose result is missing. Each entry is identified by its `case`.
+  At least one entry is required, and duplicate case IDs are an input error.
 
 The file-level **provenance** object records descriptive metadata such as the
 tested source revision or the capsula run ID. It is not part of the approval
@@ -67,7 +67,7 @@ contract, and inka ignores unknown keys.
     {
       "id": "example-repo/tests/hash_props.rs::roundtrip",
       "body": "#[test]\nfn roundtrip() { /* ... */ }",
-      "executions": [{ "id": "default", "outcome": "pass" }]
+      "executions": [{ "case": "default", "outcome": "pass" }]
     }
   ]
 }
@@ -85,18 +85,18 @@ assembled from successes across different runs.
 ## Content hashing and reapproval
 
 The interface hash covers the test-id, the contract body and the required
-execution ID set. Body normalization replaces CRLF with LF only; comments,
+case-ID set. Body normalization replaces CRLF with LF only; comments,
 Unicode normalization state, indentation and trailing whitespace remain
 content. Framing uses the same rules as the view hash in the
 [specification](spec.md) (`field` / `list` with u64-LE length prefixes).
 
 ```text
 preimage = field("inka:test-evidence:v1") ‖ field(test-id)
-           ‖ field(normalized body) ‖ list(required execution IDs)
+           ‖ field(normalized body) ‖ list(required case IDs)
 interface_hash = SHA-256(preimage)
 ```
 
-Required execution IDs are sorted bytewise: reordering `executions` is not an
+Required case IDs are sorted bytewise: reordering `executions` is not an
 edit. Outcomes do not enter the hash.
 
 The bind view hash keeps its frozen v1 layout: the proposition description and

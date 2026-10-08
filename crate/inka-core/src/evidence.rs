@@ -16,7 +16,7 @@
 //!
 //! The evidence JSON carries no declared digest. The interface hash is
 //! computed here, over the test-id, the CRLF→LF-normalized contract body and
-//! the bytewise-sorted required execution IDs, framed with the same
+//! the bytewise-sorted required case IDs, framed with the same
 //! `field`/`list` rules as the frozen v1 view hash under its own domain tag.
 //! The layout is frozen by the vectors under
 //! `tests/golden/hash/test-evidence-v1/`.
@@ -63,7 +63,7 @@ struct WireTest {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireExecution {
-    id: String,
+    case: String,
     #[serde(default)]
     outcome: Option<Outcome>,
 }
@@ -80,11 +80,12 @@ pub enum Outcome {
 
 /// One declared execution and its observed result.
 ///
-/// `outcome` is `None` when the execution was declared but no result was
-/// reported — a missing result, which never establishes a bind.
+/// `case` identifies the execution within its test; `outcome` is `None`
+/// when the execution was declared but no result was reported — a missing
+/// result, which never establishes a bind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Execution {
-    pub id: String,
+    pub case: String,
     pub outcome: Option<Outcome>,
 }
 
@@ -134,22 +135,22 @@ impl EvidenceSet {
 ///
 /// ```text
 /// preimage = field("inka:test-evidence:v1") ‖ field(test-id)
-///            ‖ field(normalized body) ‖ list(sorted execution IDs)
+///            ‖ field(normalized body) ‖ list(sorted case IDs)
 /// interface_hash = SHA-256(preimage)
 /// ```
 ///
 /// The body is normalized CRLF→LF only; a lone CR, indentation and trailing
-/// whitespace stay content. Execution IDs are sorted bytewise, so reordering
+/// whitespace stay content. Case IDs are sorted bytewise, so reordering
 /// the declared executions is not an edit; adding, removing or renaming one
 /// is. Outcomes never enter the hash.
 ///
-/// `execution_ids` must not contain duplicates; [`load_files`] validates that
+/// `case_ids` must not contain duplicates; [`load_files`] validates that
 /// before hashing. A duplicate would be framed twice and silently widen the
 /// preimage instead of erroring.
 #[must_use]
-pub fn interface_hash(test_id: &str, body: &str, execution_ids: &[&str]) -> InterfaceHash {
+pub fn interface_hash(test_id: &str, body: &str, case_ids: &[&str]) -> InterfaceHash {
     let normalized = normalize::evidence_body(body);
-    let mut ids: Vec<&[u8]> = execution_ids.iter().map(|id| id.as_bytes()).collect();
+    let mut ids: Vec<&[u8]> = case_ids.iter().map(|id| id.as_bytes()).collect();
     ids.sort_unstable();
 
     let mut preimage = Preimage::default();
@@ -203,13 +204,10 @@ pub enum InvalidEvidence {
     EmptyBody { test_id: String },
     #[error("test `{test_id}` declares no executions")]
     NoExecutions { test_id: String },
-    #[error("test `{test_id}` contains a blank execution id")]
-    BlankExecutionId { test_id: String },
-    #[error("test `{test_id}` declares execution `{execution_id}` more than once")]
-    DuplicateExecution {
-        test_id: String,
-        execution_id: String,
-    },
+    #[error("test `{test_id}` contains a blank case id")]
+    BlankCase { test_id: String },
+    #[error("test `{test_id}` declares case `{case}` more than once")]
+    DuplicateCase { test_id: String, case: String },
     #[error("test id `{test_id}` appears more than once in the loaded evidence")]
     DuplicateTest { test_id: String },
 }
@@ -276,12 +274,12 @@ fn validate(test: WireTest) -> Result<(String, TestEvidence), InvalidEvidence> {
 
     let mut seen = std::collections::BTreeSet::new();
     for execution in &test.executions {
-        if execution.id.trim().is_empty() {
-            return Err(InvalidEvidence::BlankExecutionId { test_id: test.id });
+        if execution.case.trim().is_empty() {
+            return Err(InvalidEvidence::BlankCase { test_id: test.id });
         }
-        if !seen.insert(execution.id.as_str()) {
-            return Err(InvalidEvidence::DuplicateExecution {
-                execution_id: execution.id.clone(),
+        if !seen.insert(execution.case.as_str()) {
+            return Err(InvalidEvidence::DuplicateCase {
+                case: execution.case.clone(),
                 test_id: test.id,
             });
         }
@@ -290,14 +288,14 @@ fn validate(test: WireTest) -> Result<(String, TestEvidence), InvalidEvidence> {
     let ids: Vec<&str> = test
         .executions
         .iter()
-        .map(|execution| execution.id.as_str())
+        .map(|execution| execution.case.as_str())
         .collect();
     let interface_hash = interface_hash(&test.id, &test.body, &ids);
     let executions = test
         .executions
         .into_iter()
         .map(|execution| Execution {
-            id: execution.id,
+            case: execution.case,
             outcome: execution.outcome,
         })
         .collect();
@@ -326,9 +324,9 @@ mod tests {
     }
 
     #[test]
-    fn execution_id_order_does_not_change_the_hash() {
+    fn case_order_does_not_change_the_hash() {
         // Outcomes cannot even reach the signature; this records the intent
-        // that only the sorted id set is part of the interface.
+        // that only the sorted case-id set is part of the interface.
         let hash = interface_hash("id", "body", &["a", "b"]);
         assert_eq!(interface_hash("id", "body", &["b", "a"]), hash);
     }

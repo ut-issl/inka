@@ -22,7 +22,9 @@ bindは `test: "<test-id>"` で証拠を参照する。test-idはソースレポ
 
 - **id** — bindが参照するtest-id。
 - **body** — 人間が確認できるテストのソース文字列(空でないUTF-8)。属性・デコレータ・パラメータなど何をどこまで含めるかの抽出はソースレポジトリ側アダプターの責務であり、inkaは言語固有の構文を解析・実行しない。
-- **executions** — このtestをpassとするために必要な実行の宣言と結果。リスト全体が必要集合であり、`outcome`(pass / fail / skip / cancelled)を省略した項目は「宣言されたが結果が欠落した実行」を意味する。項目は1件以上とし、実行IDの重複は入力エラー。
+- **executions** — このtestをpassとするために必要な実行の宣言と結果。リスト全体が必要集合であり、
+  `outcome`(pass / fail / skip / cancelled)を省略した項目は「宣言されたが結果が欠落した実行」を意味する。
+  各項目は `case`(ケースID)で識別する。項目は1件以上とし、ケースIDの重複は入力エラー。
 
 ファイル先頭の **provenance** には、テストしたソースの版やcapsulaのrun IDなどの記録情報を書く。承認対象には含めず、inkaは未知のキーを無視する。
 
@@ -37,7 +39,7 @@ bindは `test: "<test-id>"` で証拠を参照する。test-idはソースレポ
     {
       "id": "example-repo/tests/hash_props.rs::roundtrip",
       "body": "#[test]\nfn roundtrip() { /* ... */ }",
-      "executions": [{ "id": "default", "outcome": "pass" }]
+      "executions": [{ "case": "default", "outcome": "pass" }]
     }
   ]
 }
@@ -50,17 +52,17 @@ bindは `test: "<test-id>"` で証拠を参照する。test-idはソースレポ
 
 ## 内容のハッシュと再承認
 
-interfaceハッシュはtest-id、契約本文、必要実行IDの集合から計算する。
+interfaceハッシュはtest-id、契約本文、必要ケースIDの集合から計算する。
 本文の正規化はCRLFをLFへ置換するだけとし、コメント、Unicodeの正規化状態、字下げ、行末空白は内容として残す。
 フレーミングは[確定仕様](spec.md)のview_hashと同じ規則(u64-LE長の接頭辞による `field` / `list`)を使う。
 
 ```text
 preimage = field("inka:test-evidence:v1") ‖ field(test-id)
-           ‖ field(正規化した契約本文) ‖ list(必要実行ID)
+           ‖ field(正規化した契約本文) ‖ list(必要ケースID)
 interface_hash = SHA-256(preimage)
 ```
 
-必要実行IDはバイト順にソートして並べる。executionsの順序変更は編集ではない。実行結果(outcome)はハッシュに入らない。
+必要ケースIDはバイト順にソートして並べる。executionsの順序変更は編集ではない。実行結果(outcome)はハッシュに入らない。
 
 bindのview_hashは凍結済みv1のままとする。命題の説明・注釈、interfaceの生digest、現在は空の仮定リストを含む。run ID、実行結果、環境情報は承認契約に含めない。
 
