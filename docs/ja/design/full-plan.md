@@ -1,5 +1,7 @@
 # inka — 全体実装方針(PoC 以降)
 
+テスト証拠は[テスト証拠の契約](test-evidence.md)に従う。証拠jsonの生成と配送はソースレポジトリ側とcapsulaの責務であり、inkaは取り込んだ証拠を評価する。
+
 PoC の上に積む機能領域。以下の並びは**依存関係にもとづく整理であって線表ではない**。
 記載の依存以外に、日付や順序への約束は含まない。
 英語版(正): [English](https://www.space.t.u-tokyo.ac.jp/inka/design/full-plan/)
@@ -25,8 +27,8 @@ PoC の上に積む機能領域。以下の並びは**依存関係にもとづ�
    `eval --verify`、削除を検出可能にする軽量アンカリング(レコード数+ハッシュ
    チェーン)、承認可能なイベントとしてのフェーズ遷移(`eval-clean` 述語+昇格
    attestation)。
-6. **evidence provider の拡張。** 関数粒度の CI 証拠(言明を運ぶ opt-in マーカー、
-   正規化 AST の界面ハッシュ)。証拠ごとの実行閉包ハッシュの記録 — 界面不変のままの
+6. **evidence provider の拡張。** 関数粒度のテスト証拠(ソース側アダプターによる収集、
+   CRLFのみ正規化した確認可能なソースの界面ハッシュ)。証拠ごとの実行閉包ハッシュの記録 — 界面不変のままの
    有効内容の変化を eval の warning として表面化し、opt-in の `closure-fresh`
    ポリシー述語で選択的に厳格化。署名付き CI attestation(OIDC/Sigstore)は署名機構に
    接続する。

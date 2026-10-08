@@ -1,5 +1,9 @@
 # inka — Full Implementation Plan (beyond the PoC)
 
+Test evidence follows the [test evidence contracts](test-evidence.md). Producing and delivering
+evidence JSON is the responsibility of the source repository and capsula; inka evaluates imported
+evidence.
+
 Capability areas that build on the PoC. The ordering below is
 dependency-informed, **not a schedule**; nothing here commits to dates or
 sequence beyond the stated dependencies.
@@ -30,8 +34,8 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    canonical record bytes; `eval --verify`; lightweight anchoring (record
    count + hash chain) to make deletion tamper-evident; phase transitions as
    approvable events (`eval-clean` predicate + promotion attestations).
-6. **Evidence-provider extensions.** Function-granularity CI evidence
-   (opt-in marker carrying the statement; normalized-AST interface hash);
+6. **Evidence-provider extensions.** Function-granularity test evidence
+   (source-side adapter collection; reviewable source with CRLF-only normalization);
    execution-closure hashing recorded per evidence item, surfacing
    effective-content changes behind a stable interface as an eval warning,
    with an opt-in `closure-fresh` policy predicate for selective strictness.

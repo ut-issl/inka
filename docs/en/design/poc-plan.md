@@ -1,5 +1,9 @@
 # inka — PoC Implementation Plan
 
+Test evidence follows the [test evidence contracts](test-evidence.md). Producing and delivering
+evidence JSON is the responsibility of the source repository and capsula; inka evaluates imported
+evidence.
+
 The smallest implementation with which one person can experience the inka
 system end to end.
 Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/design/poc-plan/).
@@ -44,9 +48,9 @@ Step 5 is the proof of concept for bind (machine truth / human validity).
   approval); stale detection; decline veto; hard node-side `until:` expiry
   against the declared phase order (post-deadline approvals do not count
   either); blame output with per-cause reasons; non-zero exit when not clean.
-- **CI evidence provider (test-target granularity)**: `ci: "<target>"`;
-  `ci-export.json` generated in CI (an `inka ci-export` subcommand is the
-  preferred generator); eval-side matching.
+- **Test evidence provider**: `test: "<test-id>"`; receive evidence JSON produced by source
+  repositories and delivered through capsula, and evaluate imported evidence offline. Migrate and
+  retire `ci:`. The [test evidence contracts](test-evidence.md) define the responsibility boundary.
 
 ## Explicitly out of scope
 

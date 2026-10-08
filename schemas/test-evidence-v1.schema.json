@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.space.t.u-tokyo.ac.jp/inka/schemas/test-evidence-v1.schema.json",
+  "title": "Inka test evidence v1",
+  "description": "Evidence JSON emitted by a source repository adapter and read by an inka project. Test IDs are opaque to inka and must be unique within a loaded evidence set; the loader rejects duplicates. Executions declare the required set for a test: an entry without an outcome is a declared execution whose result is missing.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "provenance": {
+      "description": "Descriptive metadata such as the tested source revision or the capsula run ID. Never used for evaluation; unknown keys are permitted and ignored.",
+      "type": "object",
+      "properties": {
+        "source_revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "capsula_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Opaque test identifier referenced by `test:` in a bind.",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "body": {
+            "description": "Human-reviewable contract body: the source string of the test, CRLF/LF as produced (the consumer normalizes CRLF to LF before hashing).",
+            "type": "string",
+            "minLength": 1
+          },
+          "executions": {
+            "description": "The declared required execution set. Every entry is required for the test to pass; omitting `outcome` declares an execution whose result is missing. Entry IDs must be unique within a test.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "outcome": {
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "skip",
+                    "cancelled"
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "executions"
+        ]
+      }
+    }
+  },
+  "required": [
+    "v",
+    "tests"
+  ]
+}
