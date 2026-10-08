@@ -1,0 +1,15 @@
+# A valid argument whose configured evidence file declares a version this
+# consumer does not read: eval must fail loudly before any verdict.
+
+[project]
+name = "broken-evidence"
+
+[phases]
+order = ["M1"]
+current = "M1"
+
+[values]
+files = []
+
+[evidence]
+files = ["evidence.json"]

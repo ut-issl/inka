@@ -51,7 +51,7 @@ enum PromoteMode {
     Bind,
 }
 
-/// Which evidence scheme a `ci:` / `veriq:` property names.
+/// Which evidence scheme a `test:` / `veriq:` property names.
 #[derive(Debug, Clone, Copy)]
 enum SourceScheme {
     Test,

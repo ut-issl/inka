@@ -29,7 +29,8 @@
 //!
 //! Blame lists only nodes whose failure cause is their own — a missing, stale,
 //! declined, or expired approval, or missing/failed/incomplete evidence —
-//! never nodes failing solely through their children. The unestablished child is the finding; its
+//! never nodes failing solely through their children. The unestablished
+//! child is the finding; its
 //! ancestors are consequences.
 //!
 //! Policy is the built-in default only: every target needs `any(1)`, with the
@@ -459,7 +460,7 @@ fn judge(
 
     let current_hash = LocalView::of_node(view, node, None)?.view_hash();
     let status = approval_status(records, node, current_hash, phases)?;
-    Ok(approval_verdict(&status))
+    Ok(approval_verdict(status))
 }
 
 /// Judges a bind: approval and evidence are independent causes, and both
@@ -498,7 +499,7 @@ fn judge_bind(
             let current_hash =
                 LocalView::of_node(view, node, Some(test.interface_hash))?.view_hash();
             let status = approval_status(records, node, current_hash, phases)?;
-            let (approved, mut reasons) = approval_verdict(&status);
+            let (approved, mut reasons) = approval_verdict(status);
             let passing = test.establishes();
             if !passing {
                 reasons.extend(evidence_reasons(test));
@@ -539,7 +540,7 @@ fn evidence_reasons(test: &TestEvidence) -> Vec<BlameReason> {
 }
 
 /// Maps an approval status onto the shared (satisfied, blame) shape.
-fn approval_verdict(status: &ApprovalStatus<'_>) -> (bool, Vec<BlameReason>) {
+fn approval_verdict(status: ApprovalStatus<'_>) -> (bool, Vec<BlameReason>) {
     match status {
         ApprovalStatus::Satisfied { .. } => (true, Vec::new()),
         ApprovalStatus::Declined { declines } => {
@@ -555,18 +556,10 @@ fn approval_verdict(status: &ApprovalStatus<'_>) -> (bool, Vec<BlameReason>) {
                 .collect();
             (false, reasons)
         }
-        ApprovalStatus::Expired { until } => (
-            false,
-            vec![BlameReason::UntilExpired {
-                until: until.clone(),
-            }],
-        ),
-        ApprovalStatus::Stale { approvers } => (
-            false,
-            vec![BlameReason::StaleApproval {
-                approvers: approvers.clone(),
-            }],
-        ),
+        ApprovalStatus::Expired { until } => (false, vec![BlameReason::UntilExpired { until }]),
+        ApprovalStatus::Stale { approvers } => {
+            (false, vec![BlameReason::StaleApproval { approvers }])
+        }
         ApprovalStatus::Missing => (false, vec![BlameReason::MissingApproval]),
     }
 }

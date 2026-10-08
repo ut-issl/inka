@@ -13,6 +13,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 use inka_core::approvals;
+use inka_core::evidence;
 use inka_core::graph::Graph;
 use inka_core::hash::LocalView;
 use inka_core::project::load_project;
@@ -56,7 +57,8 @@ fn path_defaults_to_the_current_directory() {
 #[test]
 fn each_failure_kind_is_blamed_on_the_failing_node_alone() {
     // Act: the fixture holds one node per failure kind — missing, stale,
-    // declined, expired, and the stubbed bind — under one unapproved objective.
+    // declined, expired, and binds with missing, failing and incomplete
+    // evidence plus the veriq stub — under one unapproved objective.
     // The declined leaf also has a current approval, exercising the veto.
     let assert = inka()
         .current_dir(local_fixture("unestablished"))
@@ -113,7 +115,8 @@ fn the_json_report_matches_the_human_verdict() {
 #[test]
 fn the_json_report_spells_every_blame_cause() {
     // Act: the fixture exercises every blame cause the JSON contract has —
-    // missing, stale, declined, expired, and the stubbed bind.
+    // missing, stale, declined, expired, missing/failed/incomplete evidence,
+    // and the veriq stub.
     let assert = inka()
         .current_dir(local_fixture("unestablished"))
         .args(["eval", "--json", "."])
@@ -161,6 +164,104 @@ fn a_malformed_approvals_file_fails_loudly_with_file_and_line() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::contains("sato.jsonl:1"));
+}
+
+#[test]
+fn a_bind_established_through_loaded_evidence_evaluates_clean() {
+    // Arrange: the manifest's [evidence] file carries a passing test, and the
+    // bind approval is bound to the interface-bearing view hash.
+    let project = evidence_project("evidence-clean");
+
+    // Act & Assert: the one new CLI behavior end to end — evidence loaded
+    // from disk through the manifest establishes the bind.
+    inka()
+        .arg("eval")
+        .arg(&project)
+        .assert()
+        .success()
+        .stdout("established 2/2\n")
+        .stderr("");
+}
+
+#[test]
+fn an_invalid_evidence_file_fails_before_any_verdict() {
+    // Act & Assert: a configured evidence file with an unsupported version is
+    // a CLI input error, not a verdict.
+    inka()
+        .current_dir(local_fixture("broken-evidence"))
+        .args(["eval", "."])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("test evidence"));
+}
+
+/// The contract fixtures of the evidence-established project.
+const EVIDENCE_TEST_ID: &str = "tests/clean.rs::holds";
+const EVIDENCE_BODY: &str = "#[test]\nfn holds() {}\n";
+
+/// Builds a project whose bind is established through loaded test evidence:
+/// a manifest with `[evidence]`, a passing evidence file, and approvals
+/// bound to the current view hashes including the bind's interface hash.
+fn evidence_project(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("eval-{name}"));
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).expect("the old fixture should be removable");
+    }
+    std::fs::create_dir_all(dir.join("argument")).expect("the fixture should be creatable");
+    std::fs::write(
+        dir.join("inka.toml"),
+        "[project]\nname = \"evidence-clean\"\n\n[phases]\norder = [\"M1\"]\ncurrent = \"M1\"\n\n\
+         [values]\nfiles = []\n\n[evidence]\nfiles = [\"evidence.json\"]\n",
+    )
+    .expect("the manifest should be writable");
+    std::fs::write(
+        dir.join("argument").join("main.inka"),
+        format!(
+            "objective root {{\n  ```\n  the mission succeeds\n  ```\n  children: tested\n}}\n\n\
+             bind tested {{\n  ```\n  the hash survives a round trip\n  ```\n  test: \"{EVIDENCE_TEST_ID}\"\n}}\n"
+        ),
+    )
+    .expect("the argument should be writable");
+    let body_json = serde_json::to_string(EVIDENCE_BODY).expect("a JSON string");
+    std::fs::write(
+        dir.join("evidence.json"),
+        format!(
+            r#"{{"v": 1, "tests": [{{"id": "{EVIDENCE_TEST_ID}", "body": {body_json}, "executions": [{{"case": "default", "outcome": "pass"}}]}}]}}"#
+        ),
+    )
+    .expect("the evidence should be writable");
+
+    let project = load_project(&dir)
+        .result
+        .expect("the fixture project should load");
+    let graph = Graph::build(&project.blocks).expect("the fixture graph should build");
+    let view = ArgumentView::build(&graph, &project.source_map);
+    let interface = evidence::interface_hash(EVIDENCE_TEST_ID, EVIDENCE_BODY, &["default"]);
+    for node in &view.nodes {
+        let bind_interface = (node.mode == inka_core::view::Mode::Bind).then_some(interface);
+        let hash = LocalView::of_node(&view, node, bind_interface)
+            .expect("fixture nodes should be hashable")
+            .view_hash();
+        let record = Record::approve(
+            RecordFields {
+                target: Target::new(node.mode, &node.id).expect("a valid target"),
+                view_hash: hash,
+                approver: "iwata".to_owned(),
+                key_id: "iwata-2026".to_owned(),
+                timestamp: "2026-09-10T08:30:00Z".parse().expect("a valid timestamp"),
+                phase: "M1".to_owned(),
+                until: None,
+                policy_hash: None,
+            },
+            None,
+        )
+        .expect("a valid record");
+        approvals::append(&dir.join("approvals"), &record)
+            .expect("the record should be appendable");
+    }
+    dir
 }
 
 /// Builds a two-node project under `CARGO_TARGET_TMPDIR` and approves every
