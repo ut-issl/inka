@@ -2,6 +2,7 @@
 pub mod approvals;
 pub mod ast;
 pub mod eval;
+pub mod evidence;
 pub mod graph;
 pub mod hash;
 pub mod interpolate;

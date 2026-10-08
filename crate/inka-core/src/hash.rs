@@ -407,24 +407,24 @@ fn child_descriptions<'a>(
 
 /// The length-prefixed byte string a view hash is taken over.
 #[derive(Default)]
-struct Preimage(Vec<u8>);
+pub(crate) struct Preimage(Vec<u8>);
 
 impl Preimage {
     /// Appends `u64-LE(len) ‖ bytes`.
-    fn field(&mut self, bytes: &[u8]) {
+    pub(crate) fn field(&mut self, bytes: &[u8]) {
         self.0.extend_from_slice(&length(bytes.len()));
         self.0.extend_from_slice(bytes);
     }
 
     /// Appends `u64-LE(count)` followed by each element as a field.
-    fn list<T: AsRef<[u8]>>(&mut self, items: &[T]) {
+    pub(crate) fn list<T: AsRef<[u8]>>(&mut self, items: &[T]) {
         self.0.extend_from_slice(&length(items.len()));
         for item in items {
             self.field(item.as_ref());
         }
     }
 
-    fn finish(self) -> Vec<u8> {
+    pub(crate) fn finish(self) -> Vec<u8> {
         self.0
     }
 }

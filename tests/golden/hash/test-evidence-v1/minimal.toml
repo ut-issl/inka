@@ -1,0 +1,7 @@
+# The smallest interface: one test, one required execution.
+comment = "freezes field order: tag, test-id, normalized body, sorted execution ids"
+test_id = "example-repo/tests/hash_props.rs::roundtrip"
+body = "#[test]\nfn roundtrip() {}\n"
+normalized_body = "#[test]\nfn roundtrip() {}\n"
+executions = ["default"]
+interface_hash = "sha256:38cac49ccaca554a7e3d5f3aeca14e10631261437efc46017dd56c728e3ebd7d"

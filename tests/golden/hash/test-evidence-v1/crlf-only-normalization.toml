@@ -1,0 +1,7 @@
+# CRLF collapses to LF before hashing; nothing else about the body changes.
+comment = "a CRLF body hashes as its LF form"
+test_id = "example-repo/tests/line_endings.rs::crlf"
+body = "#[test]\r\nfn crlf() {}\r\n"
+normalized_body = "#[test]\nfn crlf() {}\n"
+executions = ["default"]
+interface_hash = "sha256:2a52df0ffb87297af2f1abf1f385834fd9b787ddc1f19d558bbad9f7fde98375"
