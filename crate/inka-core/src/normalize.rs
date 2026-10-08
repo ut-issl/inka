@@ -16,7 +16,25 @@
 //! kept near-verbatim and no markdown-AST normalization happens. Only the
 //! artefacts of writing text inside an indented fence are removed.
 
+use std::borrow::Cow;
+
 use unicode_normalization::UnicodeNormalization;
+
+/// Puts a delivered test-evidence contract body into its hashed form.
+///
+/// The test evidence contract fixes this as CRLF→LF *only*: a lone CR,
+/// comments, Unicode normalization state, indentation and trailing
+/// whitespace all remain content. This is deliberately weaker than
+/// [`description`] — the body is foreign source code, and the reviewer
+/// approves it as delivered.
+#[must_use]
+pub fn evidence_body(text: &str) -> Cow<'_, str> {
+    if text.contains("\r\n") {
+        Cow::Owned(text.replace("\r\n", "\n"))
+    } else {
+        Cow::Borrowed(text)
+    }
+}
 
 /// Puts a rendered description into its canonical form.
 ///

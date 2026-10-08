@@ -1,0 +1,8 @@
+# A decomposed accent (e + U+0301) and a lone CR both survive: the body is
+# hashed without NFC and without lone-CR unification.
+comment = "Unicode normalization state and a lone CR remain content"
+test_id = "example-repo/tests/日本語.rs::動作確認"
+body = "// de\u0301bris\r(単独CRは内容)\n#[test]\nfn 動作確認() {}\n"
+normalized_body = "// de\u0301bris\r(単独CRは内容)\n#[test]\nfn 動作確認() {}\n"
+executions = ["default"]
+interface_hash = "sha256:cd47d4d761054403403016f0482034ccda9b2fe6cda64a9a3231482712d61c00"

@@ -1,0 +1,8 @@
+# The required set is hashed as the bytewise-sorted id list, so this
+# deliberately-unsorted declaration freezes the sorting step.
+comment = "execution ids are sorted before framing; declaration order is not content"
+test_id = "example-repo/tests/matrix.py::test_cases"
+body = "@pytest.mark.parametrize(\"n\", [1, 2])\ndef test_cases(n):\n    assert n > 0\n"
+normalized_body = "@pytest.mark.parametrize(\"n\", [1, 2])\ndef test_cases(n):\n    assert n > 0\n"
+executions = ["n=2", "n=1"]
+interface_hash = "sha256:3bae3aa1635e8ceab149269eb093a3014c1eb3f5f720d764f2664a1f731c2d4d"

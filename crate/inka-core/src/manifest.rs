@@ -22,6 +22,9 @@ pub struct Manifest {
     pub project: ProjectSection,
     pub phases: PhasesSection,
     pub values: ValuesSection,
+    /// Absent when the project imports no test evidence.
+    #[serde(default)]
+    pub evidence: Option<EvidenceSection>,
 }
 
 /// The `[project]` section. `name` is only used for display today.
@@ -59,6 +62,18 @@ impl PhasesSection {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValuesSection {
+    pub files: Vec<PathBuf>,
+}
+
+/// The optional `[evidence]` section: test evidence JSON files to import.
+///
+/// Paths are relative to the manifest's directory, like `values.files`, and
+/// joining them is the loader's job. The delivery machinery (capsula) is
+/// responsible for the files being present and current; the manifest only
+/// names where they are expected.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceSection {
     pub files: Vec<PathBuf>,
 }
 
