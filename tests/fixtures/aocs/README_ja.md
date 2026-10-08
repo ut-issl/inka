@@ -1,7 +1,7 @@
 # aocs: 姿勢制御系のサンプル論証
 
 衛星の姿勢制御系(AOCS)を題材にした2つ目のサンプル論証。dogfood(inka 自身のメタな
-論証)では荷重がかからない DSL 機能——**bind(`ci:`/`veriq:` 付き)、タグ、数値の値埋め込み、
+論証)では荷重がかからない DSL 機能——**bind(`test:`/`veriq:` 付き)、タグ、数値の値埋め込み、
 bind ノードの DAG 共有**——を意図的に使う。
 
 英語版(正): [README.md](README.md)
@@ -32,7 +32,7 @@ fiat の `until: FM` / `promote: bind`(EM 段階の負債の明示)、markdown �
   `module.function` 名なのでドットのまま。
 - **タグは自由語彙**。check はタグについて何も言わない(タイポ検出は M3 のポリシー
   セレクタ側)。
-- **解決できない `ci:`/`veriq:` 参照**は check では形式検査のみ。実在検証は eval の仕事。
+- **解決できない `test:`/`veriq:` 参照**は check では形式検査のみ。実在検証は eval の仕事。
 
 未決・観察として残るもの:
 

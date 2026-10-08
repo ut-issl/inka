@@ -36,7 +36,7 @@ export type DischargeMode = (typeof DISCHARGE_MODES)[number]
 
 /** Machine-verifiable evidence a bind block discharges against. */
 const evidenceSchema = z.object({
-  kind: z.enum(['veriq', 'ci']),
+  kind: z.enum(['veriq', 'test']),
   /** The reference verbatim, opaque to the viewer. */
   target: z.string().min(1),
 })

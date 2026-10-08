@@ -42,7 +42,7 @@ settle each. Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/
   unit-aware, DAG-based reactive calculation language (`.gcl`) — can be chosen
   as an input to inka is an option under consideration. Nothing is decided:
   neither adoption nor the integration shape (an evidence provider alongside
-  `veriq:` / `ci:`, a source of shared values, or something else). If inka's
+  `veriq:` / `test:`, a source of shared values, or something else). If inka's
   operating discipline needs capabilities on the graphcal side (e.g. stable
   interface hashes or a machine-readable export), proposing them upstream as
   graphcal PRs is part of the option space.

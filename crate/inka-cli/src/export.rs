@@ -133,7 +133,7 @@ fn evidence_data(evidence: &Evidence) -> EvidenceData<'_> {
         // it is part of the wire contract, not of the model's spelling.
         kind: match evidence.kind {
             EvidenceKind::Veriq => "veriq",
-            EvidenceKind::Ci => "ci",
+            EvidenceKind::Test => "test",
         },
         target: &evidence.target,
     }
