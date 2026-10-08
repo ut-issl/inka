@@ -5,7 +5,7 @@
 //! worth doing: whitespace an author cannot see must never invalidate an
 //! approval, and content an author can read must never fail to.
 //!
-//! This file is the intended first `ci:` bind target, so it is written to be
+//! This file is the intended first `test:` bind target, so it is written to be
 //! read as a claim rather than as a test script.
 
 use inka_core::hash::LocalView;

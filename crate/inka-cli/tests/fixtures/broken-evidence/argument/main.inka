@@ -1,0 +1,12 @@
+objective root {
+  ```
+  the mission succeeds
+  ```
+  children: leaf
+}
+
+fiat leaf {
+  ```
+  taken as given
+  ```
+}

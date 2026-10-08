@@ -2,7 +2,7 @@ objective root {
   ```
   the mission succeeds
   ```
-  children: branch, declined_leaf, expired_leaf, tested
+  children: branch, declined_leaf, expired_leaf, tested, failing, partial, modelled
 }
 
 structure branch {
@@ -30,6 +30,27 @@ bind tested {
   checked in CI
   ```
   test: "tests/hash_props.rs"
+}
+
+bind failing {
+  ```
+  the regression stays fixed
+  ```
+  test: "tests/failing.rs::regression"
+}
+
+bind partial {
+  ```
+  every platform is exercised
+  ```
+  test: "tests/partial.rs::matrix"
+}
+
+bind modelled {
+  ```
+  the controller detumbles
+  ```
+  veriq: "aocs.verify_detumble"
 }
 
 fiat declined_leaf {

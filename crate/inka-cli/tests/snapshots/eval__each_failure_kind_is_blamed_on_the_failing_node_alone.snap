@@ -2,11 +2,16 @@
 source: crate/inka-cli/tests/eval.rs
 expression: stdout
 ---
-established 0/6
+established 0/9
 blame:
   structure:branch: no approval covers the current content
   fiat:declined_leaf: declined by sato: the margin calculation omits thermal losses
   fiat:expired_leaf: approvals no longer count: the current phase is past until:M2
+  bind:failing: no approval covers the current content
+  bind:failing: required executions failed: default
   fiat:leaf: approvals are stale: iwata approved an earlier version
+  bind:modelled: veriq evidence is not evaluated yet
+  bind:partial: no approval covers the current content
+  bind:partial: required executions were skipped, cancelled or missing: macos, windows
   objective:root: no approval covers the current content
   bind:tested: no imported test evidence provides `tests/hash_props.rs`

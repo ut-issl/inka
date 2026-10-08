@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "tests": [
+    {
+      "id": "tests/failing.rs::regression",
+      "body": "#[test]\nfn regression() { assert!(fixed()); }\n",
+      "executions": [
+        {
+          "case": "default",
+          "outcome": "fail"
+        }
+      ]
+    },
+    {
+      "id": "tests/partial.rs::matrix",
+      "body": "#[test]\nfn matrix() { assert!(runs_everywhere()); }\n",
+      "executions": [
+        {
+          "case": "linux",
+          "outcome": "pass"
+        },
+        {
+          "case": "macos",
+          "outcome": "skip"
+        },
+        {
+          "case": "windows"
+        }
+      ]
+    }
+  ]
+}

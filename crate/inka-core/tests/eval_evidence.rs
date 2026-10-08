@@ -41,10 +41,14 @@ impl Scratch {
     /// Loads an evidence set whose one test carries `body` and `executions`,
     /// written as raw JSON entries like `{"case": "default", "outcome": "pass"}`.
     fn evidence(&self, body: &str, executions: &[&str]) -> EvidenceSet {
+        self.evidence_for(TEST_ID, body, executions)
+    }
+
+    fn evidence_for(&self, test_id: &str, body: &str, executions: &[&str]) -> EvidenceSet {
         let body_json = serde_json::to_string(body).expect("a JSON string");
         let entries = executions.join(", ");
         let contents = format!(
-            r#"{{"v": 1, "tests": [{{"id": "{TEST_ID}", "body": {body_json}, "executions": [{entries}]}}]}}"#
+            r#"{{"v": 1, "tests": [{{"id": "{test_id}", "body": {body_json}, "executions": [{entries}]}}]}}"#
         );
         let path = self.dir.join("evidence.json");
         fs::write(&path, contents).expect("the evidence file should be writable");
@@ -302,4 +306,33 @@ fn a_veriq_bind_stays_unevaluated() {
 
     assert!(!bind_established(&evaluation));
     assert_eq!(bind_reasons(&evaluation), [BlameReason::VeriqNotEvaluated]);
+}
+
+#[test]
+fn the_same_body_under_a_different_test_id_stales_the_approval() {
+    // Table row: same body under a different selected test-id — the identity
+    // is part of the interface, so re-pointing the bind demands reapproval.
+    let scratch = Scratch::new("different-id");
+    let renamed = "inka/tests/hash_props.rs::renamed";
+    let evidence = scratch.evidence_for(
+        renamed,
+        BODY_A,
+        &[r#"{"case": "default", "outcome": "pass"}"#],
+    );
+    let mut view = bind_view();
+    view.nodes[0].evidence = Some(Evidence {
+        kind: EvidenceKind::Test,
+        target: renamed.to_owned(),
+    });
+    let records = [approval_for(BODY_A, &["default"])];
+
+    let evaluation = evaluate(&view, &phases(), &records, &evidence).expect("evaluation runs");
+
+    assert!(!bind_established(&evaluation));
+    assert_eq!(
+        bind_reasons(&evaluation),
+        [BlameReason::StaleApproval {
+            approvers: vec!["iwata".to_owned()]
+        }]
+    );
 }

@@ -1,6 +1,6 @@
 # A project in which nothing is established, one failure kind per node:
-# a missing approval, a stale approval, a decline, an expired deadline, and a bind
-# awaiting the CI provider.
+# a missing approval, a stale approval, a decline, an expired deadline, and
+# binds blamed for missing, failing and incomplete evidence plus the veriq stub.
 
 [project]
 name = "unestablished"
@@ -11,3 +11,6 @@ current = "M3"
 
 [values]
 files = []
+
+[evidence]
+files = ["evidence.json"]
