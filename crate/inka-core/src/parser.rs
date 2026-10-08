@@ -54,7 +54,7 @@ enum PromoteMode {
 /// Which evidence scheme a `ci:` / `veriq:` property names.
 #[derive(Debug, Clone, Copy)]
 enum SourceScheme {
-    Ci,
+    Test,
     Veriq,
 }
 
@@ -279,7 +279,7 @@ impl<'a> Parser<'a> {
 
         match name.as_str() {
             "children" => self.parse_children(raw, name_span),
-            "ci" => self.parse_source(raw, name_span, SourceScheme::Ci),
+            "test" => self.parse_source(raw, name_span, SourceScheme::Test),
             "veriq" => self.parse_source(raw, name_span, SourceScheme::Veriq),
             "until" => self.parse_until(raw, name_span),
             "reason" => self.parse_reason(raw, name_span),
@@ -341,7 +341,7 @@ impl<'a> Parser<'a> {
             return;
         };
         let source = match scheme {
-            SourceScheme::Ci => SourceRef::Ci(value.value),
+            SourceScheme::Test => SourceRef::Test(value.value),
             SourceScheme::Veriq => SourceRef::Veriq(value.value),
         };
         let spanned = Spanned {
@@ -352,7 +352,7 @@ impl<'a> Parser<'a> {
         if raw.source.is_some() {
             self.error(
                 name_span,
-                "duplicate source reference; a bind takes exactly one of `ci:` or `veriq:`",
+                "duplicate source reference; a bind takes exactly one of `test:` or `veriq:`",
             );
             return;
         }
@@ -526,7 +526,7 @@ impl<'a> Parser<'a> {
         if parts.source.is_none() {
             self.error(
                 parts.id.span,
-                "a bind requires exactly one of `ci:` or `veriq:`",
+                "a bind requires exactly one of `test:` or `veriq:`",
             );
         }
         Some(Block::Bind(BindBlock {
@@ -865,7 +865,7 @@ mod tests {
     #[test]
     fn parses_bind_with_ci_source() {
         let parse =
-            parse_str("bind hashed {\n```\nHash claim\n```\nci: \"tests/hash_props.rs\"\n}\n");
+            parse_str("bind hashed {\n```\nHash claim\n```\ntest: \"tests/hash_props.rs\"\n}\n");
 
         assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Bind(block)) = parse.blocks.first() else {
@@ -873,7 +873,7 @@ mod tests {
         };
         assert_eq!(
             block.source.value,
-            SourceRef::Ci("tests/hash_props.rs".to_owned())
+            SourceRef::Test("tests/hash_props.rs".to_owned())
         );
     }
 
@@ -986,8 +986,9 @@ mod tests {
 
     #[test]
     fn rejects_bind_with_both_ci_and_veriq() {
-        let parse =
-            parse_str("bind twice {\n```\nClaim\n```\nci: \"tests/a.rs\"\nveriq: \"m.check\"\n}\n");
+        let parse = parse_str(
+            "bind twice {\n```\nClaim\n```\ntest: \"tests/a.rs\"\nveriq: \"m.check\"\n}\n",
+        );
 
         assert!(
             has_message(&parse, "duplicate source reference"),
@@ -999,7 +1000,7 @@ mod tests {
         let Some(Block::Bind(block)) = parse.blocks.first() else {
             panic!("expected a bind block");
         };
-        assert_eq!(block.source.value, SourceRef::Ci("tests/a.rs".to_owned()));
+        assert_eq!(block.source.value, SourceRef::Test("tests/a.rs".to_owned()));
     }
 
     #[test]
@@ -1159,7 +1160,7 @@ mod tests {
     #[test]
     fn parses_bind_with_deadline() {
         let parse = parse_str(
-            "bind b {\n```\nClaim\n```\nci: \"tests/x.rs\"\nuntil: M2\nreason: \"pending rig\"\n}\n",
+            "bind b {\n```\nClaim\n```\ntest: \"tests/x.rs\"\nuntil: M2\nreason: \"pending rig\"\n}\n",
         );
 
         assert!(parse.errors.is_empty(), "{:?}", messages(&parse));

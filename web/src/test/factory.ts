@@ -8,7 +8,7 @@ type NodeOverrides = Partial<{
   description: string
   tags: string[]
   root: boolean
-  evidence: { kind: 'veriq' | 'ci'; target: string }
+  evidence: { kind: 'veriq' | 'test'; target: string }
   deadline: { until: string; reason?: string; promote?: 'structure' | 'bind' }
 }>
 

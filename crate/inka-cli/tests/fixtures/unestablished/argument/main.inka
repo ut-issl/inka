@@ -29,7 +29,7 @@ bind tested {
   ```
   checked in CI
   ```
-  ci: "tests/hash_props.rs"
+  test: "tests/hash_props.rs"
 }
 
 fiat declined_leaf {

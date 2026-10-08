@@ -752,13 +752,14 @@ objective root { // opening comment
     }
 
     #[test]
-    fn lexes_ci_source_target_with_slash() {
-        let tokens = lex(r#"ci: "tests/hash_props.rs""#).expect("a quoted ci target should lex");
+    fn lexes_test_source_target_with_slash() {
+        let tokens =
+            lex(r#"test: "tests/hash_props.rs""#).expect("a quoted test target should lex");
 
         assert_eq!(
             kinds(&tokens),
             vec![
-                &TokenKind::Ident("ci".to_owned()),
+                &TokenKind::Ident("test".to_owned()),
                 &TokenKind::Colon,
                 &TokenKind::StringLiteral("tests/hash_props.rs".to_owned()),
             ]

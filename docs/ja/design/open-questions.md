@@ -34,7 +34,7 @@
   組み込みが必要 — まずはデータファイル捕捉なしで始め、限界として記録する。
 - **graphcal を input に。** 単位・次元検査付きの DAG 型リアクティブ計算言語
   [graphcal](https://graphcal.org/docs/)(`.gcl`)を inka の input として選べる
-  ようにするかは検討中の選択肢。採否も統合の形(`veriq:` / `ci:` と並ぶ evidence
+  ようにするかは検討中の選択肢。採否も統合の形(`veriq:` / `test:` と並ぶ evidence
   provider か、共有 values の供給源か、別の何かか)も何も決まっていない。inka の
   運用規律に graphcal 側の機能(安定したインターフェースハッシュや機械可読
   エクスポートなど)が必要になる場合、graphcal 側へ PR を出すことも選択肢に含める。

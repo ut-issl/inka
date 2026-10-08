@@ -94,7 +94,8 @@ expression: stdout
       "mode": "bind",
       "reasons": [
         {
-          "cause": "bind_not_evaluated"
+          "cause": "missing_evidence",
+          "target": "tests/hash_props.rs"
         }
       ]
     }

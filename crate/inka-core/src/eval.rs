@@ -21,13 +21,15 @@
 //! `established` is a fixpoint over the DAG, computed leaves first: a fiat is
 //! established by a satisfied approval alone; a structure or objective needs a
 //! satisfied approval and every child established; a bind needs a satisfied
-//! approval and matching evidence. Evidence matching is stubbed until the CI
-//! provider lands: a bind is not established and carries a clear blame entry
-//! saying so.
+//! approval and passing test evidence. A bind's current view hash is computed
+//! from the interface hash of the imported evidence its `test:` reference
+//! names, so approval staleness and evidence failure stay independent causes;
+//! a reference no loaded evidence provides is the per-bind missing-evidence
+//! cause, not an input error. veriq evidence is not evaluated yet.
 //!
 //! Blame lists only nodes whose failure cause is their own — a missing, stale,
-//! declined, or expired approval, or the bind stub — never nodes failing
-//! solely through their children. The unestablished child is the finding; its
+//! declined, or expired approval, or missing/failed/incomplete evidence —
+//! never nodes failing solely through their children. The unestablished child is the finding; its
 //! ancestors are consequences.
 //!
 //! Policy is the built-in default only: every target needs `any(1)`, with the
@@ -38,10 +40,11 @@ use std::fmt;
 
 use serde::Serialize;
 
+use crate::evidence::{EvidenceSet, Outcome, TestEvidence};
 use crate::hash::{LocalView, LocalViewError, ViewHash};
 use crate::manifest::PhasesSection;
 use crate::record::{Label, Record};
-use crate::view::{ArgumentView, Mode, ViewNode};
+use crate::view::{ArgumentView, EvidenceKind, Mode, ViewNode};
 
 /// The declared phase order, resolved to ordinals for expiry comparison.
 ///
@@ -208,8 +211,14 @@ pub enum BlameReason {
     Declined { by: String, comment: String },
     /// The node's `until:` has expired; no approval counts any more.
     UntilExpired { until: String },
-    /// Evidence matching is stubbed until the CI provider lands.
-    BindNotEvaluated,
+    /// No loaded test evidence provides the bind's `test:` reference.
+    MissingEvidence { target: String },
+    /// Required executions reported `fail`.
+    EvidenceFailed { cases: Vec<String> },
+    /// Required executions were skipped, cancelled or reported no result.
+    EvidenceIncomplete { cases: Vec<String> },
+    /// veriq evidence is not evaluated yet.
+    VeriqNotEvaluated,
 }
 
 impl fmt::Display for BlameReason {
@@ -226,9 +235,18 @@ impl fmt::Display for BlameReason {
                 f,
                 "approvals no longer count: the current phase is past until:{until}"
             ),
-            BlameReason::BindNotEvaluated => {
-                f.write_str("bind evidence is not evaluated yet: the CI provider has not landed")
+            BlameReason::MissingEvidence { target } => {
+                write!(f, "no imported test evidence provides `{target}`")
             }
+            BlameReason::EvidenceFailed { cases } => {
+                write!(f, "required executions failed: {}", cases.join(", "))
+            }
+            BlameReason::EvidenceIncomplete { cases } => write!(
+                f,
+                "required executions were skipped, cancelled or missing: {}",
+                cases.join(", ")
+            ),
+            BlameReason::VeriqNotEvaluated => f.write_str("veriq evidence is not evaluated yet"),
         }
     }
 }
@@ -317,6 +335,7 @@ pub fn evaluate(
     view: &ArgumentView,
     phases: &PhasesSection,
     records: &[Record],
+    evidence: &EvidenceSet,
 ) -> Result<Evaluation, EvalError> {
     let order = PhaseOrder::new(phases)?;
 
@@ -339,17 +358,17 @@ pub fn evaluate(
     let mut reasons: Vec<Vec<BlameReason>> = vec![Vec::new(); view.nodes.len()];
     while let Some(index) = queue.pop_front() {
         let node = &view.nodes[index];
-        let (satisfied, own_reasons) = judge(view, node, records, &order)?;
+        let (satisfied, own_reasons) = judge(view, node, records, &order, evidence)?;
         let children_established = node.children.iter().all(|child| {
             index_of
                 .get(child.as_str())
                 .is_some_and(|&child_index| established[child_index] == Some(true))
         });
         established[index] = Some(match node.mode {
-            Mode::Fiat => satisfied,
-            // Stubbed: a bind also needs its evidence to match, and the
-            // provider that could say so has not landed.
-            Mode::Bind => false,
+            // A fiat needs its approval alone; for a bind, judge already
+            // folded the evidence verdict into `satisfied`, and neither has
+            // children to wait for.
+            Mode::Fiat | Mode::Bind => satisfied,
             Mode::Structure | Mode::Objective => satisfied && children_established,
         });
         reasons[index] = own_reasons;
@@ -425,22 +444,103 @@ fn assemble(
 /// Judges one node's own cause: whether its approval is satisfied, and the
 /// blame reasons it carries itself.
 ///
-/// A bind never reaches [`approval_status`] today: its current view hash
-/// needs the evidence interface hash, which only the CI provider can supply,
-/// so the whole bind judgement is the stub reason.
+/// A bind is judged by [`judge_bind`]: its view hash depends on the imported
+/// evidence, and its verdict folds the evidence outcome in.
 fn judge(
     view: &ArgumentView,
     node: &ViewNode,
     records: &[Record],
     phases: &PhaseOrder,
+    evidence: &EvidenceSet,
 ) -> Result<(bool, Vec<BlameReason>), EvalError> {
     if node.mode == Mode::Bind {
-        return Ok((false, vec![BlameReason::BindNotEvaluated]));
+        return judge_bind(view, node, records, phases, evidence);
     }
 
     let current_hash = LocalView::of_node(view, node, None)?.view_hash();
     let status = approval_status(records, node, current_hash, phases)?;
-    Ok(match status {
+    Ok(approval_verdict(&status))
+}
+
+/// Judges a bind: approval and evidence are independent causes, and both
+/// must hold for the bind to be established.
+///
+/// Without imported evidence for the `test:` reference there is no interface
+/// hash, so no current view hash and no approval judgement: the only
+/// reportable cause is the missing evidence itself. veriq references stay
+/// unevaluated.
+fn judge_bind(
+    view: &ArgumentView,
+    node: &ViewNode,
+    records: &[Record],
+    phases: &PhaseOrder,
+    evidence: &EvidenceSet,
+) -> Result<(bool, Vec<BlameReason>), EvalError> {
+    let Some(reference) = node.evidence.as_ref() else {
+        // Projection always carries a bind's evidence reference; a hand-built
+        // view without one cannot be hashed, which is already an error.
+        return Err(LocalViewError::MissingInterfaceHash {
+            id: node.id.clone(),
+        }
+        .into());
+    };
+    match reference.kind {
+        EvidenceKind::Veriq => Ok((false, vec![BlameReason::VeriqNotEvaluated])),
+        EvidenceKind::Test => {
+            let Some(test) = evidence.get(&reference.target) else {
+                return Ok((
+                    false,
+                    vec![BlameReason::MissingEvidence {
+                        target: reference.target.clone(),
+                    }],
+                ));
+            };
+            let current_hash =
+                LocalView::of_node(view, node, Some(test.interface_hash))?.view_hash();
+            let status = approval_status(records, node, current_hash, phases)?;
+            let (approved, mut reasons) = approval_verdict(&status);
+            let passing = test.establishes();
+            if !passing {
+                reasons.extend(evidence_reasons(test));
+            }
+            Ok((approved && passing, reasons))
+        }
+    }
+}
+
+/// Folds nonpass executions into blame: failures and skipped/cancelled/
+/// missing results are distinct causes, reported together when both occur.
+fn evidence_reasons(test: &TestEvidence) -> Vec<BlameReason> {
+    let failed: Vec<String> = test
+        .executions
+        .iter()
+        .filter(|execution| execution.outcome == Some(Outcome::Fail))
+        .map(|execution| execution.case.clone())
+        .collect();
+    let incomplete: Vec<String> = test
+        .executions
+        .iter()
+        .filter(|execution| {
+            matches!(
+                execution.outcome,
+                None | Some(Outcome::Skip | Outcome::Cancelled)
+            )
+        })
+        .map(|execution| execution.case.clone())
+        .collect();
+    let mut reasons = Vec::new();
+    if !failed.is_empty() {
+        reasons.push(BlameReason::EvidenceFailed { cases: failed });
+    }
+    if !incomplete.is_empty() {
+        reasons.push(BlameReason::EvidenceIncomplete { cases: incomplete });
+    }
+    reasons
+}
+
+/// Maps an approval status onto the shared (satisfied, blame) shape.
+fn approval_verdict(status: &ApprovalStatus<'_>) -> (bool, Vec<BlameReason>) {
+    match status {
         ApprovalStatus::Satisfied { .. } => (true, Vec::new()),
         ApprovalStatus::Declined { declines } => {
             let reasons = declines
@@ -455,12 +555,20 @@ fn judge(
                 .collect();
             (false, reasons)
         }
-        ApprovalStatus::Expired { until } => (false, vec![BlameReason::UntilExpired { until }]),
-        ApprovalStatus::Stale { approvers } => {
-            (false, vec![BlameReason::StaleApproval { approvers }])
-        }
+        ApprovalStatus::Expired { until } => (
+            false,
+            vec![BlameReason::UntilExpired {
+                until: until.clone(),
+            }],
+        ),
+        ApprovalStatus::Stale { approvers } => (
+            false,
+            vec![BlameReason::StaleApproval {
+                approvers: approvers.clone(),
+            }],
+        ),
         ApprovalStatus::Missing => (false, vec![BlameReason::MissingApproval]),
-    })
+    }
 }
 
 #[cfg(test)]
@@ -486,7 +594,7 @@ mod tests {
             tags: Vec::new(),
             evidence: match mode {
                 Mode::Bind => Some(Evidence {
-                    kind: EvidenceKind::Ci,
+                    kind: EvidenceKind::Test,
                     target: "tests/x.rs".to_owned(),
                 }),
                 _ => None,
@@ -595,7 +703,8 @@ mod tests {
         let records = approve_all(&view);
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: the fixpoint reaches the objective and nothing is blamed.
         assert!(evaluation.is_clean());
@@ -613,7 +722,8 @@ mod tests {
             .collect();
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: the ancestors fail only through the leaf, so only the leaf
         // is blamed — and its reason is its own.
@@ -635,7 +745,8 @@ mod tests {
         ]);
 
         // Act
-        let evaluation = evaluate(&after, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&after, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: the leaf and its direct parent are stale; the grandparent's
         // hash covers only its own children's text, so it stays satisfied and
@@ -664,7 +775,8 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert
         assert_eq!(blamed_ids(&evaluation), ["leaf"]);
@@ -692,7 +804,8 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: a stale decline is simply not counted.
         assert!(evaluation.is_clean());
@@ -716,8 +829,10 @@ mod tests {
         let records = approve_all(&view);
 
         // Act
-        let at_m2 = evaluate(&view, &phases("M2"), &records).expect("evaluation runs");
-        let at_m3 = evaluate(&view, &phases("M3"), &records).expect("evaluation runs");
+        let at_m2 = evaluate(&view, &phases("M2"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
+        let at_m3 = evaluate(&view, &phases("M3"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: valid at the deadline, hard-expired one phase later.
         assert!(at_m2.is_clean());
@@ -731,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bind_is_not_established_until_the_ci_provider_lands() {
+    fn a_test_bind_without_imported_evidence_is_blamed_for_missing_evidence() {
         // Arrange
         let view = view(vec![
             node("root", Mode::Objective, "the root claim", &["tested"]),
@@ -739,7 +854,8 @@ mod tests {
         ]);
 
         // Act: no records at all — the stub fires before approval checking.
-        let evaluation = evaluate(&view, &phases("M1"), &[]).expect("evaluation runs");
+        let evaluation =
+            evaluate(&view, &phases("M1"), &[], &EvidenceSet::default()).expect("evaluation runs");
 
         // Assert
         let tested = evaluation
@@ -747,7 +863,12 @@ mod tests {
             .iter()
             .find(|blame| blame.node == "tested")
             .expect("the bind is blamed");
-        assert_eq!(tested.reasons, [BlameReason::BindNotEvaluated]);
+        assert_eq!(
+            tested.reasons,
+            [BlameReason::MissingEvidence {
+                target: "tests/x.rs".to_owned()
+            }]
+        );
         assert!(
             !evaluation
                 .nodes
@@ -768,7 +889,8 @@ mod tests {
             .collect();
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: the root's wording is agreed like any other contract.
         assert_eq!(blamed_ids(&evaluation), ["root"]);
@@ -793,7 +915,8 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert: a kind mismatch is a different target entirely, so the node
         // reads as missing, not stale.
@@ -825,7 +948,8 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M3"), &records).expect("evaluation runs");
+        let evaluation = evaluate(&view, &phases("M3"), &records, &EvidenceSet::default())
+            .expect("evaluation runs");
 
         // Assert
         assert_eq!(
@@ -849,7 +973,8 @@ mod tests {
         let view = view(nodes);
 
         // Act
-        let error = evaluate(&view, &phases("M1"), &[]).expect_err("FM is not a phase");
+        let error = evaluate(&view, &phases("M1"), &[], &EvidenceSet::default())
+            .expect_err("FM is not a phase");
 
         // Assert
         assert_eq!(
@@ -870,7 +995,8 @@ mod tests {
         };
 
         // Act
-        let error = evaluate(&chain(), &section, &[]).expect_err("M9 is not a phase");
+        let error = evaluate(&chain(), &section, &[], &EvidenceSet::default())
+            .expect_err("M9 is not a phase");
 
         // Assert
         assert_eq!(
@@ -891,7 +1017,8 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            evaluate(&view, &phases("M1"), &[]).expect_err("a cycle cannot be evaluated"),
+            evaluate(&view, &phases("M1"), &[], &EvidenceSet::default())
+                .expect_err("a cycle cannot be evaluated"),
             EvalError::Cycle
         );
     }
