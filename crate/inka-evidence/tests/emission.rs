@@ -16,7 +16,9 @@ fn execution(case: &str, outcome: Option<Outcome>) -> Execution {
 fn built_evidence_parses_back_into_the_same_tests() {
     // Arrange
     let mut builder = EvidenceBuilder::new();
-    builder.provenance("source_revision", "4f2a1c9");
+    builder
+        .provenance("source_revision", "4f2a1c9")
+        .expect("a nonblank entry is accepted");
     builder
         .add_test(
             "tests/hash_props.rs::roundtrip",
@@ -172,7 +174,9 @@ fn a_duplicate_test_id_across_calls_is_rejected() {
 fn capsula_run_id_fills_only_when_absent() {
     // Arrange: an explicit provenance entry wins over the environment value.
     let mut preset = EvidenceBuilder::new();
-    preset.provenance("capsula_run_id", "explicit");
+    preset
+        .provenance("capsula_run_id", "explicit")
+        .expect("a nonblank entry is accepted");
     preset.capsula_run_id(Some("from-env".to_owned()));
 
     let mut filled = EvidenceBuilder::new();
@@ -221,5 +225,166 @@ proptest! {
 
         let parsed = parse(&builder.finish()).expect("emitted evidence must always parse");
         prop_assert_eq!(parsed.len(), expected);
+    }
+}
+
+#[test]
+fn blank_provenance_entries_are_rejected() {
+    // The schema requires its named provenance entries to be nonblank; the
+    // emitter refuses blanks for every key rather than special-casing two.
+    let mut builder = EvidenceBuilder::new();
+
+    assert_eq!(
+        builder.provenance("source_revision", "  "),
+        Err(InvalidEvidence::BlankProvenance {
+            key: "source_revision".to_owned()
+        })
+    );
+    assert_eq!(
+        builder.provenance(" ", "value"),
+        Err(InvalidEvidence::BlankProvenance {
+            key: " ".to_owned()
+        })
+    );
+    assert!(!builder.finish().contains("provenance"));
+}
+
+#[test]
+fn a_rejected_duplicate_test_leaves_the_output_unchanged() {
+    let mut builder = EvidenceBuilder::new();
+    builder
+        .add_test("t", "b", vec![execution("e", Some(Outcome::Pass))])
+        .expect("the first test is accepted");
+    let before = builder.finish();
+
+    builder
+        .add_test("t", "other", vec![execution("x", None)])
+        .expect_err("the same id twice is a routing conflict");
+
+    assert_eq!(builder.finish(), before);
+}
+
+/// The repository schema, compiled once for every conformance check.
+static SCHEMA: std::sync::LazyLock<jsonschema::Validator> = std::sync::LazyLock::new(|| {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../schemas/test-evidence-v1.schema.json");
+    let text = std::fs::read_to_string(path).expect("the repository schema should be readable");
+    let schema: serde_json::Value =
+        serde_json::from_str(&text).expect("the repository schema should be valid JSON");
+    jsonschema::validator_for(&schema).expect("the repository schema should compile")
+});
+
+#[test]
+fn emitted_evidence_conforms_to_the_repository_schema() {
+    // Ties the serde mirror to schemas/test-evidence-v1.schema.json, so the
+    // two cannot drift apart undetected.
+    let mut builder = EvidenceBuilder::new();
+    builder
+        .provenance("source_revision", "4f2a1c9")
+        .expect("a nonblank entry is accepted");
+    builder.capsula_run_id(Some("01K8WSYC91YAE21R7CWHQ4KYN2".to_owned()));
+    builder
+        .add_test(
+            "tests/matrix.py::test_cases",
+            "def test_cases(n): ...",
+            vec![
+                execution("n=1", Some(Outcome::Pass)),
+                execution("n=2", Some(Outcome::Fail)),
+                execution("n=3", Some(Outcome::Skip)),
+                execution("n=4", Some(Outcome::Cancelled)),
+                execution("n=5", None),
+            ],
+        )
+        .expect("a valid test is accepted");
+
+    let emitted: serde_json::Value = serde_json::from_str(&builder.finish()).expect("valid JSON");
+
+    assert!(
+        SCHEMA.is_valid(&emitted),
+        "emitted evidence violates the repository schema: {:?}",
+        SCHEMA.iter_errors(&emitted).next()
+    );
+}
+
+/// A stable name for one validation defect, for cross-direction comparison.
+fn defect(reason: &InvalidEvidence) -> &'static str {
+    match reason {
+        InvalidEvidence::BlankTestId => "blank-test-id",
+        InvalidEvidence::EmptyBody { .. } => "empty-body",
+        InvalidEvidence::NoExecutions { .. } => "no-executions",
+        InvalidEvidence::BlankCase { .. } => "blank-case",
+        InvalidEvidence::DuplicateCase { .. } => "duplicate-case",
+        InvalidEvidence::DuplicateTest { .. } => "duplicate-test",
+        InvalidEvidence::BlankProvenance { .. } => "blank-provenance",
+    }
+}
+
+proptest! {
+    /// Builder and parser agree on arbitrary, possibly invalid input: the
+    /// first defect each side reports is the same, and when neither objects
+    /// the emitted file both parses and conforms to the repository schema.
+    #[test]
+    fn builder_and_parser_reject_the_same_first_defect(
+        entries in proptest::collection::vec(
+            (
+                "[ a-c]{0,3}",
+                "[ x]{0,2}",
+                proptest::collection::vec(("[ e-g]{0,2}", proptest::option::of(0usize..4)), 0..3),
+            ),
+            1..5,
+        ),
+    ) {
+        let outcomes = [Outcome::Pass, Outcome::Fail, Outcome::Skip, Outcome::Cancelled];
+        let labels = ["pass", "fail", "skip", "cancelled"];
+
+        // Feed the builder in order; keep its first rejection.
+        let mut builder = EvidenceBuilder::new();
+        let mut builder_defect = None;
+        for (id, body, cases) in &entries {
+            let executions: Vec<Execution> = cases
+                .iter()
+                .map(|(case, outcome)| Execution {
+                    case: case.clone(),
+                    outcome: outcome.map(|index| outcomes[index]),
+                })
+                .collect();
+            if let Err(reason) = builder.add_test(id.clone(), body.clone(), executions) {
+                builder_defect = Some(defect(&reason));
+                break;
+            }
+        }
+
+        // Assemble the equivalent file by hand and parse it.
+        let tests: Vec<serde_json::Value> = entries
+            .iter()
+            .map(|(id, body, cases)| {
+                let executions: Vec<serde_json::Value> = cases
+                    .iter()
+                    .map(|(case, outcome)| match outcome {
+                        Some(index) => {
+                            serde_json::json!({"case": case, "outcome": labels[*index]})
+                        }
+                        None => serde_json::json!({"case": case}),
+                    })
+                    .collect();
+                serde_json::json!({"id": id, "body": body, "executions": executions})
+            })
+            .collect();
+        let text = serde_json::json!({"v": 1, "tests": tests}).to_string();
+        let parser_defect = match parse(&text) {
+            Ok(parsed) => {
+                prop_assert_eq!(parsed.len(), entries.len());
+                None
+            }
+            Err(inka_evidence::ParseError::Invalid(reason)) => Some(defect(&reason)),
+            Err(other) => return Err(TestCaseError::fail(format!("unexpected: {other}"))),
+        };
+
+        prop_assert_eq!(builder_defect, parser_defect);
+        if builder_defect.is_none() {
+            let emitted: serde_json::Value =
+                serde_json::from_str(&builder.finish()).expect("valid JSON");
+            prop_assert!(SCHEMA.is_valid(&emitted));
+        }
     }
 }

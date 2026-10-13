@@ -16,13 +16,17 @@ pub const VERSION: u64 = 1;
 /// The file envelope: the version stamp, open provenance, and the tests.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct WireFile {
-    pub(crate) v: u64,
-    /// Kept only so an object-shaped `provenance` deserializes; never read.
+struct WireFile {
+    v: u64,
+    /// Kept only so an object-shaped `provenance` deserializes; never read:
+    /// provenance is descriptive metadata evaluation must not depend on.
     #[serde(default)]
-    #[allow(dead_code)]
-    pub(crate) provenance: Option<serde_json::Map<String, serde_json::Value>>,
-    pub(crate) tests: Vec<Test>,
+    #[expect(
+        dead_code,
+        reason = "deserialized to enforce the object shape, deliberately unread"
+    )]
+    provenance: Option<serde_json::Map<String, serde_json::Value>>,
+    tests: Vec<Test>,
 }
 
 /// One test as the wire carries it: the opaque id a bind references, the
@@ -47,6 +51,17 @@ pub struct Execution {
     pub case: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<Outcome>,
+}
+
+impl Execution {
+    /// One declared execution; `None` records a declared-but-missing result.
+    #[must_use]
+    pub fn new(case: impl Into<String>, outcome: Option<Outcome>) -> Self {
+        Self {
+            case: case.into(),
+            outcome,
+        }
+    }
 }
 
 /// The outcome vocabulary of one required execution.
@@ -74,6 +89,8 @@ pub enum InvalidEvidence {
     DuplicateCase { test_id: String, case: String },
     #[error("test id `{test_id}` appears more than once in the loaded evidence")]
     DuplicateTest { test_id: String },
+    #[error("provenance entry `{key}` has a blank key or value")]
+    BlankProvenance { key: String },
 }
 
 /// A reason one evidence text could not be read as v1.
@@ -91,6 +108,11 @@ pub enum ParseError {
 }
 
 /// Reads one evidence file's text into its validated tests.
+///
+/// Provenance is deliberately not validated here: the consumer never reads
+/// it, so the contract keeps the reader no stricter than evaluation needs.
+/// The emission side is stricter — [`crate::EvidenceBuilder`] refuses to
+/// write entries the schema would reject.
 ///
 /// # Errors
 ///

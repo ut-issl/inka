@@ -47,9 +47,26 @@ impl EvidenceBuilder {
     /// Records one descriptive provenance entry, replacing an earlier value
     /// under the same key. Provenance is never read by evaluation, and keys
     /// beyond the schema's named ones are allowed.
-    pub fn provenance(&mut self, key: impl Into<String>, value: impl Into<String>) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidEvidence::BlankProvenance`] when the key or the
+    /// value is blank: the schema requires its named provenance entries to
+    /// be nonblank, and this emitter refuses to write what the schema would
+    /// reject, for any key.
+    pub fn provenance(
+        &mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<(), InvalidEvidence> {
+        let key = key.into();
+        let value = value.into();
+        if key.trim().is_empty() || value.trim().is_empty() {
+            return Err(InvalidEvidence::BlankProvenance { key });
+        }
         self.provenance
-            .insert(key.into(), serde_json::Value::String(value.into()));
+            .insert(key, serde_json::Value::String(value));
+        Ok(())
     }
 
     /// Fills `capsula_run_id` from the `CAPSULA_RUN_ID` environment variable
