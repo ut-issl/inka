@@ -219,6 +219,49 @@ fn ignores_files_without_the_inka_extension() {
 }
 
 #[test]
+fn loads_the_evidence_the_manifest_imports() {
+    // Arrange
+    let project = TempProject::new("evidence");
+    project.write(
+        "inka.toml",
+        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\nfiles = [\"evidence.json\"]\n"),
+    );
+    project.write(
+        "evidence.json",
+        r#"{"v": 1, "tests": [{"id": "t", "body": "fn t() {}", "executions": [{"case": "default", "outcome": "pass"}]}]}"#,
+    );
+    project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
+
+    // Act
+    let loaded = load_project(&project.root)
+        .result
+        .expect("evidence project should load");
+
+    // Assert
+    assert!(loaded.evidence.get("t").is_some());
+}
+
+#[test]
+fn reports_an_unloadable_evidence_file_as_an_input_error() {
+    // Arrange: the file the manifest names is not there.
+    let project = TempProject::new("missing-evidence-file");
+    project.write(
+        "inka.toml",
+        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\nfiles = [\"evidence.json\"]\n"),
+    );
+    project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
+
+    // Act
+    let error = load_project(&project.root)
+        .result
+        .expect_err("a missing evidence file should fail the load");
+
+    // Assert
+    assert!(matches!(error, LoadError::Evidence(_)));
+    assert!(error.to_string().contains("evidence.json"));
+}
+
+#[test]
 fn reports_missing_manifest() {
     // Arrange
     let project = TempProject::new("missing-manifest");

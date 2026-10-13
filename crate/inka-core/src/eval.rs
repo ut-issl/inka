@@ -163,19 +163,8 @@ pub fn approval_status<'r>(
         return Ok(ApprovalStatus::Declined { declines });
     }
 
-    if let Some(deadline) = &node.deadline {
-        let expired =
-            phases
-                .is_past(&deadline.until)
-                .ok_or_else(|| EvalError::UnknownUntilPhase {
-                    id: node.id.clone(),
-                    until: deadline.until.clone(),
-                })?;
-        if expired {
-            return Ok(ApprovalStatus::Expired {
-                until: deadline.until.clone(),
-            });
-        }
+    if let Some(until) = expired_deadline(node, phases)? {
+        return Ok(ApprovalStatus::Expired { until });
     }
 
     let approvals: Vec<&Record> = live
@@ -198,6 +187,27 @@ pub fn approval_status<'r>(
     } else {
         Ok(ApprovalStatus::Stale { approvers })
     }
+}
+
+/// The node's `until:` phase when it has expired, `None` when it has not or
+/// the node carries no deadline. Hash-independent, so callers that cannot
+/// compute a view hash can still judge it.
+///
+/// # Errors
+///
+/// Returns [`EvalError::UnknownUntilPhase`] when `until:` names a phase the
+/// declared order does not list.
+fn expired_deadline(node: &ViewNode, phases: &PhaseOrder) -> Result<Option<String>, EvalError> {
+    let Some(deadline) = &node.deadline else {
+        return Ok(None);
+    };
+    let expired = phases
+        .is_past(&deadline.until)
+        .ok_or_else(|| EvalError::UnknownUntilPhase {
+            id: node.id.clone(),
+            until: deadline.until.clone(),
+        })?;
+    Ok(expired.then(|| deadline.until.clone()))
 }
 
 /// A cause a node fails on its own, as blame reports it.
@@ -467,9 +477,11 @@ fn judge(
 /// must hold for the bind to be established.
 ///
 /// Without imported evidence for the `test:` reference there is no interface
-/// hash, so no current view hash and no approval judgement: the only
-/// reportable cause is the missing evidence itself. veriq references stay
-/// unevaluated.
+/// hash, so no current view hash and no record-based judgement. The `until:`
+/// deadline needs no hash, so it is still judged: an expired bind is reported
+/// as both expired and missing its evidence, and an unknown `until:` phase
+/// fails loudly whether or not the evidence has been delivered. veriq
+/// references stay unevaluated.
 fn judge_bind(
     view: &ArgumentView,
     node: &ViewNode,
@@ -489,21 +501,22 @@ fn judge_bind(
         EvidenceKind::Veriq => Ok((false, vec![BlameReason::VeriqNotEvaluated])),
         EvidenceKind::Test => {
             let Some(test) = evidence.get(&reference.target) else {
-                return Ok((
-                    false,
-                    vec![BlameReason::MissingEvidence {
-                        target: reference.target.clone(),
-                    }],
-                ));
+                let mut reasons = Vec::new();
+                if let Some(until) = expired_deadline(node, phases)? {
+                    reasons.push(BlameReason::UntilExpired { until });
+                }
+                reasons.push(BlameReason::MissingEvidence {
+                    target: reference.target.clone(),
+                });
+                return Ok((false, reasons));
             };
             let current_hash =
                 LocalView::of_node(view, node, Some(test.interface_hash))?.view_hash();
             let status = approval_status(records, node, current_hash, phases)?;
             let (approved, mut reasons) = approval_verdict(status);
-            let passing = test.establishes();
-            if !passing {
-                reasons.extend(evidence_reasons(test));
-            }
+            let evidence_blame = evidence_reasons(test);
+            let passing = evidence_blame.is_empty();
+            reasons.extend(evidence_blame);
             Ok((approved && passing, reasons))
         }
     }
@@ -511,24 +524,21 @@ fn judge_bind(
 
 /// Folds nonpass executions into blame: failures and skipped/cancelled/
 /// missing results are distinct causes, reported together when both occur.
+/// An empty result means every execution passed, which is the bind's
+/// evidence verdict; the match is exhaustive so a new outcome cannot leave
+/// a bind unestablished without a reason.
 fn evidence_reasons(test: &TestEvidence) -> Vec<BlameReason> {
-    let failed: Vec<String> = test
-        .executions
-        .iter()
-        .filter(|execution| execution.outcome == Some(Outcome::Fail))
-        .map(|execution| execution.case.clone())
-        .collect();
-    let incomplete: Vec<String> = test
-        .executions
-        .iter()
-        .filter(|execution| {
-            matches!(
-                execution.outcome,
-                None | Some(Outcome::Skip | Outcome::Cancelled)
-            )
-        })
-        .map(|execution| execution.case.clone())
-        .collect();
+    let mut failed = Vec::new();
+    let mut incomplete = Vec::new();
+    for execution in &test.executions {
+        match execution.outcome {
+            Some(Outcome::Pass) => {}
+            Some(Outcome::Fail) => failed.push(execution.case.clone()),
+            None | Some(Outcome::Skip | Outcome::Cancelled) => {
+                incomplete.push(execution.case.clone());
+            }
+        }
+    }
     let mut reasons = Vec::new();
     if !failed.is_empty() {
         reasons.push(BlameReason::EvidenceFailed { cases: failed });
@@ -846,7 +856,8 @@ mod tests {
             node("tested", Mode::Bind, "checked in CI", &[]),
         ]);
 
-        // Act: no records at all — the stub fires before approval checking.
+        // Act: no records at all — the missing-evidence lookup returns before
+        // approval checking.
         let evaluation =
             evaluate(&view, &phases("M1"), &[], &EvidenceSet::default()).expect("evaluation runs");
 
@@ -951,6 +962,70 @@ mod tests {
                 by: "sato".to_owned(),
                 comment: "the assumption no longer holds".to_owned(),
             }]
+        );
+    }
+
+    #[test]
+    fn a_test_bind_without_evidence_is_still_judged_against_its_deadline() {
+        // Arrange: the bind's evidence has not been delivered, and its
+        // `until:` is already behind the project.
+        let mut nodes = vec![
+            node("root", Mode::Objective, "the root claim", &["tested"]),
+            node("tested", Mode::Bind, "checked in CI", &[]),
+        ];
+        nodes[1].deadline = Some(Deadline {
+            until: "M2".to_owned(),
+            reason: None,
+            promote: None,
+        });
+        let view = view(nodes);
+
+        // Act
+        let evaluation =
+            evaluate(&view, &phases("M3"), &[], &EvidenceSet::default()).expect("evaluation runs");
+
+        // Assert: both hash-independent causes are reported, expiry first as
+        // in the evidence-present path.
+        let tested = evaluation
+            .blame
+            .iter()
+            .find(|blame| blame.node == "tested")
+            .expect("the bind is blamed");
+        assert_eq!(
+            tested.reasons,
+            [
+                BlameReason::UntilExpired {
+                    until: "M2".to_owned(),
+                },
+                BlameReason::MissingEvidence {
+                    target: "tests/x.rs".to_owned(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_test_bind_without_evidence_fails_loudly_on_an_unknown_until_phase() {
+        // Arrange: the error must not wait for the evidence to arrive.
+        let mut nodes = vec![node("tested", Mode::Bind, "checked in CI", &[])];
+        nodes[0].deadline = Some(Deadline {
+            until: "FM".to_owned(),
+            reason: None,
+            promote: None,
+        });
+        let view = view(nodes);
+
+        // Act
+        let error = evaluate(&view, &phases("M1"), &[], &EvidenceSet::default())
+            .expect_err("FM is not a phase");
+
+        // Assert
+        assert_eq!(
+            error,
+            EvalError::UnknownUntilPhase {
+                id: "tested".to_owned(),
+                until: "FM".to_owned(),
+            }
         );
     }
 
