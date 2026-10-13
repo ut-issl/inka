@@ -14,6 +14,7 @@ assert_cmd = "2"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 inka-core = { path = "crate/inka-core" }
+inka-evidence = { path = "crate/inka-evidence" }
 insta = "1"
 petgraph = { version = "0.8", default-features = false, features = ["std"] }
 predicates = "3"
