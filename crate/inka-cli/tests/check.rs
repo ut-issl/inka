@@ -110,6 +110,19 @@ fn missing_objective_reports_an_unanchored_error() {
 }
 
 #[test]
+fn an_invalid_evidence_file_fails_the_check() {
+    // Act & Assert: the same input error `eval` reports, so a project with a
+    // broken `[evidence]` file never passes `check` only to fail at `eval`.
+    inka()
+        .current_dir(local_fixture("broken-evidence"))
+        .args(["check", "."])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("test evidence"));
+}
+
+#[test]
 fn missing_manifest_reports_a_structural_error() {
     // Arrange: a directory that exists but holds no inka.toml.
     let without_manifest = local_fixture("no-objective").join("argument");

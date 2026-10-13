@@ -1,5 +1,6 @@
 # A valid argument whose configured evidence file declares a version this
-# consumer does not read: eval must fail loudly before any verdict.
+# consumer does not read: check and eval must both fail loudly, eval before
+# any verdict.
 
 [project]
 name = "broken-evidence"

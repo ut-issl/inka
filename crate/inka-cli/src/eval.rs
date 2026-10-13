@@ -13,7 +13,6 @@ use std::path::Path;
 
 use inka_core::approvals::{self, APPROVALS_DIR};
 use inka_core::eval::{Blame, Evaluation, NodeStatus, evaluate};
-use inka_core::evidence::{self, EvidenceSet};
 use inka_core::source::{Diagnostics, Error, SourceMap};
 use serde::Serialize;
 
@@ -37,19 +36,17 @@ pub fn run(
     err: &mut impl Write,
     color: bool,
 ) -> io::Result<Outcome> {
-    let Some(ProjectView { manifest, view }) = load_project_view(project_dir, err, color)? else {
+    let Some(ProjectView {
+        manifest,
+        evidence,
+        view,
+    }) = load_project_view(project_dir, err, color)?
+    else {
         return Ok(Outcome::Failed);
     };
     let records = match approvals::load_dir(&project_dir.join(APPROVALS_DIR)) {
         Ok(records) => records,
         Err(error) => return fail(&error.to_string(), err, color),
-    };
-    let evidence = match &manifest.evidence {
-        Some(section) => match evidence::load_files(project_dir, &section.files) {
-            Ok(evidence) => evidence,
-            Err(error) => return fail(&error.to_string(), err, color),
-        },
-        None => EvidenceSet::default(),
     };
     let evaluation = match evaluate(&view, &manifest.phases, &records, &evidence) {
         Ok(evaluation) => evaluation,

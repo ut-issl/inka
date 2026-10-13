@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::ast::Block;
+use crate::evidence::{EvidenceError, EvidenceSet, load_files};
 use crate::interpolate::{RenderedDescription, interpolate};
 use crate::lexer::Lexer;
 use crate::manifest::{Manifest, ManifestError, parse_manifest};
@@ -22,8 +23,9 @@ use crate::parser::parse;
 use crate::source::{Error, SourceMap, Warning};
 use crate::values::{ValuesError, load_values};
 
-/// A fully loaded project: validated manifest and interpolated blocks, plus
-/// the source map that resolves their spans.
+/// A fully loaded project: validated manifest, interpolated blocks, and the
+/// test evidence the manifest imports, plus the source map that resolves
+/// block spans.
 ///
 /// Blocks carry [`RenderedDescription`], so the raw pre-interpolation fence
 /// text is not representable here: a later pass cannot read it by mistake.
@@ -33,6 +35,10 @@ pub struct Project {
     pub source_map: SourceMap,
     /// Blocks in file order; consumers must not rely on this order.
     pub blocks: Vec<Block<RenderedDescription>>,
+    /// Every test the manifest's `[evidence]` files provide; empty when the
+    /// manifest imports none. Loaded here so that a missing or malformed
+    /// evidence file is an input error for every command, not only `eval`.
+    pub evidence: EvidenceSet,
 }
 
 /// The outcome of loading a project directory.
@@ -68,6 +74,8 @@ pub enum LoadError {
     },
     #[error(transparent)]
     Values(#[from] ValuesError),
+    #[error(transparent)]
+    Evidence(#[from] EvidenceError),
     #[error("argument directory not found: {}", .path.display())]
     MissingArgumentDir { path: PathBuf },
     #[error("subdirectories under argument/ are not supported: {}", .path.display())]
@@ -112,6 +120,10 @@ fn load(project_dir: &Path) -> Result<Project, LoadError> {
         source,
     })?;
     let values = load_values(project_dir, &manifest.values.files)?;
+    let evidence = match &manifest.evidence {
+        Some(section) => load_files(project_dir, &section.files)?,
+        None => EvidenceSet::default(),
+    };
 
     let mut source_map = SourceMap::new();
     let mut blocks = Vec::new();
@@ -138,6 +150,7 @@ fn load(project_dir: &Path) -> Result<Project, LoadError> {
         manifest,
         source_map,
         blocks,
+        evidence,
     })
 }
 

@@ -15,6 +15,7 @@
 use std::io::{self, Write};
 use std::path::Path;
 
+use inka_core::evidence::EvidenceSet;
 use inka_core::graph::Graph;
 use inka_core::manifest::Manifest;
 use inka_core::project::{LoadError, LoadOutcome, load_project};
@@ -24,10 +25,11 @@ use inka_core::view::ArgumentView;
 use crate::render::render;
 
 /// A loaded project reduced to what commands consume: the manifest's rule-side
-/// state and the shared argument view.
+/// state, the imported test evidence, and the shared argument view.
 #[derive(Debug, Clone)]
 pub struct ProjectView {
     pub manifest: Manifest,
+    pub evidence: EvidenceSet,
     pub view: ArgumentView,
 }
 
@@ -105,6 +107,7 @@ pub fn load_project_view(
     let view = ArgumentView::build(&graph, &project.source_map);
     Ok(Some(ProjectView {
         manifest: project.manifest,
+        evidence: project.evidence,
         view,
     }))
 }
