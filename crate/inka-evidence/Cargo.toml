@@ -1,0 +1,18 @@
+[package]
+name = "inka-evidence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Test evidence v1 wire schema: shared validation, parsing and emission"
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

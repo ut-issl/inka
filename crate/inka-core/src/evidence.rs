@@ -1,12 +1,11 @@
 //! Imported test evidence: the consumer side of the test evidence contract.
 //!
-//! `docs/en/design/test-evidence.md` fixes the responsibility boundary: a
-//! source repository emits an evidence JSON file
-//! (`schemas/test-evidence-v1.schema.json`), capsula stores and delivers it,
-//! and inka reads the file at a configured path. This module is that reader:
-//! strict deserialization, the semantic checks the schema cannot express
-//! (blank identifiers, duplicate identifiers), and the interface hash each
-//! bind approval is bound to.
+//! The wire format, its validation and the emission layer live in the shared
+//! `inka-evidence` crate, so a producer cannot emit what this consumer
+//! rejects. This module adds what only the consumer needs: reading the files
+//! an `inka.toml` `[evidence]` section names, anchoring every defect to the
+//! file that carried it, and the interface hash each bind approval is bound
+//! to.
 //!
 //! Loading is offline and content-only: no source checkout, no language
 //! parsing, no network. A configured file that is missing or malformed is a
@@ -25,69 +24,16 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use inka_evidence::{ParseError, VERSION};
 use sha2::{Digest, Sha256};
+
+pub use inka_evidence::{Execution, InvalidEvidence, Outcome};
 
 use crate::hash::{InterfaceHash, Preimage};
 use crate::normalize;
 
-/// The evidence format version this consumer reads.
-const SUPPORTED_VERSION: u64 = 1;
-
 /// The domain tag framing every test-evidence interface preimage.
 const DOMAIN_TAG: &str = "inka:test-evidence:v1";
-
-/// The file as delivered: a strict serde mirror of the v1 schema.
-///
-/// `deny_unknown_fields` everywhere except `provenance`, whose keys are
-/// explicitly open: provenance is descriptive metadata the consumer ignores.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WireFile {
-    v: u64,
-    /// Kept only so an object-shaped `provenance` deserializes; never read.
-    #[serde(default)]
-    #[allow(dead_code)]
-    provenance: Option<serde_json::Map<String, serde_json::Value>>,
-    tests: Vec<WireTest>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WireTest {
-    id: String,
-    body: String,
-    executions: Vec<WireExecution>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WireExecution {
-    case: String,
-    #[serde(default)]
-    outcome: Option<Outcome>,
-}
-
-/// The outcome vocabulary of one required execution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Outcome {
-    Pass,
-    Fail,
-    Skip,
-    Cancelled,
-}
-
-/// One declared execution and its observed result.
-///
-/// `case` identifies the execution within its test; `outcome` is `None`
-/// when the execution was declared but no result was reported — a missing
-/// result, which never establishes a bind.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Execution {
-    pub case: String,
-    pub outcome: Option<Outcome>,
-}
 
 /// One test's imported evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,7 +120,7 @@ pub enum EvidenceError {
         source: io::Error,
     },
     #[error(
-        "test evidence file `{}` is not valid v{SUPPORTED_VERSION} JSON: {source}",
+        "test evidence file `{}` is not valid v{VERSION} JSON: {source}",
         path.display()
     )]
     Malformed {
@@ -183,7 +129,7 @@ pub enum EvidenceError {
         source: serde_json::Error,
     },
     #[error(
-        "test evidence file `{}` has version {found}; this build reads v{SUPPORTED_VERSION}",
+        "test evidence file `{}` has version {found}; this build reads v{VERSION}",
         path.display()
     )]
     UnsupportedVersion { path: PathBuf, found: u64 },
@@ -195,21 +141,15 @@ pub enum EvidenceError {
     },
 }
 
-/// A semantic defect the schema shape alone cannot express.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum InvalidEvidence {
-    #[error("a test id is blank")]
-    BlankTestId,
-    #[error("test `{test_id}` has an empty contract body")]
-    EmptyBody { test_id: String },
-    #[error("test `{test_id}` declares no executions")]
-    NoExecutions { test_id: String },
-    #[error("test `{test_id}` contains a blank case id")]
-    BlankCase { test_id: String },
-    #[error("test `{test_id}` declares case `{case}` more than once")]
-    DuplicateCase { test_id: String, case: String },
-    #[error("test id `{test_id}` appears more than once in the loaded evidence")]
-    DuplicateTest { test_id: String },
+impl EvidenceError {
+    /// Anchors a path-free parse defect to the file that carried it.
+    fn of_file(error: ParseError, path: PathBuf) -> Self {
+        match error {
+            ParseError::Json(source) => Self::Malformed { path, source },
+            ParseError::UnsupportedVersion { found } => Self::UnsupportedVersion { path, found },
+            ParseError::Invalid(reason) => Self::Invalid { path, reason },
+        }
+    }
 }
 
 /// Reads and validates every configured evidence file into one set.
@@ -222,8 +162,8 @@ pub enum InvalidEvidence {
 ///
 /// Returns an [`EvidenceError`] when a file cannot be read, is not valid v1
 /// JSON, declares a version other than 1, or fails a semantic check: a blank
-/// test or execution id, an empty contract body, an empty execution list, or
-/// a duplicate execution id or test-id.
+/// test or case id, an empty contract body, an empty execution list, or a
+/// duplicate case or test-id.
 pub fn load_files(base_dir: &Path, files: &[PathBuf]) -> Result<EvidenceSet, EvidenceError> {
     let mut tests = BTreeMap::new();
     for relative in files {
@@ -232,81 +172,32 @@ pub fn load_files(base_dir: &Path, files: &[PathBuf]) -> Result<EvidenceSet, Evi
             path: path.clone(),
             source,
         })?;
-        let wire: WireFile =
-            serde_json::from_str(&text).map_err(|source| EvidenceError::Malformed {
-                path: path.clone(),
-                source,
-            })?;
-        if wire.v != SUPPORTED_VERSION {
-            return Err(EvidenceError::UnsupportedVersion {
-                path,
-                found: wire.v,
-            });
-        }
-        for test in wire.tests {
-            let (id, loaded) = validate(test).map_err(|reason| EvidenceError::Invalid {
-                path: path.clone(),
-                reason,
-            })?;
-            if tests.contains_key(&id) {
+        let parsed = inka_evidence::parse(&text)
+            .map_err(|error| EvidenceError::of_file(error, path.clone()))?;
+        for test in parsed {
+            if tests.contains_key(&test.id) {
                 return Err(EvidenceError::Invalid {
                     path,
-                    reason: InvalidEvidence::DuplicateTest { test_id: id },
+                    reason: InvalidEvidence::DuplicateTest { test_id: test.id },
                 });
             }
-            tests.insert(id, loaded);
+            let ids: Vec<&str> = test
+                .executions
+                .iter()
+                .map(|execution| execution.case.as_str())
+                .collect();
+            let interface_hash = interface_hash(&test.id, &test.body, &ids);
+            tests.insert(
+                test.id,
+                TestEvidence {
+                    body: test.body,
+                    executions: test.executions,
+                    interface_hash,
+                },
+            );
         }
     }
     Ok(EvidenceSet { tests })
-}
-
-/// Checks one delivered test and computes its interface hash.
-fn validate(test: WireTest) -> Result<(String, TestEvidence), InvalidEvidence> {
-    if test.id.trim().is_empty() {
-        return Err(InvalidEvidence::BlankTestId);
-    }
-    if test.body.is_empty() {
-        return Err(InvalidEvidence::EmptyBody { test_id: test.id });
-    }
-    if test.executions.is_empty() {
-        return Err(InvalidEvidence::NoExecutions { test_id: test.id });
-    }
-
-    let mut seen = std::collections::BTreeSet::new();
-    for execution in &test.executions {
-        if execution.case.trim().is_empty() {
-            return Err(InvalidEvidence::BlankCase { test_id: test.id });
-        }
-        if !seen.insert(execution.case.as_str()) {
-            return Err(InvalidEvidence::DuplicateCase {
-                case: execution.case.clone(),
-                test_id: test.id,
-            });
-        }
-    }
-
-    let ids: Vec<&str> = test
-        .executions
-        .iter()
-        .map(|execution| execution.case.as_str())
-        .collect();
-    let interface_hash = interface_hash(&test.id, &test.body, &ids);
-    let executions = test
-        .executions
-        .into_iter()
-        .map(|execution| Execution {
-            case: execution.case,
-            outcome: execution.outcome,
-        })
-        .collect();
-    Ok((
-        test.id,
-        TestEvidence {
-            body: test.body,
-            executions,
-            interface_hash,
-        },
-    ))
 }
 
 #[cfg(test)]

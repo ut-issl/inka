@@ -570,6 +570,7 @@ dependencies = [
 name = "inka-core"
 version = "0.1.0"
 dependencies = [
+ "inka-evidence",
  "insta",
  "petgraph",
  "proptest",
@@ -579,6 +580,16 @@ dependencies = [
  "thiserror",
  "toml",
  "unicode-normalization",
+]
+
+[[package]]
+name = "inka-evidence"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
