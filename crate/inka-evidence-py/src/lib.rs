@@ -23,14 +23,12 @@ fn invalid(error: &inka_evidence::InvalidEvidence) -> PyErr {
     InvalidEvidenceError::new_err(error.to_string())
 }
 
-/// Reads an outcome through the crate's serde vocabulary, so the accepted
-/// strings cannot drift from the wire format.
+/// Reads an outcome through the crate's serde vocabulary, so neither the
+/// accepted strings nor the error's expected-variant list can drift from
+/// the wire format.
 fn outcome_of_str(text: &str) -> PyResult<inka_evidence::Outcome> {
-    serde_json::from_value(serde_json::Value::String(text.to_owned())).map_err(|_| {
-        PyValueError::new_err(format!(
-            "unknown outcome `{text}`; expected `pass`, `fail`, `skip` or `cancelled`"
-        ))
-    })
+    serde_json::from_value(serde_json::Value::String(text.to_owned()))
+        .map_err(|error| InvalidEvidenceError::new_err(format!("unknown outcome: {error}")))
 }
 
 /// Writes an outcome back through the same vocabulary.
@@ -43,8 +41,7 @@ fn outcome_to_string(outcome: inka_evidence::Outcome) -> String {
 
 /// One declared execution and its observed result. `outcome` is `None` when
 /// the execution was declared but no result was reported.
-#[pyclass(frozen)]
-#[derive(Clone)]
+#[pyclass(frozen, module = "inka_evidence")]
 struct Execution {
     inner: inka_evidence::Execution,
 }
@@ -85,7 +82,7 @@ impl Execution {
 /// Assembles one test evidence v1 file, validating as it goes. Invalid input
 /// raises `InvalidEvidenceError` and leaves the builder unchanged, so
 /// whatever `finish` returns is guaranteed to load.
-#[pyclass]
+#[pyclass(module = "inka_evidence")]
 #[derive(Default)]
 struct EvidenceBuilder {
     inner: inka_evidence::EvidenceBuilder,
@@ -114,6 +111,8 @@ impl EvidenceBuilder {
 
     /// Fills `capsula_run_id` with `run_id`, unless it is `None` or blank or
     /// an explicit provenance entry already claimed the key.
+    // The explicit signature keeps `run_id` a required argument; without it
+    // pyo3 would let a bare `capsula_run_id()` default the Option to None.
     #[pyo3(signature = (run_id))]
     fn capsula_run_id(&mut self, run_id: Option<String>) {
         self.inner.capsula_run_id(run_id);

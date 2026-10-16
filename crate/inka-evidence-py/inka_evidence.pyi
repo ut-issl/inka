@@ -1,6 +1,8 @@
 """Typing stub for the `inka_evidence` extension module."""
 
-VERSION: int
+from typing import Final
+
+VERSION: Final[int]
 
 class InvalidEvidenceError(ValueError): ...
 

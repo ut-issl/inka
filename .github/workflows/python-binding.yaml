@@ -41,6 +41,7 @@ jobs:
               - 'crate/inka-evidence/**'
               - 'crate/inka-evidence-py/**'
               - schemas/test-evidence-v1.schema.json
+              - Cargo.toml
               - Cargo.lock
               - rust-toolchain.toml
               - .github/workflows/python-binding.yaml

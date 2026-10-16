@@ -155,11 +155,53 @@ def test_invalid_evidence_error_is_a_value_error():
     assert issubclass(InvalidEvidenceError, ValueError)
 
 
-def test_an_unknown_outcome_is_rejected_by_name():
-    with pytest.raises(ValueError, match="unknown outcome `passed`"):
+def test_an_unknown_outcome_is_rejected_with_the_wire_vocabulary():
+    # The expected-variant list comes from the shared crate's serde enum, so
+    # this match also pins that the message names the real vocabulary.
+    expected = "unknown variant `passed`, expected one of `pass`, `fail`, `skip`, `cancelled`"
+
+    with pytest.raises(InvalidEvidenceError, match=expected):
         Execution("e", "passed")
 
 
 def test_execution_exposes_its_case_and_outcome():
     assert (Execution("e", "pass").case, Execution("e", "pass").outcome) == ("e", "pass")
     assert Execution("e").outcome is None
+
+
+def test_execution_repr_names_the_case_and_outcome():
+    assert repr(Execution("e", "pass")) == 'Execution("e", "pass")'
+    assert repr(Execution("e")) == 'Execution("e")'
+
+
+def test_classes_report_their_module():
+    assert Execution.__module__ == "inka_evidence"
+    assert EvidenceBuilder.__module__ == "inka_evidence"
+    assert InvalidEvidenceError.__module__ == "inka_evidence"
+
+
+def test_add_test_rejects_a_bare_string_for_executions():
+    builder = EvidenceBuilder()
+
+    with pytest.raises(TypeError):
+        builder.add_test("t", "b", "not-a-list")
+
+
+def test_add_test_rejects_a_list_with_a_non_execution_element():
+    builder = EvidenceBuilder()
+
+    with pytest.raises(TypeError):
+        builder.add_test("t", "b", [Execution("e"), None])
+
+
+def test_an_execution_object_can_be_reused_across_tests():
+    execution = Execution("shared", "pass")
+    builder = EvidenceBuilder()
+    builder.add_test("first", "b", [execution])
+    builder.add_test("second", "b", [execution])
+
+    tests = json.loads(builder.finish())["tests"]
+
+    assert [test["executions"] for test in tests] == (
+        [[{"case": "shared", "outcome": "pass"}]] * 2
+    )
