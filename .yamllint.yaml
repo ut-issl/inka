@@ -22,3 +22,7 @@ rules:
       .pre-commit-config.yaml
   line-length:
     max: 120
+    # SHA-pinned `uses:` lines for reusable workflows exceed 120 characters
+    ignore: |
+      .github/workflows/*.yml
+      .github/workflows/*.yaml
