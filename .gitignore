@@ -116,8 +116,11 @@ tags
 .ionide
 
 ### Python ###
-# Virtual environment
-/.venv
+# Bytecode caches
+__pycache__/
+
+# Virtual environments, including the one uv creates in crate/inka-evidence-py
+.venv/
 
 ### Zensical ###
 # Generated static site

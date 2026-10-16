@@ -1,0 +1,94 @@
+name: Python binding
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+
+  determine-changes:
+    name: Determine changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      binding: ${{ steps.changed-files.outputs.binding_any_changed }}
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine changed files
+        id: changed-files
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          safe_output: false
+          separator: "\n"
+          files_yaml: |
+            binding:
+              - 'crate/inka-evidence/**'
+              - 'crate/inka-evidence-py/**'
+              - schemas/test-evidence-v1.schema.json
+              - Cargo.lock
+              - rust-toolchain.toml
+              - .github/workflows/python-binding.yaml
+
+  test:
+    name: Test the Python binding
+    needs: determine-changes
+    if: ${{ needs.determine-changes.outputs.binding == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Build the extension module
+        run: uv sync --locked
+        working-directory: crate/inka-evidence-py
+
+      - name: Run pytest
+        run: uv run --locked pytest
+        working-directory: crate/inka-evidence-py
+
+  collect:
+    name: Collect Python binding CI results
+    needs: [determine-changes, test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Verify job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" = "failure" ] || [ "${result}" = "cancelled" ]; then
+              echo "::error title=Python binding CI::At least one required job did not succeed."
+              exit 1
+            fi
+          done
+          echo "All required jobs succeeded or were skipped."

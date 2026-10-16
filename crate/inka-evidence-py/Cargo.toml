@@ -1,0 +1,26 @@
+[package]
+name = "inka-evidence-py"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Python binding over the inka-evidence emission layer"
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+# The import name is `inka_evidence`; the Rust target keeps the `_py` suffix
+# so it cannot collide with the `inka-evidence` dependency it wraps. maturin
+# names the extension module after `tool.maturin.module-name`.
+name = "inka_evidence_py"
+# `extension-module` leaves libpython symbols unresolved, so a Rust test
+# harness cannot link. The tests are the pytest suites under `tests/`.
+test = false
+
+[dependencies]
+inka-evidence.workspace = true
+pyo3.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
