@@ -11,6 +11,7 @@
 //! wasm has no process environment, so adapters read it themselves and pass
 //! `process.env.CAPSULA_RUN_ID` to [`EvidenceBuilder::capsula_run_id`].
 
+use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 /// The `name` carried by errors raised for semantic evidence defects.
@@ -24,13 +25,24 @@ fn invalid(error: &inka_evidence::InvalidEvidence) -> JsValue {
     js.into()
 }
 
+/// Wraps a `JSON.stringify` exception (a `BigInt`, a cycle, a throwing
+/// `toJSON`) in a `TypeError` that keeps the original message, so the
+/// adapter bug stays diagnosable.
+fn not_serializable(cause: &JsValue) -> js_sys::TypeError {
+    let message = cause.dyn_ref::<js_sys::Error>().map_or_else(
+        || String::from("unknown error"),
+        |error| String::from(error.message()),
+    );
+    js_sys::TypeError::new(&format!("executions is not JSON-serializable: {message}"))
+}
+
 #[wasm_bindgen(typescript_custom_section)]
 const EXECUTION_INIT: &'static str = r#"
 /**
  * One declared execution: its case id and, when a result was reported, the
- * observed outcome. Omit `outcome` for a declared-but-missing result. The
- * runtime vocabulary is the `inka-evidence` crate's; this type mirrors it
- * for editor support.
+ * observed outcome. Omit `outcome` for a declared-but-missing result (at
+ * runtime a `null` outcome is read the same way). The runtime vocabulary is
+ * the `inka-evidence` crate's; this type mirrors it for editor support.
  */
 export interface ExecutionInit {
     case: string;
@@ -88,13 +100,20 @@ impl EvidenceBuilder {
     /// Records one test and its declared required executions, given as plain
     /// `{ case, outcome? }` objects.
     ///
+    /// A `null` outcome is treated exactly like an omitted one: a declared
+    /// result that is missing. `JSON.stringify` already folds the JS-only
+    /// non-values (`NaN` becomes `null`, an `undefined` property vanishes),
+    /// and the wire deserializer reads both spellings as "no result".
+    ///
     /// # Errors
     ///
-    /// Throws a `TypeError` when `executions` is not an array of objects the
-    /// wire format's serde definitions accept (an unknown outcome spelling
-    /// or a stray field included), and an `InvalidEvidenceError` — leaving
-    /// the builder unchanged — on a blank test or case id, an empty body, an
-    /// empty execution list, or a duplicate case or test id.
+    /// Throws a `TypeError` when `executions` does not serialize to JSON
+    /// text (`undefined`, a function, a `BigInt`, a cycle) or is not an
+    /// array of objects the wire format's serde definitions accept (an
+    /// unknown outcome spelling or a stray field included), and an
+    /// `InvalidEvidenceError` on a blank test or case id, an empty body, an
+    /// empty execution list, or a duplicate case or test id. Every error
+    /// leaves the builder unchanged and usable.
     #[wasm_bindgen(js_name = addTest)]
     #[expect(
         clippy::needless_pass_by_value,
@@ -109,10 +128,18 @@ impl EvidenceBuilder {
         // The round trip through JSON text deliberately applies the exact
         // wire-format deserializer, `deny_unknown_fields` included, which a
         // field-by-name reader over the live JS object could not enforce.
-        let text = String::from(
-            js_sys::JSON::stringify(executions.as_ref())
-                .map_err(|_| js_sys::TypeError::new("executions is not JSON-serializable"))?,
-        );
+        // `JSON.stringify` returns `undefined` (not an error) for a value
+        // with no JSON form, so both the Err and the non-string Ok must map
+        // to a TypeError; unwrapping the Ok blindly would abort in wasm and
+        // leave the builder's `&mut self` borrow poisoned forever.
+        let text = js_sys::JSON::stringify(executions.as_ref())
+            .map_err(|cause| not_serializable(&cause))?
+            .as_string()
+            .ok_or_else(|| {
+                js_sys::TypeError::new(
+                    "executions has no JSON form (undefined, a function or a symbol)",
+                )
+            })?;
         let executions: Vec<inka_evidence::Execution> = serde_json::from_str(&text)
             .map_err(|error| js_sys::TypeError::new(&format!("invalid executions: {error}")))?;
         self.inner

@@ -181,14 +181,91 @@ test("a stray field in an execution object is rejected", () => {
     { case: string },
   ];
 
-  expect(() => builder.addTest("t", "b", stray)).toThrowError(TypeError);
+  expect(() => builder.addTest("t", "b", stray)).toThrowError(
+    expect.objectContaining({
+      name: "TypeError",
+      message: expect.stringContaining("unknown field `digest`"),
+    }),
+  );
 });
 
 test("a non-array executions argument is rejected", () => {
   const builder = new EvidenceBuilder();
   const bogus = "not-a-list" as unknown as [];
 
-  expect(() => builder.addTest("t", "b", bogus)).toThrowError(TypeError);
+  expect(() => builder.addTest("t", "b", bogus)).toThrowError(
+    expect.objectContaining({
+      name: "TypeError",
+      message: expect.stringContaining("expected a sequence"),
+    }),
+  );
+});
+
+describe("executions with no JSON form are a TypeError, not a wasm abort", () => {
+  test.each([
+    ["undefined", undefined],
+    ["a function", () => []],
+    ["a symbol", Symbol("executions")],
+  ])("%s", (_label, bogus) => {
+    const builder = new EvidenceBuilder();
+
+    expect(() =>
+      builder.addTest("t", "b", bogus as unknown as []),
+    ).toThrowError(
+      expect.objectContaining({
+        name: "TypeError",
+        message: expect.stringContaining("no JSON form"),
+      }),
+    );
+
+    // The failed call must not poison the builder's &mut borrow.
+    builder.addTest("still-usable", "b", [{ case: "e" }]);
+    expect(JSON.parse(builder.finish()).tests).toHaveLength(1);
+  });
+});
+
+test("a value JSON.stringify throws on keeps its message in the TypeError", () => {
+  const builder = new EvidenceBuilder();
+  const bigint = [{ case: "e", outcome: 1n }] as unknown as [];
+
+  expect(() => builder.addTest("t", "b", bigint)).toThrowError(
+    expect.objectContaining({
+      name: "TypeError",
+      message: expect.stringContaining("not JSON-serializable"),
+    }),
+  );
+
+  builder.addTest("still-usable", "b", [{ case: "e" }]);
+  expect(JSON.parse(builder.finish()).tests).toHaveLength(1);
+});
+
+test("a null outcome is read as a missing result, like an absent key", () => {
+  const builder = new EvidenceBuilder();
+  builder.addTest("t", "b", [{ case: "e", outcome: null } as unknown as { case: string }]);
+
+  expect(JSON.parse(builder.finish()).tests[0].executions[0]).toStrictEqual({
+    case: "e",
+  });
+});
+
+test("an object with toJSON that yields a valid list is accepted", () => {
+  const builder = new EvidenceBuilder();
+  const viaToJson = {
+    toJSON: () => [{ case: "e", outcome: "pass" }],
+  } as unknown as [];
+  builder.addTest("t", "b", viaToJson);
+
+  expect(JSON.parse(builder.finish()).tests[0].executions).toStrictEqual([
+    { case: "e", outcome: "pass" },
+  ]);
+});
+
+test("capsulaRunId treats null like undefined", () => {
+  const builder = new EvidenceBuilder();
+  builder.capsulaRunId(null as unknown as undefined);
+  builder.addTest("t", "b", [{ case: "e" }]);
+
+  expect(JSON.parse(builder.finish())).not.toHaveProperty("provenance");
 });
 
 test("invalid evidence errors are ordinary Error instances", () => {
