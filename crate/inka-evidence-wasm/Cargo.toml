@@ -1,0 +1,23 @@
+[package]
+name = "inka-evidence-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "TypeScript (wasm) binding over the inka-evidence emission layer"
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+# The tests are the vitest suites under `tests/`, run against the wasm-pack
+# output; a host-side Rust test harness would exercise nothing real.
+test = false
+
+[dependencies]
+inka-evidence.workspace = true
+js-sys.workspace = true
+serde_json.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true
