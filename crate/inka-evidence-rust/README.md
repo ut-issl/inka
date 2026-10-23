@@ -35,7 +35,8 @@ inferred from results:
   from the run's JUnit report (`pass` / `fail`);
 - an `#[ignore]`d test that the filters would otherwise select is declared
   with outcome `skip` (run it with `--run-ignored all` to collect a real
-  result);
+  result); a selection consisting only of such tests emits the skip
+  evidence without starting a run;
 - a declared test the run never reported — the run aborted or was
   cancelled midway — keeps a missing outcome, which never establishes a
   bind;
@@ -71,7 +72,10 @@ file, attributes included. Two shapes are supported:
   part of any one test's body.
 
 Module paths resolve as rustc resolves them: inline `mod` blocks,
-`name.rs` / `name/mod.rs` files and `#[path]` overrides. Workspaces,
+`name.rs` / `name/mod.rs` files and top-level `#[path]` overrides (a
+`#[path]`-loaded file is mod-rs-like; a `#[path]` inside an inline module
+is rejected explicitly). Definitions duplicated under different `#[cfg]`
+flags are rejected as ambiguous rather than picked blindly. Workspaces,
 multiple test binaries and filters are supported; the mapping from a
 suite to its cargo target comes from `cargo metadata`.
 

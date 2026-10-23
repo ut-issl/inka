@@ -85,10 +85,28 @@ fn emits_schema_valid_evidence_for_a_real_run() {
         ("sample::util::tests::doubles", Some(Outcome::Pass)),
         ("sample::props::add_commutes", Some(Outcome::Pass)),
         ("sample::props::plain_integration", Some(Outcome::Pass)),
+        ("sample::aliased::sub::tests::via_path", Some(Outcome::Pass)),
+        (
+            "sample::aliased::sub::extra::tests::via_sibling_path",
+            Some(Outcome::Pass),
+        ),
     ]
     .into_iter()
     .collect();
     assert_eq!(outcomes, expected);
+
+    // The `#[path]` fixtures carry decoy files at the wrong resolutions;
+    // real bodies prove the resolver followed rustc.
+    assert!(
+        !by_id["sample::aliased::sub::tests::via_path"]
+            .body
+            .contains("DECOY")
+    );
+    assert!(
+        !by_id["sample::aliased::sub::extra::tests::via_sibling_path"]
+            .body
+            .contains("DECOY")
+    );
 
     for test in &tests {
         assert_eq!(test.executions.len(), 1, "one case per run: {}", test.id);
@@ -152,12 +170,83 @@ fn respects_filters_and_the_capsula_environment() {
 }
 
 #[test]
-fn fails_explicitly_on_a_macro_generated_test() {
+fn emits_skip_evidence_when_only_ignored_tests_match() {
+    require_nextest();
+    let _guard = lock_sample();
+
+    // The filter selects only the `#[ignore]`d test: there is nothing to
+    // run, yet the declared-and-skipped evidence must still be emitted.
+    let assert = adapter()
+        .arg("--manifest-path")
+        .arg(fixture_manifest("sample"))
+        .arg("--")
+        .arg("ignored")
+        .assert()
+        .success();
+
+    let text = String::from_utf8(assert.get_output().stdout.clone())
+        .expect("the evidence on standard output is UTF-8");
+    let tests = inka_evidence::parse(&text).expect("skip-only evidence is still valid");
+    assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0].id, "sample::tests::ignored");
+    assert_eq!(tests[0].executions[0].outcome, Some(Outcome::Skip));
+}
+
+#[test]
+fn a_user_run_ignored_policy_really_runs_the_ignored_test() {
+    require_nextest();
+    let _guard = lock_sample();
+
+    // With --run-ignored the single listing is the whole truth and the
+    // ignored test executes; its unreachable!() body fails, which is
+    // evidence, not an adapter error.
+    let assert = adapter()
+        .arg("--manifest-path")
+        .arg(fixture_manifest("sample"))
+        .arg("--")
+        .arg("--run-ignored")
+        .arg("all")
+        .arg("ignored")
+        .assert()
+        .success();
+
+    let text = String::from_utf8(assert.get_output().stdout.clone())
+        .expect("the evidence on standard output is UTF-8");
+    let tests = inka_evidence::parse(&text).expect("the evidence is valid");
+    assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0].id, "sample::tests::ignored");
+    assert_eq!(tests[0].executions[0].outcome, Some(Outcome::Fail));
+}
+
+#[test]
+fn rejects_colliding_test_ids() {
     require_nextest();
 
     let assert = adapter()
         .arg("--manifest-path")
+        .arg(fixture_manifest("clash"))
+        .assert()
+        .failure();
+
+    let stderr =
+        String::from_utf8(assert.get_output().stderr.clone()).expect("the diagnostics are UTF-8");
+    assert!(
+        stderr.contains("clash::props::x") && stderr.contains("appears more than once"),
+        "the collision is explicit: {stderr}"
+    );
+}
+
+#[test]
+fn fails_explicitly_on_a_macro_generated_test() {
+    require_nextest();
+    let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("opaque-evidence.json");
+    let _ = std::fs::remove_file(&out);
+
+    let assert = adapter()
+        .arg("--manifest-path")
         .arg(fixture_manifest("opaque"))
+        .arg("--output")
+        .arg(&out)
         .assert()
         .failure();
 
@@ -171,6 +260,7 @@ fn fails_explicitly_on_a_macro_generated_test() {
         stderr.contains("no `fn generated`"),
         "the unsupported shape is explained: {stderr}"
     );
+    assert!(!out.exists(), "no evidence may be written on failure");
 }
 
 #[test]

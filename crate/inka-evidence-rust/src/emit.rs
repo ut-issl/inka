@@ -8,7 +8,7 @@ use inka_evidence::{EvidenceBuilder, Execution, Outcome};
 use crate::cli::Cli;
 use crate::error::Error;
 use crate::nextest::Scope;
-use crate::{extract, metadata, nextest};
+use crate::{extract, junit, metadata, nextest};
 
 /// Runs the whole pipeline and writes the evidence file.
 ///
@@ -36,7 +36,17 @@ pub fn run(cli: &Cli) -> Result<(), Error> {
         planned.push((test, test_id, body));
     }
 
-    let report = nextest::run(cli, &plan)?;
+    if plan.tests.is_empty() {
+        return Err(Error::EmptySelection);
+    }
+    // When every selected test is ignored there is nothing to run — and
+    // nextest would refuse a run that selects no tests — yet the
+    // declared-and-skipped evidence is still worth emitting.
+    let report = if plan.tests.iter().any(|test| test.scope == Scope::Runs) {
+        nextest::run(cli, &plan)?
+    } else {
+        junit::Report::empty()
+    };
 
     let mut builder = EvidenceBuilder::new();
     builder.capsula_env();

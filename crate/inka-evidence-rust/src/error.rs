@@ -74,6 +74,19 @@ pub enum Error {
     #[error("cannot extract the contract body of `{test_id}`: {detail}")]
     BodyNotFound { test_id: String, detail: String },
 
+    /// The widened `--run-ignored all` listing selected a test the plain
+    /// listing did not, yet the test is not `#[ignore]`d — the difference
+    /// cannot be classified as declared-and-skipped.
+    #[error(
+        "test `{binary_id}::{name}` is selected only by the widened listing but is not \
+         ignored; pass --run-ignored explicitly to state the intent"
+    )]
+    ScopeMismatch { binary_id: String, name: String },
+
+    /// The run selects no tests at all, so there is no evidence to emit.
+    #[error("the run selects no tests, so there is no evidence to emit")]
+    EmptySelection,
+
     /// The assembled evidence violates the wire contract — for example two
     /// suites whose ids collide once joined into test-ids.
     #[error(transparent)]

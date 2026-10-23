@@ -6,9 +6,10 @@
 //! will happen and once with `--run-ignored all` — because a plain listing
 //! reports an `#[ignore]`d test as `mismatch (ignored)` whether or not the
 //! user's filters select it. A test selected only by the wider listing is
-//! in scope but skipped.
+//! in scope but skipped, and must itself be marked ignored: any other
+//! difference between the listings is an explicit error.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -42,6 +43,7 @@ pub struct PlannedTest {
     pub binary_name: String,
     /// The test's path inside the binary, for example `tests::passes`.
     pub name: String,
+    /// Whether the run reports a result for this test.
     pub scope: Scope,
 }
 
@@ -55,18 +57,6 @@ pub struct Plan {
 /// Lists the run and derives each test's scope.
 pub fn plan(cli: &Cli) -> Result<Plan, Error> {
     let narrow = list(cli, false)?;
-    let runs: std::collections::BTreeSet<(String, String)> = narrow
-        .rust_suites
-        .iter()
-        .flat_map(|(binary_id, suite)| {
-            suite
-                .testcases
-                .iter()
-                .filter(|(_, case)| matches!(case.filter_match, FilterMatch::Matches))
-                .map(|(name, _)| (binary_id.clone(), name.clone()))
-        })
-        .collect();
-
     // When the user already chose how ignored tests are treated, the first
     // listing is the whole truth; otherwise widen it to find the tests that
     // are in scope but skipped as ignored.
@@ -75,6 +65,29 @@ pub fn plan(cli: &Cli) -> Result<Plan, Error> {
     } else {
         list(cli, true)?.rust_suites
     };
+    let tests = derive_tests(&narrow, scoped)?;
+    Ok(Plan {
+        target_directory: narrow.rust_build_meta.target_directory,
+        tests,
+    })
+}
+
+/// Merges the two listings into the planned tests.
+fn derive_tests(
+    narrow: &ListOutput,
+    scoped: BTreeMap<String, Suite>,
+) -> Result<Vec<PlannedTest>, Error> {
+    let runs: BTreeSet<(&str, &str)> = narrow
+        .rust_suites
+        .iter()
+        .flat_map(|(binary_id, suite)| {
+            suite
+                .testcases
+                .iter()
+                .filter(|(_, case)| matches!(case.filter_match, FilterMatch::Matches))
+                .map(|(name, _)| (binary_id.as_str(), name.as_str()))
+        })
+        .collect();
 
     let mut tests = Vec::new();
     for (binary_id, suite) in scoped {
@@ -82,10 +95,14 @@ pub fn plan(cli: &Cli) -> Result<Plan, Error> {
             if !matches!(case.filter_match, FilterMatch::Matches) {
                 continue;
             }
-            let scope = if runs.contains(&(binary_id.clone(), name.clone())) {
+            let scope = if runs.contains(&(binary_id.as_str(), name.as_str())) {
                 Scope::Runs
-            } else {
+            } else if case.ignored {
                 Scope::Ignored
+            } else {
+                // The widened listing selected something `#[ignore]` cannot
+                // explain; classifying it as skipped would be a guess.
+                return Err(Error::ScopeMismatch { binary_id, name });
             };
             tests.push(PlannedTest {
                 binary_id: binary_id.clone(),
@@ -97,10 +114,7 @@ pub fn plan(cli: &Cli) -> Result<Plan, Error> {
             });
         }
     }
-    Ok(Plan {
-        target_directory: narrow.rust_build_meta.target_directory,
-        tests,
-    })
+    Ok(tests)
 }
 
 /// nextest's exit code for a run that completed with test failures.
@@ -134,6 +148,9 @@ pub fn run(cli: &Cli, plan: &Plan) -> Result<junit::Report, Error> {
         .arg("--tool-config-file")
         .arg(format!("inka-evidence:{}", tool_config.display()));
     command.args(&cli.nextest_args);
+    // The adapter's own standard output may carry the evidence (`-`), so
+    // nothing nextest prints is allowed to land there.
+    command.stdout(stderr_stdio());
     let status = command
         .status()
         .map_err(|source| spawn_error("cargo nextest run", source))?;
@@ -146,13 +163,40 @@ pub fn run(cli: &Cli, plan: &Plan) -> Result<junit::Report, Error> {
     junit::parse(&junit_path)
 }
 
-/// The nextest profile the run will use: the last `--profile`/`-P` in the
-/// forwarded arguments, else `NEXTEST_PROFILE`, else `default`. The `JUnit`
-/// report lands in the profile's store directory, so the adapter must
-/// mirror nextest's own resolution.
+/// A `Stdio` that forwards to this process's standard error, so a child's
+/// stdout stays visible without touching the evidence stream. Falls back
+/// to discarding the output if the handle cannot be duplicated.
+fn stderr_stdio() -> Stdio {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsFd;
+        if let Ok(fd) = std::io::stderr().as_fd().try_clone_to_owned() {
+            return Stdio::from(fd);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsHandle;
+        if let Ok(handle) = std::io::stderr().as_handle().try_clone_to_owned() {
+            return Stdio::from(handle);
+        }
+    }
+    Stdio::null()
+}
+
+/// The forwarded arguments that are nextest's own: everything up to the
+/// first `--`, after which arguments belong to the test binaries.
+fn nextest_own_args(cli: &Cli) -> impl Iterator<Item = &String> {
+    cli.nextest_args.iter().take_while(|arg| *arg != "--")
+}
+
+/// The nextest profile the run will use: the last `--profile`/`-P` among
+/// nextest's own forwarded arguments, else `NEXTEST_PROFILE`, else
+/// `default`. The `JUnit` report lands in the profile's store directory,
+/// so the adapter must mirror nextest's own resolution.
 fn profile_name(cli: &Cli) -> String {
     let mut profile = None;
-    let mut args = cli.nextest_args.iter();
+    let mut args = nextest_own_args(cli);
     while let Some(arg) = args.next() {
         if arg == "--profile" || arg == "-P" {
             profile = args.next().cloned();
@@ -170,9 +214,7 @@ fn profile_name(cli: &Cli) -> String {
 
 /// Whether the forwarded arguments already pick a `--run-ignored` policy.
 fn user_set_run_ignored(cli: &Cli) -> bool {
-    cli.nextest_args
-        .iter()
-        .any(|arg| arg == "--run-ignored" || arg.starts_with("--run-ignored="))
+    nextest_own_args(cli).any(|arg| arg == "--run-ignored" || arg.starts_with("--run-ignored="))
 }
 
 /// Writes the tool config that turns on `JUnit` output, into the target
@@ -260,6 +302,7 @@ struct Suite {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Case {
+    ignored: bool,
     filter_match: FilterMatch,
 }
 
@@ -277,33 +320,57 @@ enum FilterMatch {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parses_the_list_shape_nextest_emits() {
-        let raw = r#"{
-            "rust-build-meta": { "target-directory": "/work/target" },
-            "test-count": 2,
-            "rust-suites": {
-                "sample": {
-                    "package-name": "sample",
-                    "binary-id": "sample",
-                    "binary-name": "sample",
-                    "package-id": "path+file:///work#0.1.0",
-                    "kind": "lib",
-                    "binary-path": "/work/target/debug/deps/sample-0000",
-                    "testcases": {
-                        "tests::passes": {
-                            "ignored": false,
-                            "filter-match": { "status": "matches" }
-                        },
-                        "tests::ignored": {
-                            "ignored": true,
-                            "filter-match": { "status": "mismatch", "reason": "ignored" }
-                        }
+    fn listing(raw: &str) -> ListOutput {
+        serde_json::from_str(raw).expect("the fixture JSON parses")
+    }
+
+    const NARROW: &str = r#"{
+        "rust-build-meta": { "target-directory": "/work/target" },
+        "rust-suites": {
+            "sample": {
+                "package-name": "sample",
+                "binary-name": "sample",
+                "package-id": "path+file:///work#0.1.0",
+                "kind": "lib",
+                "testcases": {
+                    "tests::passes": {
+                        "ignored": false,
+                        "filter-match": { "status": "matches" }
+                    },
+                    "tests::ignored": {
+                        "ignored": true,
+                        "filter-match": { "status": "mismatch", "reason": "ignored" }
                     }
                 }
             }
-        }"#;
-        let parsed: ListOutput = serde_json::from_str(raw).expect("the fixture JSON parses");
+        }
+    }"#;
+
+    const WIDE: &str = r#"{
+        "rust-build-meta": { "target-directory": "/work/target" },
+        "rust-suites": {
+            "sample": {
+                "package-name": "sample",
+                "binary-name": "sample",
+                "package-id": "path+file:///work#0.1.0",
+                "kind": "lib",
+                "testcases": {
+                    "tests::passes": {
+                        "ignored": false,
+                        "filter-match": { "status": "matches" }
+                    },
+                    "tests::ignored": {
+                        "ignored": true,
+                        "filter-match": { "status": "matches" }
+                    }
+                }
+            }
+        }
+    }"#;
+
+    #[test]
+    fn parses_the_list_shape_nextest_emits() {
+        let parsed = listing(NARROW);
 
         assert_eq!(
             parsed.rust_build_meta.target_directory,
@@ -315,10 +382,47 @@ mod tests {
             suite.testcases["tests::passes"].filter_match,
             FilterMatch::Matches
         ));
+        assert!(suite.testcases["tests::ignored"].ignored);
         assert!(matches!(
             &suite.testcases["tests::ignored"].filter_match,
             FilterMatch::Mismatch { reason } if reason == "ignored"
         ));
+    }
+
+    #[test]
+    fn a_wide_only_ignored_test_is_declared_as_skipped() {
+        let narrow = listing(NARROW);
+        let scoped = listing(WIDE).rust_suites;
+
+        let tests = derive_tests(&narrow, scoped).expect("the listings are consistent");
+
+        let classified: Vec<(&str, Scope)> = tests
+            .iter()
+            .map(|test| (test.name.as_str(), test.scope))
+            .collect();
+        assert_eq!(
+            classified,
+            [
+                ("tests::ignored", Scope::Ignored),
+                ("tests::passes", Scope::Runs)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_wide_only_unignored_test_is_an_explicit_error() {
+        let narrow = listing(NARROW);
+        let inconsistent = WIDE.replace(
+            r#""tests::ignored": {
+                        "ignored": true,"#,
+            r#""tests::ignored": {
+                        "ignored": false,"#,
+        );
+        let scoped = listing(&inconsistent).rust_suites;
+
+        let error = derive_tests(&narrow, scoped).expect_err("the listings disagree");
+
+        assert!(error.to_string().contains("tests::ignored"));
     }
 
     #[test]
@@ -331,6 +435,13 @@ mod tests {
     fn profile_resolution_accepts_the_equals_forms() {
         assert_eq!(profile_name(&cli_with_args(&["--profile=ci"])), "ci");
         assert_eq!(profile_name(&cli_with_args(&["-P=ci"])), "ci");
+    }
+
+    #[test]
+    fn arguments_after_a_double_dash_belong_to_the_test_binaries() {
+        let cli = cli_with_args(&["--", "--profile", "boom", "--run-ignored=all"]);
+        assert_eq!(profile_name(&cli), "default");
+        assert!(!user_set_run_ignored(&cli));
     }
 
     #[test]

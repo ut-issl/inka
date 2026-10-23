@@ -14,6 +14,14 @@ pub struct Report {
 }
 
 impl Report {
+    /// A report with no results: the shape of a run that was never needed,
+    /// such as one whose every selected test is ignored.
+    pub fn empty() -> Self {
+        Self {
+            outcomes: HashMap::new(),
+        }
+    }
+
     /// The outcome the run reported for one test, if any: a test that never
     /// ran (aborted or cancelled run) is simply absent.
     pub fn outcome(&self, binary_id: &str, name: &str) -> Option<Outcome> {
@@ -74,7 +82,14 @@ fn parse_text(text: &str) -> Result<Report, String> {
         } else {
             Outcome::Pass
         };
-        outcomes.insert((suite.to_owned(), name.to_owned()), outcome);
+        if outcomes
+            .insert((suite.to_owned(), name.to_owned()), outcome)
+            .is_some()
+        {
+            // Conflicting records for one execution are malformed input,
+            // never a silent overwrite.
+            return Err(format!("duplicate testcase `{name}` in suite `{suite}`"));
+        }
     }
     Ok(Report { outcomes })
 }
@@ -135,5 +150,16 @@ mod tests {
     #[test]
     fn rejects_text_that_is_not_xml() {
         assert!(parse_text("not xml").is_err());
+    }
+
+    #[test]
+    fn rejects_a_duplicate_testcase() {
+        let duplicated = r#"<testsuites><testsuite name="s">
+            <testcase name="t"/>
+            <testcase name="t"><failure message="again"/></testcase>
+        </testsuite></testsuites>"#;
+
+        let error = parse_text(duplicated).expect_err("conflicting records are malformed");
+        assert!(error.contains("duplicate testcase `t`"));
     }
 }

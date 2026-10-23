@@ -9,6 +9,11 @@ pub fn add(a: u64, b: u64) -> u64 {
 
 pub mod util;
 
+// Exercises rustc's `#[path]` semantics: the loaded file is mod-rs-like,
+// so its children resolve next to it. Decoy files pin the failure modes.
+#[path = "renamed.rs"]
+pub mod aliased;
+
 #[cfg(test)]
 mod tests {
     use super::add;

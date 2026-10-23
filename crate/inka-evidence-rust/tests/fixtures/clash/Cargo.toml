@@ -1,0 +1,9 @@
+# Fixture whose lib test path collides with an integration-test suite once
+# joined into a test-id; the adapter must reject the duplicate explicitly.
+
+[package]
+name = "clash"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
