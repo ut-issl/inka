@@ -151,7 +151,7 @@ fn matching_approval_and_all_required_passes_establish_the_bind() {
     let evaluation = run(&records, &evidence);
 
     assert!(bind_established(&evaluation));
-    assert!(bind_reasons(&evaluation).is_empty());
+    assert_eq!(bind_reasons(&evaluation), []);
 }
 
 #[test]

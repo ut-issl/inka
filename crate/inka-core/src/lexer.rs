@@ -785,7 +785,7 @@ objective root { // opening comment
     fn lexes_empty_input_to_no_tokens() {
         let tokens = lex("").expect("empty input should lex");
 
-        assert!(tokens.is_empty());
+        assert_eq!(tokens, []);
     }
 
     #[test]

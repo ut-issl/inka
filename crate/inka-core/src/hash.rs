@@ -155,11 +155,12 @@ fn parse_digest(text: &str) -> Result<[u8; DIGEST_LEN], InvalidDigest> {
     }
 
     let mut bytes = [0u8; DIGEST_LEN];
-    for (byte, pair) in bytes.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
+    let (pairs, _) = hex.as_bytes().as_chunks::<2>();
+    for (byte, &[high, low]) in bytes.iter_mut().zip(pairs) {
         // Digit by digit rather than through an integer parser, which
         // would also accept a signed `+ff` as a byte.
-        let high = hex_digit(pair[0]).ok_or_else(invalid)?;
-        let low = hex_digit(pair[1]).ok_or_else(invalid)?;
+        let high = hex_digit(high).ok_or_else(invalid)?;
+        let low = hex_digit(low).ok_or_else(invalid)?;
         *byte = (high << 4) | low;
     }
     Ok(bytes)
@@ -588,7 +589,7 @@ mod tests {
 
     #[test]
     fn a_node_without_a_deadline_has_no_annotations() {
-        assert!(annotations(None).is_empty());
+        assert_eq!(annotations(None), [] as [String; 0]);
     }
 
     #[test]
