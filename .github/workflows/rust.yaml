@@ -59,7 +59,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       - name: Run cargo check
         run: cargo check --workspace --all-targets --locked
@@ -78,7 +78,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache: false
 
@@ -99,7 +99,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       - name: Run cargo clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -118,7 +118,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       - name: Run cargo test
         run: cargo test --workspace --locked
