@@ -769,7 +769,7 @@ structure a {
         assert_eq!(diagnostics.errors.len(), 1);
         assert_eq!(diagnostics.errors[0].message, "no objective block found");
         assert_eq!(diagnostics.errors[0].span, None);
-        assert!(diagnostics.warnings.is_empty());
+        assert_eq!(diagnostics.warnings, []);
     }
 
     #[test]

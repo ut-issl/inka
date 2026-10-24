@@ -110,7 +110,7 @@ fn appending_to_an_empty_file_does_not_add_a_blank_line() {
     fs::create_dir_all(&temp.dir).expect("the directory creates");
     let path = temp.dir.join("iwata.jsonl");
     fs::write(&path, "").expect("the empty file writes");
-    assert!(approvals::load_file(&path).unwrap().is_empty());
+    assert_eq!(approvals::load_file(&path).unwrap(), []);
     let record = approval("iwata");
 
     // Act
@@ -167,7 +167,7 @@ fn a_project_with_no_approvals_directory_has_no_records() {
 
     let loaded = approvals::load_dir(&temp.dir).expect("a missing directory is empty");
 
-    assert!(loaded.is_empty());
+    assert_eq!(loaded, []);
 }
 
 #[test]

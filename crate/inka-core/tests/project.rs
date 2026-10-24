@@ -105,7 +105,7 @@ fn load_reports_warnings_alongside_the_result() {
     let LoadOutcome { warnings, result } = load_project(&fixture_dir("dogfood"));
 
     // Assert
-    assert!(warnings.is_empty());
+    assert_eq!(warnings, []);
     assert!(result.is_ok());
 }
 
@@ -198,7 +198,7 @@ fn loads_empty_argument_directory_as_project_without_blocks() {
         .expect("empty argument/ should load");
 
     // Assert
-    assert!(loaded.blocks.is_empty());
+    assert_eq!(loaded.blocks, []);
 }
 
 #[test]

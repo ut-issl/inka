@@ -712,7 +712,7 @@ mod tests {
         // Assert: the fixpoint reaches the objective and nothing is blamed.
         assert!(evaluation.is_clean());
         assert_eq!(evaluation.established_count(), 3);
-        assert!(evaluation.blame.is_empty());
+        assert_eq!(evaluation.blame, []);
     }
 
     #[test]

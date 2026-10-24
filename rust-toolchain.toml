@@ -1,5 +1,5 @@
 [toolchain]
-channel = "1.96.0"
+channel = "1.99.1"
 components = ["rustfmt", "clippy"]
 # The wasm binding (crate/inka-evidence-wasm) builds for this target.
 targets = ["wasm32-unknown-unknown"]

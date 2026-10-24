@@ -945,7 +945,7 @@ mod tests {
     fn rejects_block_without_description() {
         let parse = parse_str("fiat empty {\n}\n");
 
-        assert!(parse.blocks.is_empty());
+        assert_eq!(parse.blocks, []);
         assert!(
             has_message(&parse, "exactly one description"),
             "{:?}",
@@ -976,7 +976,7 @@ mod tests {
     fn rejects_bind_without_source() {
         let parse = parse_str("bind orphan {\n```\nNo source\n```\n}\n");
 
-        assert!(parse.blocks.is_empty());
+        assert_eq!(parse.blocks, []);
         assert!(
             has_message(&parse, "a bind requires exactly one"),
             "{:?}",
@@ -1125,8 +1125,8 @@ mod tests {
     fn parses_empty_input_to_no_blocks() {
         let parse = parse_str("");
 
-        assert!(parse.blocks.is_empty());
-        assert!(parse.errors.is_empty());
+        assert_eq!(parse.blocks, []);
+        assert_eq!(parse.errors, []);
     }
 
     #[test]
@@ -1242,7 +1242,7 @@ mod tests {
     fn reports_mode_violations_even_without_description() {
         let parse = parse_str("fiat f {\nchildren: a\n}\n");
 
-        assert!(parse.blocks.is_empty());
+        assert_eq!(parse.blocks, []);
         assert!(
             has_message(&parse, "exactly one description"),
             "{:?}",
