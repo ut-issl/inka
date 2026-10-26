@@ -1,0 +1,12 @@
+# Fixture crate the adapter's integration tests run for real. The empty
+# `[workspace]` table detaches it from the repository workspace.
+
+[package]
+name = "sample"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dev-dependencies]
+proptest = "1"
