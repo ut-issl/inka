@@ -33,7 +33,7 @@ def _split_input(raw: str) -> tuple[str | None, str]:
 
 def _split_provenance(raw: str) -> tuple[str, str]:
     key, separator, value = raw.partition("=")
-    if not separator:
+    if not separator or not key:
         raise SystemExit(f"error: provenance entry {raw!r} is not key=value")
     return key, value
 
@@ -67,9 +67,11 @@ def main(argv: list[str] | None = None) -> None:
     pairs = []
     for raw in arguments.inputs:
         label, file = _split_input(raw)
+        if not file:
+            raise SystemExit(f"error: input {raw!r} has an empty file name")
         try:
             pairs.append((label, Path(file).read_text(encoding="utf-8")))
-        except OSError as error:
+        except (OSError, UnicodeDecodeError) as error:
             raise SystemExit(f"error: cannot read {file}: {error}") from error
     provenance = [_split_provenance(raw) for raw in arguments.provenance]
 

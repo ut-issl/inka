@@ -104,6 +104,98 @@ def test_the_cli_module_reports_merge_errors(tmp_path: Path) -> None:
     assert "more than one input" in result.stderr
 
 
+def test_merge_defaults_leave_provenance_empty() -> None:
+    merged = merge([(None, evidence("linux"))])
+
+    assert "provenance" in json.loads(merged)  # source_revision carries
+    data = json.loads(merged)
+    assert data["provenance"] == {"source_revision": "abc123"}
+
+
+def test_the_cli_module_writes_to_stdout_by_default(tmp_path: Path) -> None:
+    one = tmp_path / "one.json"
+    one.write_text(evidence("linux"), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "inka_evidence.merge_cli", str(one)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_env(),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["v"] == 1
+
+
+def test_the_cli_module_rejects_a_blank_label(tmp_path: Path) -> None:
+    one = tmp_path / "one.json"
+    one.write_text(evidence("linux"), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "inka_evidence.merge_cli", f"={one}"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_env(),
+    )
+
+    assert result.returncode != 0
+    assert "has a blank label" in result.stderr
+
+
+def test_the_cli_module_rejects_an_empty_file_name() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "inka_evidence.merge_cli", "linux="],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_env(),
+    )
+
+    assert result.returncode != 0
+    assert "empty file name" in result.stderr
+
+
+def test_the_cli_module_reports_non_utf8_input(tmp_path: Path) -> None:
+    binary = tmp_path / "binary.json"
+    binary.write_bytes(b"\xff\xfe\x00broken")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "inka_evidence.merge_cli", str(binary)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_env(),
+    )
+
+    assert result.returncode != 0
+    assert "cannot read" in result.stderr
+
+
+def test_the_cli_module_rejects_a_keyless_provenance_entry(tmp_path: Path) -> None:
+    one = tmp_path / "one.json"
+    one.write_text(evidence("linux"), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "inka_evidence.merge_cli",
+            "--provenance",
+            "=value",
+            str(one),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=scrubbed_env(),
+    )
+
+    assert result.returncode != 0
+    assert "is not key=value" in result.stderr
+
+
 def test_the_cli_module_reports_unreadable_files(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "inka_evidence.merge_cli", "missing.json"],

@@ -35,9 +35,10 @@ struct Cli {
 
 /// Splits a `--provenance` entry on its first `=`.
 fn parse_key_value(raw: &str) -> Result<(String, String), String> {
-    raw.split_once('=')
-        .map(|(key, value)| (key.to_owned(), value.to_owned()))
-        .ok_or_else(|| String::from("expected `key=value`"))
+    match raw.split_once('=') {
+        Some((key, value)) if !key.is_empty() => Ok((key.to_owned(), value.to_owned())),
+        _ => Err(String::from("expected `key=value`")),
+    }
 }
 
 /// Splits one `[LABEL=]FILE` argument. The part before the first `=` is a
@@ -54,11 +55,15 @@ fn run(cli: &Cli) -> Result<(), String> {
     let mut inputs = Vec::new();
     for raw in &cli.inputs {
         let (label, file) = split_input(raw);
+        if file.is_empty() {
+            return Err(format!("input `{raw}` has an empty file name"));
+        }
         let text = std::fs::read_to_string(file)
             .map_err(|error| format!("cannot read {file}: {error}"))?;
         inputs.push(MergeInput {
             label: label.map(str::to_owned),
             text,
+            name: Some(file.to_owned()),
         });
     }
     let run_id = std::env::var("CAPSULA_RUN_ID").ok();

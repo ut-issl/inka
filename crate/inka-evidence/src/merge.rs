@@ -20,12 +20,14 @@ use crate::schema::{self, Execution, InvalidEvidence, ParseError};
 /// The provenance key the merge carries over when every input agrees.
 const SOURCE_REVISION_KEY: &str = "source_revision";
 
-/// One input to [`merge`]: an evidence file's text and an optional label
-/// prefixed onto its case ids as `label/case`.
+/// One input to [`merge`]: an evidence file's text, an optional label
+/// prefixed onto its case ids as `label/case`, and an optional display
+/// name (typically the file name) used in error messages.
 #[derive(Debug, Clone)]
 pub struct MergeInput {
     pub label: Option<String>,
     pub text: String,
+    pub name: Option<String>,
 }
 
 /// A reason several evidence files could not merge into one.
@@ -36,16 +38,25 @@ pub enum MergeError {
     NoInputs,
 
     /// A label was given but blank; `input` is 1-based.
-    #[error("input {input} has a blank label")]
-    BlankLabel { input: usize },
+    #[error("input {input}{} has a blank label", display_name(name.as_deref()))]
+    BlankLabel { input: usize, name: Option<String> },
 
     /// An input did not read as a v1 evidence file; `input` is 1-based.
-    #[error("input {input}: {source}")]
+    #[error("input {input}{}: {source}", display_name(name.as_deref()))]
     Parse {
         input: usize,
+        name: Option<String>,
         #[source]
         source: ParseError,
     },
+
+    /// An input states a `source_revision` that is not a nonblank string,
+    /// which could neither be compared nor carried faithfully.
+    #[error(
+        "input {input}{} states a source_revision that is not a nonblank string",
+        display_name(name.as_deref())
+    )]
+    InvalidSourceRevision { input: usize, name: Option<String> },
 
     /// One test-id carries different bodies across inputs — the source
     /// changed between configuration runs.
@@ -61,10 +72,23 @@ pub enum MergeError {
     #[error("inputs disagree on source_revision: `{left}` and `{right}`")]
     SourceRevisionMismatch { left: String, right: String },
 
-    /// The merged file would violate the wire contract (for example a
-    /// blank provenance entry).
+    /// An explicit provenance entry for the merged file was rejected.
+    #[error("invalid merged provenance: {source}")]
+    Provenance {
+        #[source]
+        source: InvalidEvidence,
+    },
+
+    /// The merged file would violate the wire contract. Unreachable after
+    /// a successful parse of every input; kept so an internal
+    /// inconsistency fails loudly instead of panicking.
     #[error(transparent)]
     Invalid(#[from] InvalidEvidence),
+}
+
+/// Formats an input's display name for error messages.
+fn display_name(name: Option<&str>) -> String {
+    name.map(|name| format!(" ({name})")).unwrap_or_default()
 }
 
 /// Merges the inputs into one evidence file's text.
@@ -74,7 +98,9 @@ pub enum MergeError {
 /// merged provenance is `provenance` plus `capsula_run_id` filled from
 /// `capsula_run_id` (unless an explicit entry claimed it), with
 /// `source_revision` carried over automatically when every input states
-/// the same value; an explicit `provenance` entry overrides the carry.
+/// the same value. An explicit `provenance` entry overrides the carry
+/// (input disagreement is still an error), and an explicit
+/// `capsula_run_id` provenance entry beats the `capsula_run_id` argument.
 ///
 /// # Errors
 ///
@@ -104,19 +130,29 @@ pub fn merge(
         {
             return Err(MergeError::BlankLabel {
                 input: input_number,
+                name: input.name.clone(),
             });
         }
         let (file_provenance, file_tests) =
             schema::parse_with_provenance(&input.text).map_err(|source| MergeError::Parse {
                 input: input_number,
+                name: input.name.clone(),
                 source,
             })?;
-        revisions.push(
-            file_provenance
-                .get(SOURCE_REVISION_KEY)
-                .and_then(|value| value.as_str())
-                .map(str::to_owned),
-        );
+        revisions.push(match file_provenance.get(SOURCE_REVISION_KEY) {
+            None => None,
+            // A present revision must be a nonblank string: anything else
+            // could neither be compared nor carried faithfully.
+            Some(value) => match value.as_str() {
+                Some(revision) if !revision.trim().is_empty() => Some(revision.to_owned()),
+                _ => {
+                    return Err(MergeError::InvalidSourceRevision {
+                        input: input_number,
+                        name: input.name.clone(),
+                    });
+                }
+            },
+        });
 
         for test in file_tests {
             let executions: Vec<Execution> = test
@@ -155,10 +191,14 @@ pub fn merge(
 
     let mut builder = EvidenceBuilder::new();
     if let Some(revision) = shared_revision(&revisions)? {
-        builder.provenance(SOURCE_REVISION_KEY, revision)?;
+        builder
+            .provenance(SOURCE_REVISION_KEY, revision)
+            .map_err(|source| MergeError::Provenance { source })?;
     }
     for (key, value) in provenance {
-        builder.provenance(key, value)?;
+        builder
+            .provenance(key, value)
+            .map_err(|source| MergeError::Provenance { source })?;
     }
     builder.capsula_run_id(capsula_run_id);
     for id in order {
@@ -215,6 +255,7 @@ mod tests {
         MergeInput {
             label: label.map(str::to_owned),
             text,
+            name: None,
         }
     }
 
@@ -376,7 +417,119 @@ mod tests {
 
         let error = merge(&[input(Some("  "), one)], &[], None).expect_err("blank label");
 
-        assert!(matches!(error, MergeError::BlankLabel { input: 1 }));
+        assert!(matches!(error, MergeError::BlankLabel { input: 1, .. }));
+    }
+
+    #[test]
+    fn a_non_string_source_revision_is_an_error() {
+        let raw = r#"{"v":1,"provenance":{"source_revision":123},"tests":[
+            {"id":"t","body":"b","executions":[{"case":"linux"}]}]}"#;
+
+        let error =
+            merge(&[input(None, raw.to_owned())], &[], None).expect_err("non-string revision");
+
+        assert!(matches!(
+            error,
+            MergeError::InvalidSourceRevision { input: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn a_blank_source_revision_is_an_error() {
+        let raw = r#"{"v":1,"provenance":{"source_revision":"  "},"tests":[
+            {"id":"t","body":"b","executions":[{"case":"linux"}]}]}"#;
+
+        let error = merge(&[input(None, raw.to_owned())], &[], None).expect_err("blank revision");
+
+        assert!(matches!(
+            error,
+            MergeError::InvalidSourceRevision { input: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn a_cross_label_case_collision_is_an_error() {
+        // `a` labeled with `b/c` collides with `a/b` labeled with `c`.
+        let one = evidence(None, &[("t", "body", &[("c", None)])]);
+        let two = evidence(None, &[("t", "body", &[("b/c", None)])]);
+
+        let error = merge(&[input(Some("a/b"), one), input(Some("a"), two)], &[], None)
+            .expect_err("prefixed cases collide");
+
+        assert!(
+            matches!(error, MergeError::DuplicateCase { test_id, case } if test_id == "t" && case == "a/b/c")
+        );
+    }
+
+    #[test]
+    fn ordering_follows_first_appearance_across_three_inputs() {
+        let one = evidence(None, &[("alpha", "body", &[("one", None)])]);
+        let two = evidence(
+            None,
+            &[
+                ("beta", "body", &[("two", None)]),
+                ("alpha", "body", &[("two", None)]),
+            ],
+        );
+        let three = evidence(None, &[("alpha", "body", &[("three", None)])]);
+
+        let merged = merge(
+            &[input(None, one), input(None, two), input(None, three)],
+            &[],
+            None,
+        )
+        .expect("merges");
+
+        let tests = parse(&merged).expect("valid");
+        assert_eq!(tests[0].id, "alpha");
+        assert_eq!(tests[1].id, "beta");
+        let cases: Vec<&str> = tests[0]
+            .executions
+            .iter()
+            .map(|execution| execution.case.as_str())
+            .collect();
+        assert_eq!(cases, ["one", "two", "three"]);
+    }
+
+    #[test]
+    fn an_explicit_capsula_run_id_beats_the_argument() {
+        let one = evidence(None, &[("t", "body", &[("linux", None)])]);
+
+        let merged = merge(
+            &[input(None, one)],
+            &[(String::from("capsula_run_id"), String::from("explicit"))],
+            Some(String::from("from-env")),
+        )
+        .expect("merges");
+
+        assert!(merged.contains("\"capsula_run_id\": \"explicit\""));
+    }
+
+    #[test]
+    fn a_blank_explicit_provenance_entry_names_the_merge() {
+        let one = evidence(None, &[("t", "body", &[("linux", None)])]);
+
+        let error = merge(
+            &[input(None, one)],
+            &[(String::from("runner"), String::from("  "))],
+            None,
+        )
+        .expect_err("blank provenance");
+
+        assert!(error.to_string().starts_with("invalid merged provenance:"));
+    }
+
+    #[test]
+    fn a_named_input_appears_in_its_parse_error() {
+        let bad = MergeInput {
+            label: None,
+            text: String::from("not json"),
+            name: Some(String::from("linux.json")),
+        };
+
+        let error = merge(&[bad], &[], None).expect_err("not evidence");
+
+        assert!(error.to_string().starts_with("input 1 (linux.json):"));
     }
 
     #[test]

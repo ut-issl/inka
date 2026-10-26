@@ -176,7 +176,8 @@ push前に構成ごとの証拠ファイルを1つへ併合する:
 
    case軸が既に埋まっている場合(pytestのパラメタライズ)は入力に
    ラベルを付ける。`label=file` はそのファイルの全case IDを
-   `label/case` に接頭辞化する:
+   `label/case` に接頭辞化する(パス区切りを含む部分はファイル名として
+   読むので、`=` を含むファイル名は `./odd=name` のように書く):
 
    ```console
    inka-evidence-merge --output evidence.json \
@@ -187,7 +188,8 @@ push前に構成ごとの証拠ファイルを1つへ併合する:
 
 併合は各test-idのexecutionsを1つの宣言集合へ和集合化する — bindは全構成を
 要求するようになる — とともに、本文の不一致・caseの重複・`source_revision`
-の食い違いには明示的に失敗する。併合後ファイルのprovenanceは併合自身のもの
+の食い違いには明示的に失敗する。一部の入力にしか現れないtestは、その宣言
+どおりのcaseのまま含まれる。併合後ファイルのprovenanceは併合自身のもの
 (`--provenance`、併合runの `CAPSULA_RUN_ID`)と、全入力が一致する場合の
 `source_revision` だけである。
 

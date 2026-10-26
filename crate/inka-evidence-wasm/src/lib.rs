@@ -180,6 +180,8 @@ const MERGE_TYPES: &'static str = r#"
 export interface MergeInput {
     label?: string;
     text: string;
+    /** A display name (typically the file name) used in error messages. */
+    name?: string;
 }
 
 /** Options for `merge`. */
@@ -213,6 +215,8 @@ struct WireMergeInput {
     #[serde(default)]
     label: Option<String>,
     text: String,
+    #[serde(default)]
+    name: Option<String>,
 }
 
 /// The wire shape of the merge options.
@@ -273,6 +277,7 @@ pub fn merge(inputs: MergeInputArray, options: Option<MergeOptionsArg>) -> Resul
         .map(|input| inka_evidence::MergeInput {
             label: input.label,
             text: input.text,
+            name: input.name,
         })
         .collect();
     let provenance: Vec<(String, String)> =

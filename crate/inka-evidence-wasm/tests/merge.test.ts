@@ -75,6 +75,37 @@ test("a malformed input shape is a TypeError", () => {
   );
 });
 
+test("null and undefined options are accepted", () => {
+  const text = evidence("linux", "pass");
+
+  expect(JSON.parse(merge([{ text }], undefined)).v).toBe(1);
+  expect(
+    JSON.parse(merge([{ text }], null as unknown as undefined)).v,
+  ).toBe(1);
+});
+
+test("an unknown option key is a TypeError", () => {
+  const bogus = { capsulaRunID: "typo" } as unknown as { capsulaRunId: string };
+
+  expect(() => merge([{ text: evidence("linux") }], bogus)).toThrowError(
+    expect.objectContaining({
+      name: "TypeError",
+      message: expect.stringContaining("unknown field `capsulaRunID`"),
+    }),
+  );
+});
+
+test("a named input appears in merge errors", () => {
+  expect(() =>
+    merge([{ text: "not json", name: "linux.json" }]),
+  ).toThrowError(
+    expect.objectContaining({
+      name: "InvalidEvidenceError",
+      message: expect.stringContaining("input 1 (linux.json):"),
+    }),
+  );
+});
+
 test("the merge bin merges files end to end", () => {
   const scratch = mkdtempSync(join(tmpdir(), "inka-evidence-merge-"));
   const linux = join(scratch, "linux.json");
@@ -110,6 +141,55 @@ test("the merge bin merges files end to end", () => {
       (execution: { case: string }) => execution.case,
     ),
   ).toStrictEqual(["linux/default", "macos/default"]);
+});
+
+test("the merge bin handles option forms, help and bad inputs", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "inka-evidence-merge-"));
+  const one = join(scratch, "one.json");
+  writeFileSync(one, evidence("linux", "pass"), "utf8");
+  const bin = join(__dirname, "..", "dist", "merge-cli.js");
+  const out = join(scratch, "inline.json");
+
+  // --output=PATH inline form
+  const inline = spawnSync(
+    process.execPath,
+    [bin, `--output=${out}`, one],
+    { encoding: "utf8" },
+  );
+  expect(inline.status, inline.stderr).toBe(0);
+  expect(JSON.parse(readFileSync(out, "utf8")).v).toBe(1);
+
+  // --help prints usage and exits zero
+  const help = spawnSync(process.execPath, [bin, "--help"], {
+    encoding: "utf8",
+  });
+  expect(help.status).toBe(0);
+  expect(help.stdout).toContain("usage:");
+
+  // unknown flags, missing values, blank labels and empty file names fail
+  const unknown = spawnSync(process.execPath, [bin, "--bogus", one], {
+    encoding: "utf8",
+  });
+  expect(unknown.status).not.toBe(0);
+  expect(unknown.stderr).toContain("unknown option");
+
+  const missingValue = spawnSync(process.execPath, [bin, one, "--output"], {
+    encoding: "utf8",
+  });
+  expect(missingValue.status).not.toBe(0);
+  expect(missingValue.stderr).toContain("--output needs a value");
+
+  const blankLabel = spawnSync(process.execPath, [bin, `=${one}`], {
+    encoding: "utf8",
+  });
+  expect(blankLabel.status).not.toBe(0);
+  expect(blankLabel.stderr).toContain("has a blank label");
+
+  const emptyFile = spawnSync(process.execPath, [bin, "linux="], {
+    encoding: "utf8",
+  });
+  expect(emptyFile.status).not.toBe(0);
+  expect(emptyFile.stderr).toContain("empty file name");
 });
 
 test("the merge bin reports conflicts and unreadable files", () => {

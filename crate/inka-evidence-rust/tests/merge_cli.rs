@@ -93,6 +93,59 @@ fn a_case_collision_fails_explicitly() {
 }
 
 #[test]
+fn a_blank_label_fails_explicitly() {
+    let file = evidence_file("merge-blank-label.json", "default", Some(Outcome::Pass));
+
+    merge_command()
+        .arg(format!("={}", file.display()))
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("has a blank label"));
+}
+
+#[test]
+fn an_empty_file_name_fails_explicitly() {
+    merge_command()
+        .arg("linux=")
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("empty file name"));
+}
+
+#[test]
+fn a_malformed_provenance_entry_is_rejected() {
+    merge_command()
+        .arg("--provenance")
+        .arg("nokey")
+        .arg("whatever.json")
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("key=value"));
+}
+
+#[test]
+fn a_body_mismatch_fails_explicitly() {
+    let mut builder = EvidenceBuilder::new();
+    builder
+        .add_test(
+            "suite::test",
+            "another body",
+            vec![Execution::new("macos", None)],
+        )
+        .expect("valid");
+    let other = Path::new(env!("CARGO_TARGET_TMPDIR")).join("merge-other-body.json");
+    std::fs::write(&other, builder.finish()).expect("writes");
+    let one = evidence_file("merge-body-one.json", "linux", Some(Outcome::Pass));
+
+    merge_command()
+        .arg(one.display().to_string())
+        .arg(other.display().to_string())
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("different bodies"));
+}
+
+#[test]
 fn a_missing_input_file_is_a_clear_error() {
     merge_command()
         .arg("linux=does-not-exist.json")

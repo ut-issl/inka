@@ -155,7 +155,11 @@ fn merge(
 ) -> PyResult<String> {
     let inputs: Vec<inka_evidence::MergeInput> = inputs
         .into_iter()
-        .map(|(label, text)| inka_evidence::MergeInput { label, text })
+        .map(|(label, text)| inka_evidence::MergeInput {
+            label,
+            text,
+            name: None,
+        })
         .collect();
     inka_evidence::merge(&inputs, &provenance.unwrap_or_default(), capsula_run_id)
         .map_err(|error| InvalidEvidenceError::new_err(error.to_string()))

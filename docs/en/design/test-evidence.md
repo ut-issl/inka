@@ -221,7 +221,8 @@ tests, merge their evidence files into one before pushing:
 
    Where the case axis is already taken (pytest's parametrizations),
    label the inputs instead; `label=file` prefixes that file's case ids
-   as `label/case`:
+   as `label/case` (a segment containing a path separator is read as a
+   file name, so write a file whose name contains `=` as `./odd=name`):
 
    ```console
    inka-evidence-merge --output evidence.json \
@@ -232,7 +233,8 @@ tests, merge their evidence files into one before pushing:
 
 The merge unions each test-id's executions into one declared set — so the
 bind requires every configuration — and fails explicitly on differing
-bodies, duplicate cases or disagreeing `source_revision` entries. The
+bodies, duplicate cases or disagreeing `source_revision` entries. A test
+present in only some inputs keeps exactly its declared cases. The
 merged file's provenance is the merge's own (`--provenance`, the
 `CAPSULA_RUN_ID` of the merge run), plus `source_revision` when all
 inputs agree on it.
