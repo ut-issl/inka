@@ -109,7 +109,8 @@ capsulaサーバで実地検証した。Rustアダプターが出力した証拠
 ### ソース側
 
 ソースレポジトリは `capsula run` の中でテストを実行し、アダプターが証拠
-JSONを書き、`capture-file` フックがそれをrun成果物として保存する:
+jsonを書き、`capture-file` フックがそれをrun成果物として保存する。
+`capsula.toml` に:
 
 ```toml
 server = "https://capsula.example.com"
@@ -134,10 +135,12 @@ $ capsula run -- inka-evidence-rust --output evidence.json \
 $ capsula push <RUN_NAME>
 ```
 
-アダプターを `capsula run` の中で動かすことで、エクスポートされる
-`CAPSULA_RUN_ID` が証拠の `capsula_run_id` provenanceに自動で入る。テスト
-ビルドが生成するものはすべてコミットするか無視リストに入れること
-(lockfileも含む): `capture-git-repo` フックはダーティなツリーを拒否する
+`capsula run` は2つの識別子を表示する: runのULID(`<RUN_ID>`。エクスポート
+される `CAPSULA_RUN_ID` が証拠の `capsula_run_id` provenanceに書き込むのと
+同じ値)と、生成された名前(`<RUN_NAME>`。例 `uppity-bead`)で、後者は
+プロジェクト側の `capsula pull` も再表示する。テストビルドが生成するものは
+すべてコミットするか無視リストに入れること(アダプターの `evidence.json`
+もlockfileも含む): `capture-git-repo` フックはダーティなツリーを拒否する
 ため、初回runのビルドが生成したlockfileが2回目のrunを中断させる。
 
 ### プロジェクト側
@@ -157,8 +160,11 @@ files = ["evidence/test-evidence.json"]
 ```
 
 コピー方式なら、設定パスはvaultの日付入りrunディレクトリに依存しない。
-pullしたrunの場所は `capsula run-dir` で解決できる。配送を信頼する前に、
-pullしたrun IDと証拠自身のprovenanceを突き合わせる:
+pullしたrunの場所は名前から `capsula run-dir` で解決できる。パス中の
+`post-0-capture-file/` はcapsulaのフック出力レイアウト(添字はフックの
+順序に従う)で、このシェル手順にだけ現れる — inkaがvaultレイアウトを解釈
+しないことは変わらない。配送を信頼する前に、pullしたrun IDと証拠自身の
+provenanceを突き合わせる:
 
 ```console
 $ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
@@ -166,8 +172,9 @@ $ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
 ```
 
 責務は責務分担の節のとおり: capsulaはpull時にサイズとSHA-256を検証し、
-pullで復元したrunの再pushを拒否する。コピーしたファイルが最新かどうかは
-プロジェクト側のpull運用の責任で、inkaは設定パスをそのまま読むだけ。
+pullで復元したrunの再pushを拒否する。設定パスを最新に保つのは、責務分担の
+節がinkaの外に置いた配送機構の一部 — このフローでは配送を運用する者が行う
+`pull` と `cp` の手順 — であり、inkaは設定パスをそのまま読むだけ。
 このパスはマニフェスト相対で、意図的に制限しない — 絶対パスも `..` も
 許容する。証拠の置き場所を宣言するのはマニフェストの作者だからである。
 
