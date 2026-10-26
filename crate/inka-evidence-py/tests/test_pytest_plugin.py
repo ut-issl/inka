@@ -295,3 +295,205 @@ def test_a_malformed_provenance_entry_is_a_usage_error(
 
     assert result.ret == pytest.ExitCode.USAGE_ERROR
     result.stderr.fnmatch_lines(["*is not key=value*"])
+
+
+def test_a_rejected_item_suppresses_the_whole_emission(
+    pytester: pytest.Pytester,
+) -> None:
+    # The function tests collect fine before the doctest is rejected; a
+    # partial declaration must not be written.
+    pytester.makepyfile(
+        test_aaa_fine="def test_fine():\n    assert True\n",
+        zzz_doc=(
+            "def documented():\n"
+            '    """Doubles.\n'
+            "\n"
+            "    >>> documented()\n"
+            "    2\n"
+            '    """\n'
+            "    return 2\n"
+        ),
+    )
+    evidence = pytester.path / "evidence.json"
+
+    result = pytester.runpytest(
+        *PLUGIN_ARGS, "--doctest-modules", "--inka-evidence", str(evidence)
+    )
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    assert not evidence.exists()
+
+
+def test_a_stale_evidence_file_is_cleared_up_front(
+    pytester: pytest.Pytester,
+) -> None:
+    evidence = pytester.path / "evidence.json"
+    evidence.write_text('{"stale": true}', encoding="utf-8")
+
+    result = pytester.runpytest(*PLUGIN_ARGS, "--inka-evidence", str(evidence))
+
+    assert result.ret == pytest.ExitCode.NO_TESTS_COLLECTED
+    assert not evidence.exists(), "a suppressed run must not leave stale evidence"
+
+
+def test_a_collection_only_run_emits_nothing(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(test_one="def test_one():\n    assert True\n")
+    evidence = pytester.path / "evidence.json"
+
+    result = pytester.runpytest(
+        *PLUGIN_ARGS, "--collect-only", "--inka-evidence", str(evidence)
+    )
+
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines(["*collection-only run*no evidence was emitted*"])
+    assert not evidence.exists()
+
+
+def test_a_wrapping_decorator_without_wraps_is_an_explicit_error(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        test_wrapped=(
+            "def sneaky(function):\n"
+            "    def wrapper(*args, **kwargs):\n"
+            "        return function(*args, **kwargs)\n"
+            "    return wrapper\n"
+            "\n"
+            "\n"
+            "@sneaky\n"
+            "def test_hidden():\n"
+            "    assert True\n"
+        )
+    )
+    evidence = pytester.path / "evidence.json"
+
+    result = pytester.runpytest(*PLUGIN_ARGS, "--inka-evidence", str(evidence))
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*'wrapper'*hides the test's own source*"])
+    assert not evidence.exists()
+
+
+def test_an_unwritable_output_path_is_a_clear_error(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(test_one="def test_one():\n    assert True\n")
+    evidence = pytester.path / "missing-directory" / "evidence.json"
+
+    result = pytester.runpytest(*PLUGIN_ARGS, "--inka-evidence", str(evidence))
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*cannot emit the evidence*"])
+
+
+def test_duplicate_nodeids_are_a_clear_error(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(test_one="def test_one():\n    assert True\n")
+    evidence = pytester.path / "evidence.json"
+
+    result = pytester.runpytest(
+        *PLUGIN_ARGS,
+        "--keep-duplicates",
+        "--inka-evidence",
+        str(evidence),
+        "test_one.py",
+        "test_one.py",
+    )
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*cannot emit the evidence*"])
+    assert not evidence.exists()
+
+
+def test_an_inherited_method_is_declared_once_per_subclass(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        test_inherit=(
+            "class Base:\n"
+            "    def test_shared(self):\n"
+            "        assert True\n"
+            "\n"
+            "\n"
+            "class TestA(Base):\n"
+            "    pass\n"
+            "\n"
+            "\n"
+            "class TestB(Base):\n"
+            "    pass\n"
+        )
+    )
+    evidence = pytester.path / "evidence.json"
+
+    pytester.runpytest(*PLUGIN_ARGS, "--inka-evidence", str(evidence)).assert_outcomes(
+        passed=2
+    )
+
+    tests = by_test_id(read_evidence(evidence))
+    first = tests["test_inherit.py::TestA::test_shared"]
+    second = tests["test_inherit.py::TestB::test_shared"]
+    assert first["body"] == second["body"]
+    assert "def test_shared" in first["body"]
+
+
+def test_awkward_parameter_ids_split_cleanly(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(
+        test_ids=(
+            "import pytest\n"
+            "\n"
+            "\n"
+            '@pytest.mark.parametrize("b", [1, 2])\n'
+            '@pytest.mark.parametrize("a", ["x]y"])\n'
+            "def test_stacked(a, b):\n"
+            "    assert a and b\n"
+        )
+    )
+    evidence = pytester.path / "evidence.json"
+
+    pytester.runpytest(*PLUGIN_ARGS, "--inka-evidence", str(evidence)).assert_outcomes(
+        passed=2
+    )
+
+    tests = by_test_id(read_evidence(evidence))
+    assert outcome_by_case(tests["test_ids.py::test_stacked"]) == {
+        "x]y-1": "pass",
+        "x]y-2": "pass",
+    }
+
+
+def test_rerun_reports_are_not_final(pytester: pytest.Pytester) -> None:
+    # pytest-rerunfailures marks retried attempts with outcome "rerun";
+    # only the final attempt may enter the evidence.
+    from types import SimpleNamespace
+
+    from inka_evidence.pytest_plugin import _EvidenceCollector
+
+    collector = _EvidenceCollector(pytester.path / "unused.json", [])
+    nodeid = "test_flaky.py::test_flaky"
+    collector.pytest_runtest_logreport(
+        SimpleNamespace(nodeid=nodeid, outcome="rerun", failed=True, skipped=False, when="call")  # type: ignore[arg-type]
+    )
+    assert collector._outcomes == {}
+
+    collector.pytest_runtest_logreport(
+        SimpleNamespace(nodeid=nodeid, outcome="passed", failed=False, skipped=False, when="call")  # type: ignore[arg-type]
+    )
+    assert collector._outcomes == {nodeid: "pass"}
+
+
+def test_xdist_distribution_detection_uses_the_live_options() -> None:
+    from types import SimpleNamespace
+
+    from inka_evidence.pytest_plugin import _xdist_distribution_active
+
+    def config(has_xdist: bool, processes: object, dist: str) -> object:
+        options = {"numprocesses": processes, "dist": dist}
+        return SimpleNamespace(
+            pluginmanager=SimpleNamespace(hasplugin=lambda name: has_xdist),
+            getoption=lambda name, default=None: options.get(name, default),
+        )
+
+    assert not _xdist_distribution_active(config(False, 4, "load"))  # type: ignore[arg-type]
+    assert not _xdist_distribution_active(config(True, None, "no"))  # type: ignore[arg-type]
+    assert not _xdist_distribution_active(config(True, 0, "no"))  # type: ignore[arg-type]
+    assert _xdist_distribution_active(config(True, 4, "no"))  # type: ignore[arg-type]
+    assert _xdist_distribution_active(config(True, None, "load"))  # type: ignore[arg-type]

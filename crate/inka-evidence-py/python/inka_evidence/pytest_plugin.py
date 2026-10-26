@@ -3,7 +3,11 @@
 Inert unless ``--inka-evidence=PATH`` is passed. The required execution
 set is declared from the finally selected items, never inferred from
 results: a run that stops early (``-x``, an interrupt) leaves declared
-executions with a missing outcome.
+executions with a missing outcome. Whenever the declared set would be
+unreliable — collection errors, an unsupported item, a collection-only
+run, an empty selection — nothing is emitted and the reason is printed;
+the target path is removed up front, so a leftover file can never pass
+for this run's evidence.
 
 Identity: the test-id is the nodeid without its parametrization part
 (``tests/test_x.py::TestGroup::test_m``); each parametrization is one
@@ -13,9 +17,11 @@ approval interface.
 
 Bodies are the test function's own definition — decorators included —
 via :func:`inspect.getsource`; fixture and helper bodies stay excluded,
-as the contract assigns dependency capture elsewhere. Items that are not
-function-based tests (doctests, ...) and pytest-xdist distribution are
-explicit errors; with pytest-rerunfailures the final attempt wins.
+as the contract assigns dependency capture elsewhere. A decorator that
+replaces the function without ``functools.wraps`` would hide the real
+source, so it is an explicit error, as are items that are not
+function-based tests (doctests, ...) and pytest-xdist distribution. With
+pytest-rerunfailures the final attempt wins.
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from inka_evidence import EvidenceBuilder, Execution
+from inka_evidence import EvidenceBuilder, Execution, InvalidEvidenceError
 
 DEFAULT_CASE = "default"
 
@@ -36,6 +42,7 @@ _OUTCOME_SKIP = "skip"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
+    """Declares the plugin's own command-line options."""
     group = parser.getgroup("inka-evidence")
     group.addoption(
         "--inka-evidence",
@@ -53,6 +60,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    """Arms the collector when emission is requested, after sanity checks."""
     output = config.getoption("--inka-evidence")
     raw_provenance: list[str] = config.getoption("--inka-evidence-provenance")
     if output is None:
@@ -67,12 +75,22 @@ def pytest_configure(config: pytest.Config) -> None:
             "run without -n/--dist or drop --inka-evidence"
         )
     provenance = [_split_provenance(entry) for entry in raw_provenance]
+    path = Path(output)
+    # A leftover file from an earlier run must never pass for this run's
+    # evidence: after a suppressed emission the path stays absent.
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as error:
+        raise pytest.UsageError(
+            f"inka-evidence: cannot clear the evidence path {path}: {error}"
+        ) from error
     config.pluginmanager.register(
-        _EvidenceCollector(Path(output), provenance), "inka-evidence-collector"
+        _EvidenceCollector(path, provenance), "inka-evidence-collector"
     )
 
 
 def _split_provenance(entry: str) -> tuple[str, str]:
+    """Splits one ``key=value`` provenance option on its first ``=``."""
     key, separator, value = entry.partition("=")
     if not separator:
         raise pytest.UsageError(
@@ -82,11 +100,20 @@ def _split_provenance(entry: str) -> tuple[str, str]:
 
 
 def _xdist_distribution_active(config: pytest.Config) -> bool:
+    """Whether pytest-xdist would distribute this run across workers."""
     if not config.pluginmanager.hasplugin("xdist"):
         return False
     processes = config.getoption("numprocesses", default=None)
     distribution = config.getoption("dist", default="no")
     return bool(processes) or distribution != "no"
+
+
+def _collection_only(config: pytest.Config) -> bool:
+    """Whether this run never calls tests (``--collect-only`` and kin)."""
+    return any(
+        config.getoption(name, default=False)
+        for name in ("collectonly", "setuponly", "setupplan")
+    )
 
 
 def _identify(item: pytest.Item) -> tuple[str, str]:
@@ -104,15 +131,23 @@ def _identify(item: pytest.Item) -> tuple[str, str]:
     if not item.nodeid.endswith(suffix):
         raise pytest.UsageError(
             f"inka-evidence: cannot split the parameter id {callspec.id!r} "
-            f"out of {item.nodeid}"
+            f"out of {item.nodeid}; please report this nodeid shape"
         )
     return item.nodeid[: -len(suffix)], callspec.id
 
 
 def _body(item: pytest.Function) -> str:
     """The test function's own definition, decorators included, verbatim."""
+    function = item.function
+    name = getattr(function, "__name__", "<unnamed>")
+    if name != item.originalname:
+        raise pytest.UsageError(
+            f"inka-evidence: {item.nodeid} resolves to a function named "
+            f"{name!r}; a decorator without functools.wraps (or an alias) "
+            "hides the test's own source"
+        )
     try:
-        return inspect.getsource(item.function)
+        return inspect.getsource(function)
     except (OSError, TypeError) as error:
         raise pytest.UsageError(
             f"inka-evidence: cannot extract the source of {item.nodeid}: {error}"
@@ -140,19 +175,28 @@ class _EvidenceCollector:
         self._broken: str | None = None
 
     def pytest_collection_finish(self, session: pytest.Session) -> None:
-        for item in session.items:
-            test_id, case = _identify(item)
-            declared = self._tests.get(test_id)
-            if declared is None:
-                declared = _DeclaredTest(_body(item))
-                self._tests[test_id] = declared
-            declared.cases.append((case, item.nodeid))
+        # Stage into a local so a rejected item never leaves a partial
+        # declaration behind: pytest still runs sessionfinish after a
+        # UsageError raised here.
+        staged: dict[str, _DeclaredTest] = {}
+        try:
+            for item in session.items:
+                test_id, case = _identify(item)
+                declared = staged.get(test_id)
+                if declared is None:
+                    declared = _DeclaredTest(_body(item))
+                    staged[test_id] = declared
+                declared.cases.append((case, item.nodeid))
+        except pytest.UsageError:
+            self._broken = "an unsupported test item"
+            raise
+        self._tests = staged
 
     def pytest_collectreport(self, report: pytest.CollectReport) -> None:
         if report.failed:
             self._broken = "collection errors"
 
-    def pytest_internalerror(self, excrepr: object) -> None:
+    def pytest_internalerror(self, excrepr: object, excinfo: object) -> None:
         self._broken = "an internal pytest error"
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -180,11 +224,27 @@ class _EvidenceCollector:
                 "no evidence was emitted",
             )
             return
+        if _collection_only(session.config):
+            self._announce(
+                session.config,
+                "a collection-only run reports no results, "
+                "no evidence was emitted",
+            )
+            return
         if not self._tests:
             self._announce(
                 session.config, "the run selected no tests, no evidence was emitted"
             )
             return
+        try:
+            self._emit()
+        except (InvalidEvidenceError, OSError) as error:
+            raise pytest.UsageError(
+                f"inka-evidence: cannot emit the evidence: {error}"
+            ) from error
+        self._announce(session.config, f"wrote {self._output}")
+
+    def _emit(self) -> None:
         builder = EvidenceBuilder()
         builder.capsula_env()
         for key, value in self._provenance:
@@ -195,8 +255,10 @@ class _EvidenceCollector:
                 for case, nodeid in declared.cases
             ]
             builder.add_test(test_id, declared.body, executions)
-        self._output.write_text(builder.finish(), encoding="utf-8")
-        self._announce(session.config, f"wrote {self._output}")
+        # Atomic: a crash mid-write cannot leave a half-written file.
+        scratch = self._output.with_name(self._output.name + ".tmp")
+        scratch.write_text(builder.finish(), encoding="utf-8")
+        scratch.replace(self._output)
 
     @staticmethod
     def _announce(config: pytest.Config, message: str) -> None:

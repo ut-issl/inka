@@ -44,7 +44,15 @@ after `-k`/`-m` deselection — never inferred from results:
   and a strict xpass a fail, following pytest's own verdict;
 - a declared test the session never reported — `-x`, an interrupt —
   keeps a missing outcome, which never establishes a bind;
-- a deselected test is not declared at all.
+- a deselected test is not declared at all; a module skipped at
+  collection time (`pytest.skip(allow_module_level=True)`,
+  `importorskip`) likewise contributes nothing, because the skip is a
+  selection-time decision.
+
+The target path is removed when the session starts and written atomically
+at the end, so after a suppressed emission (collection errors, a rejected
+item, `--collect-only`, an empty selection) the path is absent — a stale
+file can never pass for the run's evidence.
 
 ### Test-id construction
 
@@ -62,8 +70,11 @@ parametrizations requires fresh approval.
 
 The body is the test function's own definition, decorators included,
 exactly as `inspect.getsource` reads it (indentation and trailing newline
-preserved). Fixture and helper bodies stay excluded: the contract assigns
-dependency capture elsewhere.
+preserved — moving a test into or out of a class changes the body and so
+the approval interface). Fixture and helper bodies stay excluded: the
+contract assigns dependency capture elsewhere. A decorator that replaces
+the function without `functools.wraps` would hide the real source and is
+rejected explicitly.
 
 ### Topology and version limits
 
@@ -73,6 +84,7 @@ dependency capture elsewhere.
 - Items that are not function-based tests — doctests among them — are
   rejected explicitly rather than guessed at.
 - With pytest-rerunfailures, the final attempt is the recorded outcome.
-- Collection errors suppress emission entirely: a partially declared set
-  would silently narrow the evidence.
+- Collection errors and collection-only runs (`--collect-only`,
+  `--setup-only`, `--setup-plan`) suppress emission entirely: a partially
+  declared set or an all-missing run would mislead.
 - Tests that wrap subprocesses appear only as the outer pytest test.
