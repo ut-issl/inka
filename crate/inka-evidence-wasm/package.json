@@ -5,8 +5,18 @@
   "description": "Emit inka test evidence v1 JSON from JavaScript test adapters",
   "main": "pkg/inka_evidence_wasm.js",
   "types": "pkg/inka_evidence_wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./pkg/inka_evidence_wasm.d.ts",
+      "default": "./pkg/inka_evidence_wasm.js"
+    },
+    "./vitest": {
+      "types": "./dist/vitest.d.ts",
+      "default": "./dist/vitest.js"
+    }
+  },
   "scripts": {
-    "build": "wasm-pack build --release --target nodejs",
+    "build": "wasm-pack build --release --target nodejs && tsc -p tsconfig.build.json",
     "test": "npm run build && vitest run",
     "typecheck": "npm run build && tsc --noEmit"
   },
@@ -16,5 +26,8 @@
     "typescript": "7.0.2",
     "vitest": "5.0.5",
     "wasm-pack": "0.15.0"
+  },
+  "dependencies": {
+    "@babel/parser": "8.0.8"
   }
 }
