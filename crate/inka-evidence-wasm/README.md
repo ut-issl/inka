@@ -54,7 +54,11 @@ from results:
 - a `test.skip` / `test.todo` reports `skip`;
 - a declared test the run never reported — `--bail`, an interrupt —
   keeps a missing outcome, which never establishes a bind;
-- a test excluded by filters is not declared at all.
+- a test excluded by a name filter (`-t`, `.only`) stays declared and
+  reports `skip` (Vitest still collects it); only file-level selection
+  removes tests from the declaration entirely;
+- a run with unhandled errors outside the tests suppresses emission: the
+  recorded outcomes would be untrustworthy.
 
 Each run records one execution per test, labeled by the `case` option
 (default `default`); runs under other configurations are separate
@@ -86,14 +90,24 @@ for `test.each` the full chain including the table — sliced verbatim from
 the original source at the task's reported location (parsed with
 `@babel/parser`; TypeScript and JSX included). Helper functions and
 fixtures outside the call stay excluded: the contract assigns dependency
-capture elsewhere. A location the slicer cannot resolve to a call
-expression is an explicit error.
+capture elsewhere. The resolved call is cross-checked against the task —
+a literal test name must match (each patterns placeholder-wise) — and a
+location the slicer cannot resolve or verify is an explicit error. A
+dynamic test name (a variable, a template with substitutions) cannot be
+cross-checked and is recorded as collected.
 
 ### Topology and version limits
 
-- Vitest >= 5 on Node (the `--target nodejs` wasm build).
+- Vitest >= 5 on Node ^22.18 or >= 24.11 (the `--target nodejs` wasm
+  build; `@babel/parser` is loaded through `require(esm)`).
 - `includeTaskLocation: true` is required; its absence is an explicit
   error.
+- The tagged-template form of `each` is rejected explicitly: Vitest
+  reports untrustworthy locations for it, which could slice a neighboring
+  test's body. Use the array form.
+- Watch mode and filtered re-runs are unsupported: every re-run rewrites
+  the file, so partial evidence would replace full evidence. Run the
+  evidence pass as a one-shot `vitest run`.
 - Retries (`retry`) record the final result.
 - Multi-project workspaces are supported through the `[project]` prefix;
   an unnamed project in more than one config colliding on the same file

@@ -31,8 +31,12 @@
  *
  * Bodies are the whole test call expression — declaration and callback,
  * for `test.each` the full chain including the table — sliced verbatim
- * from the original source at the task's reported location. Anything the
- * slicer cannot resolve is an explicit error, never a guess.
+ * from the original source at the task's reported location. The resolved
+ * call is cross-checked against the task: a literal test name must match
+ * (each patterns are matched placeholder-wise), and the tagged-template
+ * `each` form is rejected outright because Vitest reports untrustworthy
+ * locations for it. Anything the slicer cannot resolve or verify is an
+ * explicit error, never a guess.
  */
 
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -82,9 +86,13 @@ export default class InkaEvidenceReporter implements Reporter {
     // A leftover file from an earlier run must never pass for this run's
     // evidence: after a suppressed emission the path stays absent.
     rmSync(this.outputPath(), { force: true });
+    rmSync(`${this.outputPath()}.tmp`, { force: true });
   }
 
-  onTestRunEnd(testModules: ReadonlyArray<TestModule>): void {
+  onTestRunEnd(
+    testModules: ReadonlyArray<TestModule>,
+    unhandledErrors: ReadonlyArray<unknown>,
+  ): void {
     const uncollected = testModules.filter(
       (module) => module.errors().length > 0,
     );
@@ -93,6 +101,15 @@ export default class InkaEvidenceReporter implements Reporter {
       this.announce(
         `collection errors in ${names}: the declared set is unreliable, ` +
           "no evidence was emitted",
+      );
+      return;
+    }
+    if (unhandledErrors.length > 0) {
+      // An error outside any test (an unhandled rejection, a worker crash)
+      // makes the recorded outcomes untrustworthy.
+      this.announce(
+        `${unhandledErrors.length} unhandled error(s) outside the tests: ` +
+          "the results are unreliable, no evidence was emitted",
       );
       return;
     }
@@ -127,7 +144,7 @@ export default class InkaEvidenceReporter implements Reporter {
               "`test.includeTaskLocation: true` in the vitest config",
           );
         }
-        const body = sources.slice(module.moduleId, location, testId);
+        const body = sources.slice(module.moduleId, location, testId, test.name);
         builder.addTest(testId, body, [
           { case: caseId, outcome: mapOutcome(test.result().state, testId) },
         ]);
@@ -183,7 +200,14 @@ function mapOutcome(
 
 function relativeToRoot(root: string, moduleId: string): string {
   const prefix = root.endsWith("/") ? root : `${root}/`;
-  return moduleId.startsWith(prefix) ? moduleId.slice(prefix.length) : moduleId;
+  if (!moduleId.startsWith(prefix)) {
+    // An absolute fallback would make the test-id machine-specific.
+    throw new Error(
+      `inka-evidence: ${moduleId} lies outside the vitest root ${root}; ` +
+        "its test-id would not be stable",
+    );
+  }
+  return moduleId.slice(prefix.length);
 }
 
 /** One parsed source file, cached across the tests it hosts. */
@@ -193,14 +217,22 @@ interface ParsedSource {
   ast: AstNode;
 }
 
-class SourceCache {
+export class SourceCache {
   private readonly cache = new Map<string, ParsedSource>();
 
-  /** The verbatim text of the test call expression at `location`. */
+  /**
+   * The verbatim text of the test call expression at `location`.
+   *
+   * The resolved call is verified against the task's name: Vitest has been
+   * observed to report a wrong location for the tagged-template `each`
+   * form, which can land on a neighboring test — a body mismatch must be
+   * an error, never silently recorded evidence.
+   */
   slice(
     moduleId: string,
     location: { line: number; column: number },
     testId: string,
+    testName: string,
   ): string {
     const source = this.load(moduleId);
     const lineStart = source.lineStarts[location.line - 1];
@@ -218,6 +250,7 @@ class SourceCache {
           `${location.column} for ${testId}`,
       );
     }
+    verifyCall(call, testId, testName);
     return source.text.slice(call.start, call.end);
   }
 
@@ -281,7 +314,8 @@ function testCallAt(root: AstNode, offset: number): AstNode | null {
     const current = path[index];
     if (
       parent.type === "MemberExpression" ||
-      (parent.type === "CallExpression" && parent.callee === current)
+      (parent.type === "CallExpression" && parent.callee === current) ||
+      (parent.type === "TaggedTemplateExpression" && parent.tag === current)
     ) {
       index -= 1;
       continue;
@@ -294,13 +328,147 @@ function testCallAt(root: AstNode, offset: number): AstNode | null {
 
 function contains(node: AstNode, offset: number): boolean {
   return (
-    node.start !== null &&
-    node.start !== undefined &&
-    node.end !== null &&
-    node.end !== undefined &&
-    offset >= node.start &&
-    offset < node.end
+    node.start !== null && node.end !== null && offset >= node.start && offset < node.end
   );
+}
+
+/**
+ * Verifies that the resolved call belongs to the task. A literal first
+ * argument must equal the task's name — or, for an `each`/`for` chain,
+ * match it placeholder-wise. A dynamic (non-literal) name cannot be
+ * verified and is accepted as collected. The tagged-template `each` form
+ * is rejected outright: Vitest reports untrustworthy locations for it.
+ */
+function verifyCall(call: AstNode, testId: string, testName: string): void {
+  const chain = calleeChain(call);
+  if (chain.some((node) => node.type === "TaggedTemplateExpression")) {
+    throw new Error(
+      `inka-evidence: ${testId} uses a tagged-template each table, whose ` +
+        "reported location is untrustworthy; use the array form of each",
+    );
+  }
+  const argumentList = call.arguments;
+  const first = Array.isArray(argumentList) ? argumentList[0] : undefined;
+  if (!isNode(first)) {
+    throw new Error(
+      `inka-evidence: the call resolved for ${testId} takes no arguments, ` +
+        "so it cannot be a test declaration; the reported location is " +
+        "untrustworthy",
+    );
+  }
+  const literal = literalValue(first);
+  if (literal === null) {
+    // A template with substitutions is a legitimate dynamic name; every
+    // other literal kind (a number, boolean, regexp, ...) cannot be one.
+    if (first.type.endsWith("Literal") && first.type !== "TemplateLiteral") {
+      throw new Error(
+        `inka-evidence: the call resolved for ${testId} does not look like ` +
+          "a test declaration; the reported location is untrustworthy",
+      );
+    }
+    // A dynamic name (a variable, a helper call) cannot be verified and
+    // is accepted as collected.
+    return;
+  }
+  const eachForm = chain.some(
+    (node) =>
+      node.type === "MemberExpression" &&
+      isNode(node.property) &&
+      node.property.type === "Identifier" &&
+      (node.property.name === "each" || node.property.name === "for"),
+  );
+  const matches = eachForm
+    ? patternMatches(literal, testName)
+    : literal === testName;
+  if (!matches) {
+    throw new Error(
+      `inka-evidence: the call resolved for ${testId} declares ` +
+        `${JSON.stringify(literal)}, which does not match the task name ` +
+        `${JSON.stringify(testName)}; the reported location is untrustworthy`,
+    );
+  }
+}
+
+/** The nodes along a call's callee chain: `test.skip.each(t)("n", f)`. */
+function calleeChain(call: AstNode): AstNode[] {
+  const chain: AstNode[] = [];
+  let node: AstNode | undefined = call;
+  while (node !== undefined) {
+    chain.push(node);
+    let next: unknown;
+    if (node.type === "CallExpression") {
+      next = node.callee;
+    } else if (node.type === "MemberExpression") {
+      next = node.object;
+    } else if (node.type === "TaggedTemplateExpression") {
+      next = node.tag;
+    } else {
+      break;
+    }
+    node = isNode(next) ? next : undefined;
+  }
+  return chain;
+}
+
+/** The compile-time value of a string literal argument, if it has one. */
+function literalValue(node: AstNode): string | null {
+  if (node.type === "StringLiteral" && typeof node.value === "string") {
+    return node.value;
+  }
+  if (
+    node.type === "TemplateLiteral" &&
+    Array.isArray(node.expressions) &&
+    node.expressions.length === 0 &&
+    Array.isArray(node.quasis) &&
+    node.quasis.length === 1
+  ) {
+    const quasi = node.quasis[0];
+    if (isNode(quasi)) {
+      const value = (quasi.value as { cooked?: unknown } | undefined)?.cooked;
+      if (typeof value === "string") {
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether an `each` name pattern can produce `name`: printf tokens and
+ * `$property` accesses match any text, everything else matches verbatim.
+ */
+export function patternMatches(pattern: string, name: string): boolean {
+  const printfTokens = "idfsjoc#";
+  let regex = "^";
+  let index = 0;
+  while (index < pattern.length) {
+    const char = pattern[index];
+    const next = pattern[index + 1];
+    if (char === "%" && next === "%") {
+      regex += "%";
+      index += 2;
+      continue;
+    }
+    if (char === "%" && next !== undefined && printfTokens.includes(next)) {
+      regex += "[\\s\\S]*";
+      index += 2;
+      continue;
+    }
+    if (char === "$") {
+      const access = /^(#|[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*)/.exec(
+        pattern.slice(index + 1),
+      );
+      if (access !== null) {
+        regex += "[\\s\\S]*";
+        index += 1 + access[0].length;
+        continue;
+      }
+    }
+    regex += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    index += 1;
+  }
+  regex += "$";
+  return new RegExp(regex).test(name);
 }
 
 function childNodes(node: AstNode): AstNode[] {

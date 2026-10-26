@@ -130,8 +130,37 @@ test("a named project prefixes the test-id", () => {
   expect([...tests.keys()]).toStrictEqual([
     "[proj] named.test.ts > named passes",
   ]);
+  // No case option configured: the label falls back to "default".
+  expect(
+    tests.get("[proj] named.test.ts > named passes")?.executions,
+  ).toStrictEqual([{ case: "default", outcome: "pass" }]);
   // No explicit provenance and no capsula run id in the environment.
   expect(raw).not.toHaveProperty("provenance");
+});
+
+test("a name filter declares unmatched tests as skipped", () => {
+  const run = runFixture("basic", { args: ["-t", "adds"] });
+
+  expect(run.status, run.output).toBe(0); // the failing test is filtered out
+  const { tests } = readEvidence(run.evidencePath);
+  expect(tests.get("basic.test.ts > math > adds")?.executions).toStrictEqual([
+    { case: "node-ci", outcome: "pass" },
+  ]);
+  // Filtered tests stay declared with a conservative skip, which never
+  // establishes a bind.
+  expect(tests.get("basic.test.ts > fails")?.executions).toStrictEqual([
+    { case: "node-ci", outcome: "skip" },
+  ]);
+});
+
+test("a tagged-template each table fails explicitly", () => {
+  // Vitest reports untrustworthy locations for this form; the body of a
+  // neighboring test must never be recorded silently.
+  const run = runFixture("templateeach");
+
+  expect(run.status, run.output).not.toBe(0);
+  expect(run.output).toContain("untrustworthy");
+  expect(existsSync(run.evidencePath)).toBe(false);
 });
 
 test("a bailed run leaves missing results, never passes", () => {
