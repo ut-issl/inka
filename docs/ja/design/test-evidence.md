@@ -100,87 +100,62 @@ bindのview_hashは凍結済みv1のままとする。命題の説明・注釈�
 
 ## capsula経由の配送
 
-以下のフローは2026-10-26に、別々の2リポジトリとPostgreSQLバックエンドの
-capsulaサーバで実地検証した。Rustアダプターが出力した証拠は `capsula push`
-と `capsula pull` だけでリポジトリ境界を越え、inkaは転送を一切実装せずに
-プロジェクト側で成立まで評価できた。`capsula pull` を持つcapsula
-(リリース0.14.0より新しいもの)が必要。
+ソースレポジトリからプロジェクトレポジトリへ証拠を運ぶ手順。`capsula
+pull` を持つcapsula(リリース0.14.0より新しいもの)が必要。
 
 ### ソース側
 
-ソースレポジトリは `capsula run` の中でテストを実行し、アダプターが証拠
-jsonを書き、`capture-file` フックがそれをrun成果物として保存する。
-`capsula.toml` に:
+1. `capsula.toml` で証拠ファイルをrun成果物として保存する:
 
-```toml
-server = "https://capsula.example.com"
+   ```toml
+   server = "https://capsula.example.com"
 
-[vault]
-name = "telemetry-ci"
+   [vault]
+   name = "telemetry-ci"
 
-[[pre-run.hooks]]
-id = "capture-git-repo"
-name = "telemetry"
-path = "."
+   [[post-run.hooks]]
+   id = "capture-file"
+   glob = "evidence.json"
+   mode = "copy"
+   ```
 
-[[post-run.hooks]]
-id = "capture-file"
-glob = "evidence.json"
-mode = "copy"
-```
+2. アダプターを `capsula run` の中で動かし(エクスポートされる
+   `CAPSULA_RUN_ID` が証拠の `capsula_run_id` に自動で入る)、pushする:
 
-```console
-$ capsula run -- inka-evidence-rust --output evidence.json \
-    --provenance source_revision=$(git rev-parse HEAD)
-$ capsula push <RUN_NAME>
-```
+   ```console
+   $ capsula run -- inka-evidence-rust --output evidence.json \
+       --provenance source_revision=$(git rev-parse HEAD)
+   $ capsula push <RUN_NAME>
+   ```
 
-`capsula run` は2つの識別子を表示する: runのULID(`<RUN_ID>`。エクスポート
-される `CAPSULA_RUN_ID` が証拠の `capsula_run_id` provenanceに書き込むのと
-同じ値)と、生成された名前(`<RUN_NAME>`。例 `uppity-bead`)で、後者は
-プロジェクト側の `capsula pull` も再表示する。テストビルドが生成するものは
-すべてコミットするか無視リストに入れること(アダプターの `evidence.json`
-もlockfileも含む): `capture-git-repo` フックはダーティなツリーを拒否する
-ため、初回runのビルドが生成したlockfileが2回目のrunを中断させる。
+   `capsula run` はrunのULID(`<RUN_ID>`)と生成された名前(`<RUN_NAME>`)
+   を表示する。`capture-git-repo` フックを使う場合、テストビルドが生成する
+   もの(`evidence.json`、lockfile)はコミットするか無視リストに入れること。
+   このフックはダーティなツリーで中断する。
 
 ### プロジェクト側
 
-プロジェクトレポジトリはrunを復元し、その成果物をマニフェストに設定した
-パスへ接続する:
+1. runをpullし、成果物を `inka.toml` に設定したパスへコピーする:
 
-```console
-$ capsula pull <RUN_ID>
-$ cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
-    evidence/test-evidence.json
-```
+   ```console
+   $ capsula pull <RUN_ID>
+   $ cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
+       evidence/test-evidence.json
+   ```
 
-```toml
-[evidence]
-files = ["evidence/test-evidence.json"]
-```
+   ```toml
+   [evidence]
+   files = ["evidence/test-evidence.json"]
+   ```
 
-コピー方式なら、設定パスはvaultの日付入りrunディレクトリに依存しない。
-pullしたrunの場所は名前から `capsula run-dir` で解決できる。パス中の
-`post-0-capture-file/` はcapsulaのフック出力レイアウト(添字はフックの
-順序に従う)で、このシェル手順にだけ現れる — inkaがvaultレイアウトを解釈
-しないことは変わらない。配送を信頼する前に、pullしたrun IDと証拠自身の
-provenanceを突き合わせる:
+2. 届いたファイルがpullしたrunのものであることを確認する:
 
-```console
-$ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
-    evidence/test-evidence.json
-```
+   ```console
+   $ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
+       evidence/test-evidence.json
+   ```
 
-責務は責務分担の節のとおり: capsulaはpull時にサイズとSHA-256を検証し、
-pullで復元したrunの再pushを拒否する。設定パスを最新に保つのは、責務分担の
-節がinkaの外に置いた配送機構の一部 — このフローでは配送を運用する者が行う
-`pull` と `cp` の手順 — であり、inkaは設定パスをそのまま読むだけ。
-このパスはマニフェスト相対で、意図的に制限しない — 絶対パスも `..` も
-許容する。証拠の置き場所を宣言するのはマニフェストの作者だからである。
-
-1つの証拠ファイルは1つの実行構成を運ぶ。複数構成(プラットフォーム、
-featureセット)を1ファイルの複数caseへ併合する仕組みは後続作業とし、
-それまでは構成ごとに別ファイル(test-idを分ける)か単一構成で運用する。
+あとは通常どおり `inka eval` が設定パスを読む。
 
 ## スコープ外・後続作業
 
