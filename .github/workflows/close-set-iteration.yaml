@@ -10,6 +10,7 @@ permissions: {}
 
 jobs:
   set-iteration:
+    cache-mode: none
     permissions: {}
     uses: ut-issl/github-project-workflows/.github/workflows/set-iteration-on-close.yml@85e71bdd6393d9183966295098a393633f9937d7 # main
     secrets:
