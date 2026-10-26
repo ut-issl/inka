@@ -10,6 +10,7 @@ from inka_evidence._native import (
     EvidenceBuilder as EvidenceBuilder,
     Execution as Execution,
     InvalidEvidenceError as InvalidEvidenceError,
+    merge as merge,
 )
 
-__all__ = ["VERSION", "EvidenceBuilder", "Execution", "InvalidEvidenceError"]
+__all__ = ["VERSION", "EvidenceBuilder", "Execution", "InvalidEvidenceError", "merge"]

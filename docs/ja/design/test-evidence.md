@@ -157,8 +157,41 @@ pull` を持つcapsula(リリース0.14.0より新しいもの)が必要。
 
 あとは通常どおり `inka eval` が設定パスを読む。
 
+### 実行構成の併合
+
+同じテストを複数構成(プラットフォーム、featureセット)で要求するには、
+push前に構成ごとの証拠ファイルを1つへ併合する:
+
+1. 構成ごとに証拠ファイルを出力する。case軸が空いているアダプターでは
+   runごとに別のcaseラベルを付ける(Rustアダプターの `--case linux`、
+   Vitestレポーターの `case`)。
+
+2. `inka-evidence-merge` で併合する(Rustアダプターに同梱。
+   `python -m inka_evidence.merge_cli` とnpmパッケージの
+   `inka-evidence-merge` もある):
+
+   ```console
+   inka-evidence-merge --output evidence.json ev-linux.json ev-macos.json
+   ```
+
+   case軸が既に埋まっている場合(pytestのパラメタライズ)は入力に
+   ラベルを付ける。`label=file` はそのファイルの全case IDを
+   `label/case` に接頭辞化する:
+
+   ```console
+   inka-evidence-merge --output evidence.json \
+       linux=ev-linux.json macos=ev-macos.json
+   ```
+
+3. 併合後ファイルのrunを上記の手順どおりpushする。
+
+併合は各test-idのexecutionsを1つの宣言集合へ和集合化する — bindは全構成を
+要求するようになる — とともに、本文の不一致・caseの重複・`source_revision`
+の食い違いには明示的に失敗する。併合後ファイルのprovenanceは併合自身のもの
+(`--provenance`、併合runの `CAPSULA_RUN_ID`)と、全入力が一致する場合の
+`source_revision` だけである。
+
 ## スコープ外・後続作業
 
-- 複数構成の証拠: 複数runの実行結果を1ファイルのcase集合へ併合する仕組みと、アダプターが付ける実行構成ラベル。
 - 環境情報(lockfileハッシュなど)の記録と、環境変更の警告・エラーポリシー。
 - 署名による実行者の認証。

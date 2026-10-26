@@ -142,6 +142,25 @@ impl EvidenceBuilder {
     }
 }
 
+/// Merges per-configuration evidence file texts into one evidence file's
+/// text. Each input is `(label, text)`; a label prefixes every case id of
+/// its input as `label/case`. See the shared crate's merge module for the
+/// exact semantics.
+#[pyfunction]
+#[pyo3(signature = (inputs, provenance=None, capsula_run_id=None))]
+fn merge(
+    inputs: Vec<(Option<String>, String)>,
+    provenance: Option<Vec<(String, String)>>,
+    capsula_run_id: Option<String>,
+) -> PyResult<String> {
+    let inputs: Vec<inka_evidence::MergeInput> = inputs
+        .into_iter()
+        .map(|(label, text)| inka_evidence::MergeInput { label, text })
+        .collect();
+    inka_evidence::merge(&inputs, &provenance.unwrap_or_default(), capsula_run_id)
+        .map_err(|error| InvalidEvidenceError::new_err(error.to_string()))
+}
+
 /// The private extension module; `inka_evidence/__init__.py` re-exports
 /// its public names.
 #[pymodule(name = "_native")]
@@ -153,5 +172,6 @@ fn python_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add_class::<Execution>()?;
     m.add_class::<EvidenceBuilder>()?;
+    m.add_function(wrap_pyfunction!(merge, m)?)?;
     Ok(())
 }

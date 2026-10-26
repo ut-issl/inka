@@ -14,7 +14,9 @@
 //! language-specific extraction (each adapter's job).
 
 mod builder;
+mod merge;
 mod schema;
 
 pub use builder::EvidenceBuilder;
+pub use merge::{MergeError, MergeInput, merge};
 pub use schema::{Execution, InvalidEvidence, Outcome, ParseError, Test, VERSION, parse};

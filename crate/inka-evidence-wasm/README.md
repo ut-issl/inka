@@ -96,6 +96,14 @@ location the slicer cannot resolve or verify is an explicit error. A
 dynamic test name (a variable, a template with substitutions) cannot be
 cross-checked and is recorded as collected.
 
+### Merging run configurations
+
+The package exports `merge(inputs, options?)` and ships an
+`inka-evidence-merge` bin that unions per-configuration evidence files
+into one declared set; a `label=file` input prefixes that file's case ids
+as `label/case`. Give each Vitest run a distinct `case` option instead
+when the case axis is free.
+
 ### Topology and version limits
 
 - Vitest >= 5 on Node ^22.18 or >= 24.11 (the `--target nodejs` wasm
