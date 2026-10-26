@@ -11,4 +11,4 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: ut-issl/github-project-workflows/.github/workflows/auto-assign-pr-creator.yml@main
+    uses: ut-issl/github-project-workflows/.github/workflows/auto-assign-pr-creator.yml@85e71bdd6393d9183966295098a393633f9937d7 # main
