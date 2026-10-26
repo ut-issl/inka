@@ -1,4 +1,4 @@
-"""Typing stub for the `inka_evidence` extension module."""
+"""Typing stub for the `inka_evidence._native` extension module."""
 
 from typing import Final
 
