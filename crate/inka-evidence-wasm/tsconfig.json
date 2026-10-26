@@ -12,7 +12,11 @@
     ]
   },
   "include": [
+    "js",
     "tests",
     "pkg/*.d.ts"
+  ],
+  "exclude": [
+    "tests/fixtures"
   ]
 }
