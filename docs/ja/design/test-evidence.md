@@ -98,9 +98,67 @@ bindのview_hashは凍結済みv1のままとする。命題の説明・注釈�
 | 同じ本文で別のtest-idへ変更 | 変更後のinterfaceを承認するまで未成立 |
 | 本文は同じまま、必要実行集合を変更 | 変更後のinterfaceを承認するまで未成立 |
 
+## capsula経由の配送
+
+ソースレポジトリからプロジェクトレポジトリへ証拠を運ぶ手順。`capsula
+pull` を持つcapsula(リリース0.14.0より新しいもの)が必要。
+
+### ソース側
+
+1. `capsula.toml` で証拠ファイルをrun成果物として保存する:
+
+   ```toml
+   server = "https://capsula.example.com"
+
+   [vault]
+   name = "telemetry-ci"
+
+   [[post-run.hooks]]
+   id = "capture-file"
+   glob = "evidence.json"
+   mode = "copy"
+   ```
+
+2. アダプターを `capsula run` の中で動かし(エクスポートされる
+   `CAPSULA_RUN_ID` が証拠の `capsula_run_id` に自動で入る)、pushする:
+
+   ```console
+   $ capsula run -- inka-evidence-rust --output evidence.json \
+       --provenance source_revision=$(git rev-parse HEAD)
+   $ capsula push <RUN_NAME>
+   ```
+
+   `capsula run` はrunのULID(`<RUN_ID>`)と生成された名前(`<RUN_NAME>`)
+   を表示する。`capture-git-repo` フックを使う場合、テストビルドが生成する
+   もの(`evidence.json`、lockfile)はコミットするか無視リストに入れること。
+   このフックはダーティなツリーで中断する。
+
+### プロジェクト側
+
+1. runをpullし、成果物を `inka.toml` に設定したパスへコピーする:
+
+   ```console
+   $ capsula pull <RUN_ID>
+   $ cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
+       evidence/test-evidence.json
+   ```
+
+   ```toml
+   [evidence]
+   files = ["evidence/test-evidence.json"]
+   ```
+
+2. 届いたファイルがpullしたrunのものであることを確認する:
+
+   ```console
+   $ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
+       evidence/test-evidence.json
+   ```
+
+あとは通常どおり `inka eval` が設定パスを読む。
+
 ## スコープ外・後続作業
 
-- interfaceハッシュのゴールデンベクタ。ハッシュを計算するconsumer実装と同時に凍結する。
-- 言語・フレームワーク別アダプター(Rust/proptest、Python/pytest、JavaScript・TypeScript/Vitestなど)の抽出規則と実行連携。
+- 複数構成の証拠: 複数runの実行結果を1ファイルのcase集合へ併合する仕組みと、アダプターが付ける実行構成ラベル。
 - 環境情報(lockfileハッシュなど)の記録と、環境変更の警告・エラーポリシー。
 - 署名による実行者の認証。

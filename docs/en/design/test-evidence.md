@@ -143,13 +143,69 @@ quorum, veto and expiry rules continue to apply.
 | Same body under a different test-id | Unestablished until the changed interface is approved |
 | Same body, changed required execution set | Unestablished until the changed interface is approved |
 
+## Delivery through capsula
+
+How to carry evidence from a source repository to a project repository.
+Requires a capsula with `capsula pull` (newer than release 0.14.0).
+
+### Source side
+
+1. In `capsula.toml`, store the evidence file as a run artifact:
+
+   ```toml
+   server = "https://capsula.example.com"
+
+   [vault]
+   name = "telemetry-ci"
+
+   [[post-run.hooks]]
+   id = "capture-file"
+   glob = "evidence.json"
+   mode = "copy"
+   ```
+
+2. Run the adapter inside `capsula run` (the exported `CAPSULA_RUN_ID`
+   then fills the evidence's `capsula_run_id` automatically) and push:
+
+   ```console
+   $ capsula run -- inka-evidence-rust --output evidence.json \
+       --provenance source_revision=$(git rev-parse HEAD)
+   $ capsula push <RUN_NAME>
+   ```
+
+   `capsula run` prints the run's ULID (`<RUN_ID>`) and its generated
+   name (`<RUN_NAME>`). When using the `capture-git-repo` hook, commit or
+   ignore everything the test build creates (`evidence.json`, lockfiles):
+   the hook aborts on a dirty tree.
+
+### Project side
+
+1. Pull the run and copy the artifact to the path `inka.toml` configures:
+
+   ```console
+   $ capsula pull <RUN_ID>
+   $ cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
+       evidence/test-evidence.json
+   ```
+
+   ```toml
+   [evidence]
+   files = ["evidence/test-evidence.json"]
+   ```
+
+2. Check that the delivered file belongs to the pulled run:
+
+   ```console
+   $ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
+       evidence/test-evidence.json
+   ```
+
+`inka eval` then reads the configured path as usual.
+
 ## Out of scope / follow-up work
 
-- Golden vectors for the interface hash, frozen together with the consumer
-  implementation that computes it.
-- Per-language/framework adapters (Rust/proptest, Python/pytest,
-  JavaScript/TypeScript with Vitest, ...): extraction rules and runner
-  integration.
+- Multi-configuration evidence: merging several runs' executions into one
+  file's case set, and the run-configuration labels adapters attach.
 - Environment metadata (such as lockfile hashes) and warning/error policies for
   environment changes.
 - Signed attestations authenticating executors.
