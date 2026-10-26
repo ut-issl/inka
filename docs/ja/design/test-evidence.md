@@ -98,9 +98,85 @@ bindのview_hashは凍結済みv1のままとする。命題の説明・注釈�
 | 同じ本文で別のtest-idへ変更 | 変更後のinterfaceを承認するまで未成立 |
 | 本文は同じまま、必要実行集合を変更 | 変更後のinterfaceを承認するまで未成立 |
 
+## capsula経由の配送
+
+以下のフローは2026-10-26に、別々の2リポジトリとPostgreSQLバックエンドの
+capsulaサーバで実地検証した。Rustアダプターが出力した証拠は `capsula push`
+と `capsula pull` だけでリポジトリ境界を越え、inkaは転送を一切実装せずに
+プロジェクト側で成立まで評価できた。`capsula pull` を持つcapsula
+(リリース0.14.0より新しいもの)が必要。
+
+### ソース側
+
+ソースレポジトリは `capsula run` の中でテストを実行し、アダプターが証拠
+JSONを書き、`capture-file` フックがそれをrun成果物として保存する:
+
+```toml
+server = "https://capsula.example.com"
+
+[vault]
+name = "telemetry-ci"
+
+[[pre-run.hooks]]
+id = "capture-git-repo"
+name = "telemetry"
+path = "."
+
+[[post-run.hooks]]
+id = "capture-file"
+glob = "evidence.json"
+mode = "copy"
+```
+
+```console
+$ capsula run -- inka-evidence-rust --output evidence.json \
+    --provenance source_revision=$(git rev-parse HEAD)
+$ capsula push <RUN_NAME>
+```
+
+アダプターを `capsula run` の中で動かすことで、エクスポートされる
+`CAPSULA_RUN_ID` が証拠の `capsula_run_id` provenanceに自動で入る。テスト
+ビルドが生成するものはすべてコミットするか無視リストに入れること
+(lockfileも含む): `capture-git-repo` フックはダーティなツリーを拒否する
+ため、初回runのビルドが生成したlockfileが2回目のrunを中断させる。
+
+### プロジェクト側
+
+プロジェクトレポジトリはrunを復元し、その成果物をマニフェストに設定した
+パスへ接続する:
+
+```console
+$ capsula pull <RUN_ID>
+$ cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
+    evidence/test-evidence.json
+```
+
+```toml
+[evidence]
+files = ["evidence/test-evidence.json"]
+```
+
+コピー方式なら、設定パスはvaultの日付入りrunディレクトリに依存しない。
+pullしたrunの場所は `capsula run-dir` で解決できる。配送を信頼する前に、
+pullしたrun IDと証拠自身のprovenanceを突き合わせる:
+
+```console
+$ jq -e --arg run "<RUN_ID>" '.provenance.capsula_run_id == $run' \
+    evidence/test-evidence.json
+```
+
+責務は責務分担の節のとおり: capsulaはpull時にサイズとSHA-256を検証し、
+pullで復元したrunの再pushを拒否する。コピーしたファイルが最新かどうかは
+プロジェクト側のpull運用の責任で、inkaは設定パスをそのまま読むだけ。
+このパスはマニフェスト相対で、意図的に制限しない — 絶対パスも `..` も
+許容する。証拠の置き場所を宣言するのはマニフェストの作者だからである。
+
+1つの証拠ファイルは1つの実行構成を運ぶ。複数構成(プラットフォーム、
+featureセット)を1ファイルの複数caseへ併合する仕組みは後続作業とし、
+それまでは構成ごとに別ファイル(test-idを分ける)か単一構成で運用する。
+
 ## スコープ外・後続作業
 
-- interfaceハッシュのゴールデンベクタ。ハッシュを計算するconsumer実装と同時に凍結する。
-- 言語・フレームワーク別アダプター(Rust/proptest、Python/pytest、JavaScript・TypeScript/Vitestなど)の抽出規則と実行連携。
+- 複数構成の証拠: 複数runの実行結果を1ファイルのcase集合へ併合する仕組みと、アダプターが付ける実行構成ラベル。
 - 環境情報(lockfileハッシュなど)の記録と、環境変更の警告・エラーポリシー。
 - 署名による実行者の認証。
