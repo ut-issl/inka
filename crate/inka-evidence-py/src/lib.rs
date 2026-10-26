@@ -142,8 +142,9 @@ impl EvidenceBuilder {
     }
 }
 
-/// The `inka_evidence` Python module.
-#[pymodule(name = "inka_evidence")]
+/// The private extension module; `inka_evidence/__init__.py` re-exports
+/// its public names.
+#[pymodule(name = "_native")]
 fn python_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("VERSION", inka_evidence::VERSION)?;
     m.add(

@@ -4,6 +4,18 @@ version = "0.1.0"
 description = "Emit inka test evidence v1 JSON from Python test adapters"
 requires-python = ">=3.10"
 
+# Registers the evidence plugin with every pytest in the environment; it
+# stays inert unless --inka-evidence is passed.
+[project.entry-points.pytest11]
+inka_evidence = "inka_evidence.pytest_plugin"
+
+[project.optional-dependencies]
+# The pytest plugin only ever runs inside pytest; the extra documents the
+# supported range without burdening plain emission users.
+pytest = [
+  "pytest>=8",
+]
+
 [dependency-groups]
 dev = [
   "jsonschema>=4",
@@ -15,4 +27,8 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-module-name = "inka_evidence"
+# Mixed layout: the Rust extension is the private `_native` submodule and
+# the package's Python source (re-exports and the pytest plugin) lives
+# under python/.
+module-name = "inka_evidence._native"
+python-source = "python"

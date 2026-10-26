@@ -119,6 +119,9 @@ tags
 # Bytecode caches
 __pycache__/
 
+# The extension module maturin's editable build drops into the package
+crate/inka-evidence-py/python/inka_evidence/*.so
+
 # Virtual environments, including the one uv creates in crate/inka-evidence-py
 .venv/
 
