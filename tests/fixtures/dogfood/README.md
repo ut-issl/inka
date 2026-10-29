@@ -48,7 +48,8 @@ This README does not restate the design. See [docs/en/design/](../../docs/en/des
 
 `evidence/test-evidence.json` is real adapter output: the hash v1
 golden-vector replay test run through `capsula run` (#75). To regenerate
-from the repository root:
+from the repository root (build the adapter once with
+`cargo build -p inka-evidence-rust`):
 
 ```console
 capsula run -- target/debug/inka-evidence-rust --output evidence.json \

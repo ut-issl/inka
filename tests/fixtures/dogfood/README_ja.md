@@ -45,7 +45,7 @@ bind は CI provider(対象は `local_view_hash_sound`)で入る。
 
 `evidence/test-evidence.json` はアダプターの実出力(hash v1ゴールデンベクタ
 再生テストを `capsula run` で実行したもの、#75)。リポジトリルートから再生成
-する:
+する(アダプターは先に `cargo build -p inka-evidence-rust` でビルドする):
 
 ```console
 capsula run -- target/debug/inka-evidence-rust --output evidence.json \
