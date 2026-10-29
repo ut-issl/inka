@@ -202,10 +202,45 @@ Requires a capsula with `capsula pull` (newer than release 0.14.0).
 
 `inka eval` then reads the configured path as usual.
 
+### Merging run configurations
+
+To require several configurations (platforms, feature sets) of the same
+tests, merge their evidence files into one before pushing:
+
+1. Emit one evidence file per configuration. Give each run a distinct
+   case label where the adapter has a free case axis (`--case linux` on
+   the Rust adapter, `case` on the Vitest reporter).
+
+2. Merge them with `inka-evidence-merge` (shipped with the Rust adapter;
+   also `python -m inka_evidence.merge_cli` and the npm package's
+   `inka-evidence-merge`):
+
+   ```console
+   inka-evidence-merge --output evidence.json ev-linux.json ev-macos.json
+   ```
+
+   Where the case axis is already taken (pytest's parametrizations),
+   label the inputs instead; `label=file` prefixes that file's case ids
+   as `label/case` (a segment containing a path separator is read as a
+   file name, so write a file whose name contains `=` as `./odd=name`):
+
+   ```console
+   inka-evidence-merge --output evidence.json \
+       linux=ev-linux.json macos=ev-macos.json
+   ```
+
+3. Push the merged file's run as in the steps above.
+
+The merge unions each test-id's executions into one declared set — so the
+bind requires every configuration — and fails explicitly on differing
+bodies, duplicate cases or disagreeing `source_revision` entries. A test
+present in only some inputs keeps exactly its declared cases. The
+merged file's provenance is the merge's own (`--provenance`, the
+`CAPSULA_RUN_ID` of the merge run), plus `source_revision` when all
+inputs agree on it.
+
 ## Out of scope / follow-up work
 
-- Multi-configuration evidence: merging several runs' executions into one
-  file's case set, and the run-configuration labels adapters attach.
 - Environment metadata (such as lockfile hashes) and warning/error policies for
   environment changes.
 - Signed attestations authenticating executors.

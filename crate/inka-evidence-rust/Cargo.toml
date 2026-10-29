@@ -10,6 +10,12 @@ publish.workspace = true
 name = "inka-evidence-rust"
 path = "src/main.rs"
 
+[[bin]]
+# Language-agnostic: merges evidence files from any adapter, shipped here
+# so source repositories get it alongside the Rust adapter binary.
+name = "inka-evidence-merge"
+path = "src/bin/merge.rs"
+
 [dependencies]
 clap.workspace = true
 inka-evidence.workspace = true

@@ -76,6 +76,15 @@ contract assigns dependency capture elsewhere. A decorator that replaces
 the function without `functools.wraps` would hide the real source and is
 rejected explicitly.
 
+### Merging run configurations
+
+`python -m inka_evidence.merge_cli` (also installed as
+`inka-evidence-merge`) unions per-configuration evidence files into one;
+the `inka_evidence.merge` function exposes the same operation to code.
+pytest's cases are its parametrization ids, so label each configuration's
+file at merge time (`linux=ev-linux.json` prefixes its case ids as
+`linux/<param>`).
+
 ### Topology and version limits
 
 - pytest >= 8 on Python >= 3.10.

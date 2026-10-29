@@ -18,13 +18,10 @@ pub const VERSION: u64 = 1;
 #[serde(deny_unknown_fields)]
 struct WireFile {
     v: u64,
-    /// Kept only so an object-shaped `provenance` deserializes; never read:
-    /// provenance is descriptive metadata evaluation must not depend on.
+    /// Enforces the object shape on deserialization. Evaluation never reads
+    /// it — provenance is descriptive metadata — but the merge path carries
+    /// `source_revision` across inputs, so parsing keeps it.
     #[serde(default)]
-    #[expect(
-        dead_code,
-        reason = "deserialized to enforce the object shape, deliberately unread"
-    )]
     provenance: Option<serde_json::Map<String, serde_json::Value>>,
     tests: Vec<Test>,
 }
@@ -121,6 +118,14 @@ pub enum ParseError {
 /// or case id, an empty contract body, an empty execution list, or a
 /// duplicate case or test id within the file.
 pub fn parse(text: &str) -> Result<Vec<Test>, ParseError> {
+    parse_with_provenance(text).map(|(_, tests)| tests)
+}
+
+/// Reads one evidence file like [`parse`], also returning its provenance,
+/// which the merge path needs for the `source_revision` carry-over.
+pub(crate) fn parse_with_provenance(
+    text: &str,
+) -> Result<(serde_json::Map<String, serde_json::Value>, Vec<Test>), ParseError> {
     let wire: WireFile = serde_json::from_str(text)?;
     if wire.v != VERSION {
         return Err(ParseError::UnsupportedVersion { found: wire.v });
@@ -136,7 +141,7 @@ pub fn parse(text: &str) -> Result<Vec<Test>, ParseError> {
             .into());
         }
     }
-    Ok(wire.tests)
+    Ok((wire.provenance.unwrap_or_default(), wire.tests))
 }
 
 /// Checks one test against the rules both directions share.

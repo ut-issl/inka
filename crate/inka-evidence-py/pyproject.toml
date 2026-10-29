@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Emit inka test evidence v1 JSON from Python test adapters"
 requires-python = ">=3.10"
 
+[project.scripts]
+inka-evidence-merge = "inka_evidence.merge_cli:main"
+
 # Registers the evidence plugin with every pytest in the environment; it
 # stays inert unless --inka-evidence is passed.
 [project.entry-points.pytest11]

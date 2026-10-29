@@ -85,6 +85,19 @@ wrappers, ...), or declared in a module shape it cannot resolve — is an
 explicit error naming the test, never a guessed body. Doctests are not
 run by nextest and are out of scope.
 
+## Merging run configurations
+
+The package also ships `inka-evidence-merge`, which unions
+per-configuration evidence files (from any adapter) into one declared set:
+
+```console
+inka-evidence-merge --output evidence.json ev-linux.json ev-macos.json
+```
+
+A `label=file` input prefixes that file's case ids as `label/case`.
+Differing bodies, duplicate cases and disagreeing `source_revision`
+entries fail explicitly.
+
 ## Provenance
 
 `--provenance key=value` records descriptive metadata (repeatable); the

@@ -17,23 +17,28 @@ use wasm_bindgen::prelude::*;
 /// The `name` carried by errors raised for semantic evidence defects.
 const INVALID_EVIDENCE: &str = "InvalidEvidenceError";
 
-/// Translates a shared-crate defect into a JS `Error` whose `name` is
-/// `InvalidEvidenceError`, so adapters can tell it from a type mistake.
-fn invalid(error: &inka_evidence::InvalidEvidence) -> JsValue {
-    let js = js_sys::Error::new(&error.to_string());
+/// A JS `Error` named `InvalidEvidenceError`, so adapters can tell a
+/// semantic evidence defect from a type mistake.
+fn invalid_message(message: &str) -> JsValue {
+    let js = js_sys::Error::new(message);
     js.set_name(INVALID_EVIDENCE);
     js.into()
 }
 
+/// Translates a shared-crate defect into the named JS error.
+fn invalid(error: &inka_evidence::InvalidEvidence) -> JsValue {
+    invalid_message(&error.to_string())
+}
+
 /// Wraps a `JSON.stringify` exception (a `BigInt`, a cycle, a throwing
 /// `toJSON`) in a `TypeError` that keeps the original message, so the
-/// adapter bug stays diagnosable.
-fn not_serializable(cause: &JsValue) -> js_sys::TypeError {
+/// adapter bug stays diagnosable; `what` names the offending argument.
+fn not_serializable(what: &str, cause: &JsValue) -> js_sys::TypeError {
     let message = cause.dyn_ref::<js_sys::Error>().map_or_else(
         || String::from("unknown error"),
         |error| String::from(error.message()),
     );
-    js_sys::TypeError::new(&format!("executions is not JSON-serializable: {message}"))
+    js_sys::TypeError::new(&format!("{what} is not JSON-serializable: {message}"))
 }
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -133,7 +138,7 @@ impl EvidenceBuilder {
         // to a TypeError; unwrapping the Ok blindly would abort in wasm and
         // leave the builder's `&mut self` borrow poisoned forever.
         let text = js_sys::JSON::stringify(executions.as_ref())
-            .map_err(|cause| not_serializable(&cause))?
+            .map_err(|cause| not_serializable("executions", &cause))?
             .as_string()
             .ok_or_else(|| {
                 js_sys::TypeError::new(
@@ -164,4 +169,119 @@ impl EvidenceBuilder {
 #[must_use]
 pub fn version() -> u32 {
     u32::try_from(inka_evidence::VERSION).expect("the format version fits in a u32")
+}
+
+#[wasm_bindgen(typescript_custom_section)]
+const MERGE_TYPES: &'static str = r#"
+/**
+ * One input to `merge`: an evidence file's text and an optional label
+ * prefixed onto its case ids as `label/case`.
+ */
+export interface MergeInput {
+    label?: string;
+    text: string;
+    /** A display name (typically the file name) used in error messages. */
+    name?: string;
+}
+
+/** Options for `merge`. */
+export interface MergeOptions {
+    /** Extra provenance entries for the merged file. */
+    provenance?: Record<string, string>;
+    /**
+     * Fills the `capsula_run_id` provenance entry — typically
+     * `process.env.CAPSULA_RUN_ID` — unless an explicit entry claimed it.
+     */
+    capsulaRunId?: string;
+}
+"#;
+
+#[wasm_bindgen]
+extern "C" {
+    /// A plain array of `MergeInput` objects.
+    #[wasm_bindgen(typescript_type = "ReadonlyArray<MergeInput>")]
+    pub type MergeInputArray;
+
+    /// A plain `MergeOptions` object.
+    #[wasm_bindgen(typescript_type = "MergeOptions")]
+    pub type MergeOptionsArg;
+}
+
+/// The wire shape of one merge input, read through serde so unknown fields
+/// and shapes fail like every other boundary of this binding.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireMergeInput {
+    #[serde(default)]
+    label: Option<String>,
+    text: String,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+/// The wire shape of the merge options.
+#[derive(Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireMergeOptions {
+    #[serde(default)]
+    provenance: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default, rename = "capsulaRunId")]
+    capsula_run_id: Option<String>,
+}
+
+/// Reads a JS value through `JSON.stringify` into a serde shape; `what`
+/// names the argument in error messages.
+fn from_js<T: serde::de::DeserializeOwned>(value: &JsValue, what: &str) -> Result<T, JsValue> {
+    let text = js_sys::JSON::stringify(value)
+        .map_err(|cause| not_serializable(what, &cause))?
+        .as_string()
+        .ok_or_else(|| {
+            js_sys::TypeError::new(&format!(
+                "{what} has no JSON form (undefined, a function or a symbol)"
+            ))
+        })?;
+    serde_json::from_str(&text)
+        .map_err(|error| js_sys::TypeError::new(&format!("invalid {what}: {error}")).into())
+}
+
+/// Merges per-configuration evidence file texts into one evidence file's
+/// text. Each input may carry a label, which prefixes its case ids as
+/// `label/case`; see the shared crate's merge module for the semantics.
+///
+/// # Errors
+///
+/// Throws a `TypeError` when the arguments do not have the declared shape,
+/// and an `Error` named `InvalidEvidenceError` when the inputs cannot
+/// merge (an unreadable input, differing bodies, a case declared twice,
+/// disagreeing `source_revision` entries, no inputs).
+#[wasm_bindgen]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen moves extern-typed arguments in by value"
+)]
+pub fn merge(inputs: MergeInputArray, options: Option<MergeOptionsArg>) -> Result<String, JsValue> {
+    let inputs: Vec<WireMergeInput> = from_js(inputs.as_ref(), "inputs")?;
+    let options: WireMergeOptions = match options {
+        Some(options) => {
+            let value: &JsValue = options.as_ref();
+            if value.is_undefined() || value.is_null() {
+                WireMergeOptions::default()
+            } else {
+                from_js(value, "options")?
+            }
+        }
+        None => WireMergeOptions::default(),
+    };
+    let inputs: Vec<inka_evidence::MergeInput> = inputs
+        .into_iter()
+        .map(|input| inka_evidence::MergeInput {
+            label: input.label,
+            text: input.text,
+            name: input.name,
+        })
+        .collect();
+    let provenance: Vec<(String, String)> =
+        options.provenance.unwrap_or_default().into_iter().collect();
+    inka_evidence::merge(&inputs, &provenance, options.capsula_run_id)
+        .map_err(|error| invalid_message(&error.to_string()))
 }
