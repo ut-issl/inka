@@ -29,17 +29,18 @@ fn inka() -> Command {
 }
 
 #[test]
-fn dogfood_project_evaluates_and_reports_nothing_established() {
-    // Arrange & Act & Assert: the dogfood closing condition — the command can
-    // evaluate the dogfood project. Nothing is approved there yet, so the
-    // verdict is a full blame list and a non-zero exit status.
+fn dogfood_project_establishes_its_first_real_bind() {
+    // Arrange & Act & Assert: the dogfood project carries one approved bind
+    // backed by adapter-emitted, capsula-delivered evidence (#75); the rest
+    // of the argument stays unapproved, so the verdict still blames and the
+    // exit status stays non-zero.
     inka()
         .arg("eval")
         .arg(workspace_fixture("dogfood"))
         .assert()
         .failure()
         .code(1)
-        .stdout(predicate::str::starts_with("established 0/"))
+        .stdout(predicate::str::starts_with("established 1/"))
         .stderr("");
 }
 
@@ -51,7 +52,7 @@ fn path_defaults_to_the_current_directory() {
         .assert()
         .failure()
         .code(1)
-        .stdout(predicate::str::starts_with("established 0/"));
+        .stdout(predicate::str::starts_with("established 1/"));
 }
 
 #[test]

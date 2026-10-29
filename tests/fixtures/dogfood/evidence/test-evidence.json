@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "provenance": {
+    "capsula_run_id": "01M63B8BQDKQJF64A3AZ541RVH",
+    "source_revision": "46d2dda"
+  },
+  "tests": [
+    {
+      "id": "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value",
+      "body": "#[test]\nfn every_recorded_vector_still_hashes_to_its_recorded_value() {\n    let files = vector_files();\n    assert!(\n        !files.is_empty(),\n        \"the v1 layout should be frozen by vectors\"\n    );\n\n    for path in &files {\n        // Arrange\n        let vector = read_vector(path);\n        let name = path.display();\n\n        // Act\n        let deadline = vector.annotations.deadline();\n        let local = local_view(&vector, deadline.as_ref());\n\n        // Assert\n        assert_eq!(\n            normalize::description(&vector.description),\n            vector.normalized,\n            \"{name}: the recorded normal form should still be the normal form\"\n        );\n        assert_eq!(\n            local.view_hash().to_string(),\n            vector.view_hash,\n            \"{name}: the v1 layout is frozen — a parallel v2 is how it changes\"\n        );\n    }\n}",
+      "executions": [
+        {
+          "case": "default",
+          "outcome": "pass"
+        }
+      ]
+    }
+  ]
+}

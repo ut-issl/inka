@@ -40,3 +40,21 @@ bind は CI provider(対象は `local_view_hash_sound`)で入る。
 - [poc-plan.md](../../docs/ja/design/poc-plan.md) /
   [full-plan.md](../../docs/ja/design/full-plan.md) — 実装方針
 - [open-questions.md](../../docs/ja/design/open-questions.md) — 未決事項
+
+## テスト証拠
+
+`evidence/test-evidence.json` はアダプターの実出力(hash v1ゴールデンベクタ
+再生テストを `capsula run` で実行したもの、#75)。リポジトリルートから再生成
+する:
+
+```console
+capsula run -- target/debug/inka-evidence-rust --output evidence.json \
+    --provenance source_revision=$(git rev-parse --short HEAD) \
+    -- every_recorded_vector_still_hashes
+cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
+    tests/fixtures/dogfood/evidence/test-evidence.json
+```
+
+参照先テストを編集すると契約本文が変わるため、`approvals/shimomura.jsonl`
+の承認は失効し、`bind:hash_vectors_replay` は再生成した証拠に対する再承認が
+必要になる。

@@ -129,6 +129,14 @@ crate/inka-evidence-py/python/inka_evidence/*.so
 # Generated static site
 /site
 
+### Capsula ###
+# Run records of the dogfood evidence flow
+.capsula/
+
+# The adapter's working output; the delivered copy is committed under
+# tests/fixtures/dogfood/evidence/
+/evidence.json
+
 ### Rust ###
 # Build artifacts
 /target

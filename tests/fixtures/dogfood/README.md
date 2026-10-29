@@ -43,3 +43,21 @@ This README does not restate the design. See [docs/en/design/](../../docs/en/des
   [full-plan.md](../../docs/en/design/full-plan.md) — implementation plans
 - [open-questions.md](../../docs/en/design/open-questions.md) — what is still
   undecided
+
+## Test evidence
+
+`evidence/test-evidence.json` is real adapter output: the hash v1
+golden-vector replay test run through `capsula run` (#75). To regenerate
+from the repository root:
+
+```console
+capsula run -- target/debug/inka-evidence-rust --output evidence.json \
+    --provenance source_revision=$(git rev-parse --short HEAD) \
+    -- every_recorded_vector_still_hashes
+cp "$(capsula run-dir <RUN_NAME>)/post-0-capture-file/evidence.json" \
+    tests/fixtures/dogfood/evidence/test-evidence.json
+```
+
+Editing the referenced test changes its contract body, so the approval in
+`approvals/shimomura.jsonl` goes stale and `bind:hash_vectors_replay`
+needs fresh approval against the regenerated evidence.
