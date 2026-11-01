@@ -14,7 +14,7 @@ repos:
       - id: markdownlint-cli2
 
   - repo: https://github.com/tombi-toml/tombi-pre-commit
-    rev: d89e7f1227a0574e4bd50f58c7ac72b08b245e04  # frozen: v1.9.0
+    rev: 0b38d622dd760f14333c8cf6b49cd6588f7d2427  # frozen: v1.9.7
     hooks:
       - id: tombi-format
         exclude: (^|/)(Cargo|uv)\.lock$
