@@ -671,6 +671,43 @@ mod tests {
         }
     }
 
+    /// The calendar judgement moved to jiff; this pins it, date by date,
+    /// against the hand-rolled rules it replaced, so a jiff upgrade cannot
+    /// silently shift what the frozen v1 record format accepts.
+    #[test]
+    fn the_calendar_judgement_matches_the_frozen_hand_rolled_rules() {
+        fn frozen_is_leap_year(year: u32) -> bool {
+            year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
+        }
+        fn frozen_days_in_month(year: u32, month: u32) -> u32 {
+            match month {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                _ if frozen_is_leap_year(year) => 29,
+                _ => 28,
+            }
+        }
+
+        // Every century boundary and leap pattern the rules distinguish,
+        // plus both ends of the four-digit range.
+        for year in [
+            0u32, 1, 4, 100, 400, 1896, 1900, 1999, 2000, 2024, 2100, 9999,
+        ] {
+            for month in 0u32..=13 {
+                for day in 0u32..=32 {
+                    let text = format!("{year:04}-{month:02}-{day:02}T08:30:00Z");
+                    let frozen = (1..=12).contains(&month)
+                        && (1..=frozen_days_in_month(year, month)).contains(&day);
+                    assert_eq!(
+                        text.parse::<Timestamp>().is_ok(),
+                        frozen,
+                        "`{text}` must be judged as the frozen rules judged it"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_decline_requires_a_comment() {
         // Arrange & Act: build the same decline with and without its reason.

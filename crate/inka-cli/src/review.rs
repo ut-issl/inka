@@ -7,6 +7,12 @@
 //! construction: every decision goes through [`approvals::append`], and no
 //! code path here rewrites or deletes an existing line. Timestamps are taken
 //! in this layer and passed into the pure record constructors.
+//!
+//! An interactive session judges the project as it was loaded: every decision
+//! binds to the hash that was on screen, so an edit made elsewhere while the
+//! session runs cannot be approved unseen — a record against the older
+//! content simply reads as stale, exactly as if it had been written before
+//! the edit.
 
 use std::io::{self, BufRead, Write};
 use std::path::Path;
@@ -207,6 +213,7 @@ fn interactive(
 
     let total = actionable.len();
     let mut recorded = 0usize;
+    let mut failed = 0usize;
     for (index, item) in actionable.iter().enumerate() {
         let node = view
             .node(&item.id)
@@ -237,7 +244,13 @@ fn interactive(
                     recorded += 1;
                 }
                 Err(message) => {
+                    // Surface the failure next to the prompt it answers, not
+                    // after the whole session, and fail the command: a
+                    // decision the reviewer took but the store did not keep
+                    // must not exit zero.
                     fail(&message, err, color)?;
+                    err.flush()?;
+                    failed += 1;
                 }
             }
         }
@@ -247,7 +260,11 @@ fn interactive(
         "decisions recorded: {recorded}; targets remaining: {}",
         total - recorded
     )?;
-    Ok(Outcome::Ok)
+    Ok(if failed == 0 {
+        Outcome::Ok
+    } else {
+        Outcome::Failed
+    })
 }
 
 /// The two record labels, spelled for construction and confirmation lines.
@@ -274,17 +291,27 @@ enum Answer {
     Quit,
 }
 
+/// Reads one input line, tolerating invalid UTF-8: a stray byte becomes the
+/// replacement character instead of aborting the session mid-queue. `None`
+/// means end of input.
+fn read_answer(session: &mut Session<'_>) -> io::Result<Option<String>> {
+    let mut bytes = Vec::new();
+    if session.input.read_until(b'\n', &mut bytes)? == 0 {
+        return Ok(None);
+    }
+    Ok(Some(String::from_utf8_lossy(&bytes).trim().to_owned()))
+}
+
 /// Prompts until one of `a`/`d`/`s`/`q` is read; end of input quits.
 fn prompt_decision(session: &mut Session<'_>, out: &mut impl Write) -> io::Result<Answer> {
     loop {
         write!(out, "(a)pprove / (d)ecline / (s)kip / (q)uit > ")?;
         out.flush()?;
-        let mut line = String::new();
-        if session.input.read_line(&mut line)? == 0 {
+        let Some(line) = read_answer(session)? else {
             writeln!(out)?;
             return Ok(Answer::Quit);
-        }
-        match line.trim() {
+        };
+        match line.as_str() {
             "a" => return Ok(Answer::Approve),
             "d" => return Ok(Answer::Decline),
             "s" => return Ok(Answer::Skip),
@@ -299,14 +326,12 @@ fn prompt_comment(session: &mut Session<'_>, out: &mut impl Write) -> io::Result
     loop {
         write!(out, "comment (required) > ")?;
         out.flush()?;
-        let mut line = String::new();
-        if session.input.read_line(&mut line)? == 0 {
+        let Some(comment) = read_answer(session)? else {
             writeln!(out)?;
             return Ok(None);
-        }
-        let comment = line.trim();
+        };
         if !comment.is_empty() {
-            return Ok(Some(comment.to_owned()));
+            return Ok(Some(comment));
         }
         writeln!(out, "a decline must say why")?;
     }
@@ -465,7 +490,14 @@ fn write_target(
 
 fn write_indented(text: &str, indent: usize, out: &mut impl Write) -> io::Result<()> {
     for line in text.lines() {
-        writeln!(out, "{:indent$}{line}", "")?;
+        // Control characters out of a source file must not reach the
+        // terminal, where an escape sequence could spoof the prompt the
+        // reviewer answers. Tabs are ordinary description content.
+        let sanitized: String = line
+            .chars()
+            .filter(|&c| !c.is_control() || c == '\t')
+            .collect();
+        writeln!(out, "{:indent$}{sanitized}", "")?;
     }
     Ok(())
 }
@@ -546,8 +578,8 @@ mod tests {
     }
 
     /// Runs the interactive form against `dir` with `answers` as scripted
-    /// terminal input, returning the captured stdout.
-    fn run_interactive(dir: &Path, answers: &str) -> String {
+    /// terminal input, returning the outcome and the captured stdout.
+    fn run_interactive_bytes(dir: &Path, answers: &[u8]) -> (Outcome, String) {
         let request = Request {
             approver: "alice".to_owned(),
             key_id: None,
@@ -568,12 +600,20 @@ mod tests {
         let mut err = Vec::new();
         let outcome = run(dir, &request, session, &mut out, &mut err, false)
             .expect("writing to vecs succeeds");
+        (
+            outcome,
+            String::from_utf8(out).expect("the transcript is UTF-8"),
+        )
+    }
+
+    /// The happy-path wrapper: the loop itself must succeed.
+    fn run_interactive(dir: &Path, answers: &str) -> String {
+        let (outcome, transcript) = run_interactive_bytes(dir, answers.as_bytes());
         assert!(
             matches!(outcome, Outcome::Ok),
-            "the loop itself succeeds: {}",
-            String::from_utf8_lossy(&err)
+            "the loop itself succeeds:\n{transcript}"
         );
-        String::from_utf8(out).expect("the transcript is UTF-8")
+        transcript
     }
 
     fn record_lines(dir: &Path) -> Vec<String> {
@@ -625,6 +665,43 @@ mod tests {
         assert!(transcript.contains("please answer a, d, s or q"));
         assert!(transcript.contains("decisions recorded: 0; targets remaining: 3"));
         assert_eq!(record_lines(dir.path()).len(), 0);
+    }
+
+    #[test]
+    fn invalid_utf8_input_reprompts_instead_of_aborting() {
+        // Arrange & Act: a stray byte, then a skip and a quit.
+        let dir = scenario_project();
+        let (outcome, transcript) = run_interactive_bytes(dir.path(), b"\xff\xfe\ns\nq\n");
+
+        // Assert: the session survives the byte and records nothing.
+        assert!(matches!(outcome, Outcome::Ok));
+        assert!(transcript.contains("please answer a, d, s or q"));
+        assert_eq!(record_lines(dir.path()).len(), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_store_failure_fails_the_command_instead_of_exiting_zero() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Arrange: an approvals directory nothing can write into.
+        let dir = scenario_project();
+        let approvals = dir.path().join("approvals");
+        fs::create_dir(&approvals).expect("the approvals directory creates");
+        fs::set_permissions(&approvals, fs::Permissions::from_mode(0o555))
+            .expect("the permissions set");
+
+        // Act: the reviewer approves, the store refuses.
+        let (outcome, transcript) = run_interactive_bytes(dir.path(), b"a\nq\n");
+
+        // Assert: the decision that was not kept must not exit zero.
+        fs::set_permissions(&approvals, fs::Permissions::from_mode(0o755))
+            .expect("the permissions restore");
+        assert!(
+            matches!(outcome, Outcome::Failed),
+            "transcript:\n{transcript}"
+        );
+        assert!(transcript.contains("decisions recorded: 0"));
     }
 
     #[test]

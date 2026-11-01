@@ -52,10 +52,10 @@ pub enum Command {
         #[arg(long = "as", value_name = "APPROVER")]
         approver: String,
         /// The key id records name; defaults to the approver name.
-        #[arg(long)]
+        #[arg(long, value_parser = clap::builder::NonEmptyStringValueParser::new())]
         key_id: Option<String>,
         /// Show the review queue and exit.
-        #[arg(long, conflicts_with_all = ["target", "approve", "decline", "comment"])]
+        #[arg(long, conflicts_with_all = ["target", "approve", "decline", "comment", "key_id"])]
         list: bool,
         /// One block id to record a decision on, with --approve or --decline.
         #[arg(requires = "decision")]
@@ -67,7 +67,7 @@ pub enum Command {
         #[arg(long, requires = "target", requires = "comment")]
         decline: bool,
         /// The comment the record carries; required by --decline.
-        #[arg(long, requires = "target")]
+        #[arg(long, requires = "target", value_parser = clap::builder::NonEmptyStringValueParser::new())]
         comment: Option<String>,
     },
     /// Write the argument to standard output as cytoscape `elements` JSON.
