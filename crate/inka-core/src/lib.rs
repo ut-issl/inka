@@ -12,6 +12,7 @@ pub mod normalize;
 pub mod parser;
 pub mod project;
 pub mod record;
+pub mod review;
 pub mod source;
 pub mod values;
 pub mod view;

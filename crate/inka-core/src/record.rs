@@ -209,30 +209,24 @@ fn is_rfc3339_utc(text: &str) -> bool {
         return false;
     }
 
-    let field = |start: usize, end: usize| -> u32 {
+    let field = |start: usize, end: usize| -> i16 {
         text[start..end].parse().expect("checked ASCII digits")
     };
     let (year, month, day) = (field(0, 4), field(5, 7), field(8, 10));
     let (hour, minute, second) = (field(11, 13), field(14, 16), field(17, 19));
-    (1..=12).contains(&month)
-        && (1..=days_in_month(year, month)).contains(&day)
+    // The calendar judgement (month ranges, leap years) is delegated to jiff;
+    // the spelling rules above stay this module's own. A four-digit year is
+    // always inside jiff's civil range, and two-digit fields fit `i8`.
+    jiff::civil::Date::new(
+        year,
+        i8::try_from(month).expect("two digits fit i8"),
+        i8::try_from(day).expect("two digits fit i8"),
+    )
+    .is_ok()
         && hour < 24
         && minute < 60
         // RFC3339 admits a leap second.
         && second <= 60
-}
-
-fn days_in_month(year: u32, month: u32) -> u32 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        _ if is_leap_year(year) => 29,
-        _ => 28,
-    }
-}
-
-fn is_leap_year(year: u32) -> bool {
-    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
 /// The fields every record carries whatever its label.

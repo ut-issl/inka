@@ -14,6 +14,9 @@ pub fn workspace_fixture(name: &str) -> PathBuf {
 }
 
 /// Directory of a CLI-local fixture under `tests/fixtures/`.
+// Each test binary compiles this module separately, and not every binary
+// exercises both fixture roots.
+#[allow(dead_code)]
 pub fn local_fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")

@@ -6,6 +6,7 @@ mod eval;
 mod export;
 mod load;
 mod render;
+mod review;
 mod serve;
 
 use std::io::{self, IsTerminal, Write};
@@ -62,6 +63,54 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             let mut out = io::BufWriter::new(io::stdout().lock());
             let mut err = io::BufWriter::new(io::stderr().lock());
             let outcome = eval::run(&path, json, &mut out, &mut err, color)?;
+            err.flush()?;
+            out.flush()?;
+            Ok(outcome)
+        }
+        Command::Review {
+            path,
+            approver,
+            key_id,
+            list,
+            target,
+            approve,
+            decline,
+            comment,
+        } => {
+            let color = color_choice.resolve(no_color, io::stderr().is_terminal());
+            let action = match target {
+                Some(target) if approve => review::Action::Single {
+                    target,
+                    decision: review::Decision::Approve { comment },
+                },
+                Some(target) if decline => review::Action::Single {
+                    target,
+                    decision: review::Decision::Decline {
+                        comment: comment.expect("clap makes --decline require --comment"),
+                    },
+                },
+                // clap makes a target require --approve or --decline.
+                Some(_) => unreachable!("a target always carries a decision"),
+                None if list => review::Action::List,
+                None => review::Action::Interactive,
+            };
+            let request = review::Request {
+                approver,
+                key_id,
+                action,
+            };
+            let stdin = io::stdin();
+            let input_is_tty = stdin.is_terminal();
+            let mut input = stdin.lock();
+            let mut now = review::now;
+            let session = review::Session {
+                input: &mut input,
+                input_is_tty,
+                now: &mut now,
+            };
+            let mut out = io::BufWriter::new(io::stdout().lock());
+            let mut err = io::BufWriter::new(io::stderr().lock());
+            let outcome = review::run(&path, &request, session, &mut out, &mut err, color)?;
             err.flush()?;
             out.flush()?;
             Ok(outcome)

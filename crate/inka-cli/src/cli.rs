@@ -6,7 +6,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 
 /// Structured argumentation with accountable approvals.
 #[derive(Debug, Parser)]
@@ -39,6 +39,36 @@ pub enum Command {
         /// Write the evaluation as JSON instead of the human summary.
         #[arg(long)]
         json: bool,
+    },
+    /// Review approval targets: list the queue, walk it interactively, or
+    /// record one decision on one target.
+    #[command(group = ArgGroup::new("decision").args(["approve", "decline"]))]
+    Review {
+        /// Project directory holding `inka.toml`; defaults to the current
+        /// directory.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Who is reviewing; records append to `approvals/<approver>.jsonl`.
+        #[arg(long = "as", value_name = "APPROVER")]
+        approver: String,
+        /// The key id records name; defaults to the approver name.
+        #[arg(long)]
+        key_id: Option<String>,
+        /// Show the review queue and exit.
+        #[arg(long, conflicts_with_all = ["target", "approve", "decline", "comment"])]
+        list: bool,
+        /// One block id to record a decision on, with --approve or --decline.
+        #[arg(requires = "decision")]
+        target: Option<String>,
+        /// Record an approval of the target.
+        #[arg(long, requires = "target")]
+        approve: bool,
+        /// Record a decline of the target; a comment is mandatory.
+        #[arg(long, requires = "target", requires = "comment")]
+        decline: bool,
+        /// The comment the record carries; required by --decline.
+        #[arg(long, requires = "target")]
+        comment: Option<String>,
     },
     /// Write the argument to standard output as cytoscape `elements` JSON.
     Export {
