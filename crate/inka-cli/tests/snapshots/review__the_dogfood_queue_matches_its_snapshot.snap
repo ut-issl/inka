@@ -1,0 +1,29 @@
+---
+source: crate/inka-cli/tests/review.rs
+expression: "String::from_utf8(output.stdout).expect(\"the queue is UTF-8\")"
+---
+targets needing review: 24
+  structure:approvals_meaningful — no approval covers the current content
+  fiat:approver_unforgeable — no approval covers the current content
+  fiat:approvers_follow_norm — no approval covers the current content
+  fiat:assumptions_surfaced — no approval covers the current content
+  fiat:bind_validity_by_human — no approval covers the current content
+  structure:description_is_contract — no approval covers the current content
+  structure:edit_cost_proportional — no approval covers the current content
+  fiat:eval_reproducible — no approval covers the current content
+  fiat:git_hosting_intact — no approval covers the current content
+  fiat:id_not_in_contract — no approval covers the current content
+  objective:inka_ok — no approval covers the current content
+  structure:invalidation_exact — no approval covers the current content
+  fiat:labels_cover_reality — no approval covers the current content
+  fiat:lint_flags_leaky_contracts — no approval covers the current content
+  fiat:local_view_binding — no approval covers the current content
+  fiat:local_view_hash_sound — no approval covers the current content
+  fiat:log_tamper_evident — no approval covers the current content
+  fiat:policy_is_reviewable — no approval covers the current content
+  fiat:queue_minimizes_friction — no approval covers the current content
+  structure:records_auditable — no approval covers the current content
+  structure:surface_edits_free — no approval covers the current content
+  structure:target_unswappable — no approval covers the current content
+  structure:truth_validity_separated — no approval covers the current content
+  fiat:verification_truth_by_machine — no approval covers the current content
