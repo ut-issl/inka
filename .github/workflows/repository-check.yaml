@@ -249,7 +249,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Tombi
-        uses: tombi-toml/setup-tombi@e0db57b0c2dfee98ec48ee3f02beb983fba2aa09 # v1.9.0
+        uses: tombi-toml/setup-tombi@27bcea5be2d2712e99ee507a2a53c09fcc67460b # v1.9.7
         with:
           version: '1.1.2'
 
