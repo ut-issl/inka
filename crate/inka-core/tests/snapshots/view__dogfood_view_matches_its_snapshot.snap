@@ -130,6 +130,21 @@ ArgumentView {
             children: [],
         },
         ViewNode {
+            id: "hash_vectors_replay",
+            mode: Bind,
+            namespace: "editing",
+            description: "The frozen hash v1 golden vectors replay byte-for-byte on the current implementation",
+            tags: [],
+            evidence: Some(
+                Evidence {
+                    kind: Test,
+                    target: "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value",
+                },
+            ),
+            deadline: None,
+            children: [],
+        },
+        ViewNode {
             id: "id_not_in_contract",
             mode: Fiat,
             namespace: "editing",
@@ -165,6 +180,7 @@ ArgumentView {
             children: [
                 "local_view_binding",
                 "local_view_hash_sound",
+                "hash_vectors_replay",
             ],
         },
         ViewNode {
@@ -419,6 +435,10 @@ ArgumentView {
         ViewEdge {
             parent: "invalidation_exact",
             child: "local_view_hash_sound",
+        },
+        ViewEdge {
+            parent: "invalidation_exact",
+            child: "hash_vectors_replay",
         },
         ViewEdge {
             parent: "records_auditable",

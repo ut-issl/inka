@@ -107,6 +107,20 @@ expression: "export(\"dogfood\")"
   },
   {
     "data": {
+      "id": "hash_vectors_replay",
+      "mode": "bind",
+      "namespace": "editing",
+      "description": "The frozen hash v1 golden vectors replay byte-for-byte on the current implementation",
+      "tags": [],
+      "root": false,
+      "evidence": {
+        "kind": "test",
+        "target": "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value"
+      }
+    }
+  },
+  {
+    "data": {
       "id": "id_not_in_contract",
       "mode": "fiat",
       "namespace": "editing",
@@ -381,6 +395,13 @@ expression: "export(\"dogfood\")"
       "id": "invalidation_exact->local_view_hash_sound",
       "source": "invalidation_exact",
       "target": "local_view_hash_sound"
+    }
+  },
+  {
+    "data": {
+      "id": "invalidation_exact->hash_vectors_replay",
+      "source": "invalidation_exact",
+      "target": "hash_vectors_replay"
     }
   },
   {

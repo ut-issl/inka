@@ -1,0 +1,12 @@
+# Capsula configuration for the dogfood evidence flow: running inka's own
+# tests through the Rust adapter inside `capsula run` stores the emitted
+# evidence as a run artifact. See the delivery section of
+# docs/en/design/test-evidence.md.
+
+[vault]
+name = "inka-ci"
+
+[[post-run.hooks]]
+id = "capture-file"
+glob = "evidence.json"
+mode = "copy"

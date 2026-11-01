@@ -13,7 +13,7 @@ structure invalidation_exact {
   ```
   Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents
   ```
-  children: local_view_binding, local_view_hash_sound
+  children: local_view_binding, local_view_hash_sound, hash_vectors_replay
 }
 
 fiat local_view_binding {
@@ -32,6 +32,16 @@ fiat local_view_hash_sound {
   until: M2
   promote: bind
   reason: "bind to the hash v1 golden vectors and proptests (first CI bind target)"
+}
+
+// The first real CI bind (#75): the broad soundness claim above stays a
+// fiat, while this narrow slice of it is established through evidence the
+// Rust adapter emitted from an actual test run and capsula delivered.
+bind hash_vectors_replay {
+  ```
+  The frozen hash v1 golden vectors replay byte-for-byte on the current implementation
+  ```
+  test: "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value"
 }
 
 structure surface_edits_free {

@@ -41,10 +41,11 @@ repos:
         exclude: '\.snap$'
       - id: pretty-format-json
         args: ["--autofix", "--no-sort-keys"]
-        # web/fixtures/*.json is `inka export` output, kept byte-identical to
-        # the command so regenerating it is an empty diff. The hook escapes
-        # non-ASCII, which the exporter does not.
-        exclude: '^web/fixtures/.*\.json$'
+        # web/fixtures/*.json is `inka export` output and the dogfood
+        # evidence is the adapter's run artifact: both stay byte-identical
+        # to the command that wrote them, so regenerating is an empty diff
+        # and the evidence still matches capsula's recorded SHA-256.
+        exclude: '^(web/fixtures/.*\.json|tests/fixtures/dogfood/evidence/.*\.json)$'
       - id: check-json
       - id: check-toml
       - id: check-yaml

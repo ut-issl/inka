@@ -26,10 +26,10 @@ fn dogfood_manifest_deserializes_into_manifest() {
     );
     assert_eq!(manifest.phases.current, "M0");
     assert_eq!(manifest.values.files, [Path::new("values.toml")]);
-    assert_eq!(
-        manifest.evidence, None,
-        "dogfood imports no test evidence yet"
-    );
+    let evidence = manifest
+        .evidence
+        .expect("dogfood imports its capsula-delivered test evidence (#75)");
+    assert_eq!(evidence.files, [Path::new("evidence/test-evidence.json")]);
 }
 
 /// A minimal manifest body the evidence tests extend.
