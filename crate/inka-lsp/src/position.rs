@@ -41,6 +41,37 @@ pub fn position(file: &SourceFile, offset: usize) -> Position {
     }
 }
 
+/// Converts an LSP position back to a byte offset, the inverse of
+/// [`position`].
+///
+/// Out-of-range coordinates clamp instead of failing — a line past the end
+/// of the file resolves to the end of the file, a character past the end of
+/// its line to the end of that line — matching how the protocol tells
+/// servers to interpret them. A position inside a surrogate pair resolves to
+/// the following character boundary.
+pub fn offset_of(file: &SourceFile, position: Position) -> usize {
+    let mut line_start = 0usize;
+    for _ in 0..position.line {
+        match file.text[line_start..].find('\n') {
+            Some(newline) => line_start += newline + 1,
+            None => return file.text.len(),
+        }
+    }
+    let line_end = file.text[line_start..]
+        .find('\n')
+        .map_or(file.text.len(), |newline| line_start + newline);
+    let line = &file.text[line_start..line_end];
+
+    let mut units: u32 = 0;
+    for (byte_index, character) in line.char_indices() {
+        if units >= position.character {
+            return line_start + byte_index;
+        }
+        units += u32::try_from(character.len_utf16()).unwrap_or(u32::MAX);
+    }
+    line_end
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,6 +109,28 @@ mod tests {
         assert_eq!(position(file, 3), Position::new(0, 1)); // after あ
         assert_eq!(position(file, 7), Position::new(0, 3)); // after 𝄞
         assert_eq!(position(file, 8), Position::new(0, 4)); // after x
+    }
+
+    #[test]
+    fn offset_of_round_trips_positions_and_clamps_out_of_range_ones() {
+        // Arrange: multibyte first line, ASCII second.
+        let (map, span) = map_of("あ𝄞x\ncd");
+        let file = map.file(span.file_id).expect("file exists");
+
+        // Act & Assert: every char boundary round-trips through both
+        // directions.
+        for offset in [0usize, 3, 7, 8, 9, 10, 11] {
+            assert_eq!(
+                offset_of(file, position(file, offset)),
+                offset,
+                "offset {offset} should round-trip"
+            );
+        }
+        // Past-the-end coordinates clamp instead of failing.
+        assert_eq!(offset_of(file, Position::new(0, 99)), 8); // end of line 0
+        assert_eq!(offset_of(file, Position::new(9, 0)), 11); // end of file
+        // Inside the 𝄞 surrogate pair resolves to the next boundary.
+        assert_eq!(offset_of(file, Position::new(0, 2)), 7);
     }
 
     #[test]

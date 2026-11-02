@@ -79,6 +79,16 @@ impl SourceMap {
     pub fn file(&self, file_id: FileId) -> Option<&SourceFile> {
         self.files.get(file_id.0)
     }
+
+    /// Every loaded file with its id, in registration order. This is how a
+    /// caller that starts from a path — an editor naming the document a
+    /// request is about — finds its way back to the ids spans carry.
+    pub fn files(&self) -> impl Iterator<Item = (FileId, &SourceFile)> {
+        self.files
+            .iter()
+            .enumerate()
+            .map(|(index, file)| (FileId(index), file))
+    }
 }
 
 /// A problem that invalidates the argument: whatever produced it cannot hand
