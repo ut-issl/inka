@@ -1,0 +1,20 @@
+[package]
+name = "inka-lsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Language server for the inka argumentation DSL"
+publish.workspace = true
+
+[dependencies]
+inka-core = { workspace = true }
+lsp-server = { workspace = true }
+lsp-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

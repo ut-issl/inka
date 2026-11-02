@@ -18,6 +18,8 @@ inka-evidence = { path = "crate/inka-evidence" }
 insta = "1"
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 js-sys = "0.3.106"
+lsp-server = "0.10"
+lsp-types = "0.97"
 petgraph = { version = "0.8", default-features = false, features = ["std"] }
 predicates = "3"
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }

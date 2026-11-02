@@ -52,8 +52,12 @@ impl Scratch {
         );
         let path = self.dir.join("evidence.json");
         fs::write(&path, contents).expect("the evidence file should be writable");
-        evidence::load_files(&self.dir, &[PathBuf::from("evidence.json")])
-            .expect("the fixture evidence should load")
+        evidence::load_files(
+            &self.dir,
+            &[PathBuf::from("evidence.json")],
+            &inka_core::read::DiskText,
+        )
+        .expect("the fixture evidence should load")
     }
 }
 

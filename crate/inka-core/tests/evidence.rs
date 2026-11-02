@@ -37,7 +37,7 @@ impl Scratch {
     }
 
     fn load(&self, files: &[PathBuf]) -> Result<EvidenceSet, EvidenceError> {
-        evidence::load_files(&self.dir, files)
+        evidence::load_files(&self.dir, files, &inka_core::read::DiskText)
     }
 }
 

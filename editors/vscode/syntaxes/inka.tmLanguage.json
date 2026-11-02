@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "inka",
+  "scopeName": "source.inka",
+  "patterns": [
+    {
+      "comment": "Fenced description, mirroring the lexer: any line opening with 3+ backticks starts one, and it closes only on a line of at least that many backticks and nothing else. Deliberately flat: rich highlighting of the CommonMark inside is the language server's job (semantic tokens), not this grammar's.",
+      "name": "string.unquoted.fence.inka",
+      "begin": "^\\s*(`{3,}).*$",
+      "end": "^\\s*(\\1`*)\\s*$"
+    },
+    {
+      "name": "comment.line.double-slash.inka",
+      "match": "//.*$"
+    },
+    {
+      "match": "\\b(objective|structure|bind|fiat)\\s+([A-Za-z_][A-Za-z0-9_-]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.mode.inka"
+        },
+        "2": {
+          "name": "entity.name.section.inka"
+        }
+      }
+    },
+    {
+      "name": "keyword.other.annotation.inka",
+      "match": "\\b(children|until|reason|promote|test|veriq)(?=\\s*:)"
+    },
+    {
+      "name": "entity.name.tag.inka",
+      "match": "#[A-Za-z0-9_-]+"
+    },
+    {
+      "name": "string.quoted.double.inka",
+      "match": "\"[^\"]*\""
+    }
+  ]
+}

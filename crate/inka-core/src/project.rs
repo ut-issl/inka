@@ -20,6 +20,7 @@ use crate::interpolate::{RenderedDescription, interpolate};
 use crate::lexer::Lexer;
 use crate::manifest::{Manifest, ManifestError, parse_manifest};
 use crate::parser::parse;
+use crate::read::{DiskText, ReadText};
 use crate::source::{Error, SourceMap, Warning};
 use crate::values::{ValuesError, load_values};
 
@@ -104,24 +105,36 @@ pub enum LoadError {
 /// interpolation errors.
 #[must_use]
 pub fn load_project(project_dir: &Path) -> LoadOutcome {
+    load_project_with(project_dir, &DiskText)
+}
+
+/// Loads the project rooted at `project_dir`, reading file contents through
+/// `reader` instead of straight from disk.
+///
+/// This is [`load_project`] with the content source swapped out: an editor
+/// passes a reader that serves its open buffers so analysis sees what is on
+/// screen. Which files make up the project is still decided by the
+/// filesystem — see [`ReadText`].
+#[must_use]
+pub fn load_project_with(project_dir: &Path, reader: &dyn ReadText) -> LoadOutcome {
     // No load-stage pass emits warnings yet: the lane exists so every caller
     // is already shaped for the day one does.
     LoadOutcome {
         warnings: Vec::new(),
-        result: load(project_dir),
+        result: load(project_dir, reader),
     }
 }
 
-fn load(project_dir: &Path) -> Result<Project, LoadError> {
+fn load(project_dir: &Path, reader: &dyn ReadText) -> Result<Project, LoadError> {
     let manifest_path = project_dir.join("inka.toml");
-    let manifest_text = read_file(&manifest_path)?;
+    let manifest_text = read_file(&manifest_path, reader)?;
     let manifest = parse_manifest(&manifest_text).map_err(|source| LoadError::Manifest {
         path: manifest_path,
         source,
     })?;
-    let values = load_values(project_dir, &manifest.values.files)?;
+    let values = load_values(project_dir, &manifest.values.files, reader)?;
     let evidence = match &manifest.evidence {
-        Some(section) => load_files(project_dir, &section.files)?,
+        Some(section) => load_files(project_dir, &section.files, reader)?,
         None => EvidenceSet::default(),
     };
 
@@ -129,7 +142,7 @@ fn load(project_dir: &Path) -> Result<Project, LoadError> {
     let mut blocks = Vec::new();
     let mut errors = Vec::new();
     for path in argument_files(&project_dir.join("argument"))? {
-        let text = read_file(&path)?;
+        let text = read_file(&path, reader)?;
         let (file_blocks, file_errors) = lex_and_parse(&mut source_map, path, text);
         blocks.extend(file_blocks);
         errors.extend(file_errors);
@@ -227,8 +240,8 @@ fn lex_and_parse(
     }
 }
 
-fn read_file(path: &Path) -> Result<String, LoadError> {
-    std::fs::read_to_string(path).map_err(|source| LoadError::Read {
+fn read_file(path: &Path, reader: &dyn ReadText) -> Result<String, LoadError> {
+    reader.read_text(path).map_err(|source| LoadError::Read {
         path: path.to_path_buf(),
         source,
     })

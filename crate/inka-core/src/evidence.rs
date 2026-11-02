@@ -31,6 +31,7 @@ pub use inka_evidence::{Execution, InvalidEvidence, Outcome};
 
 use crate::hash::{InterfaceHash, Preimage};
 use crate::normalize;
+use crate::read::ReadText;
 
 /// The domain tag framing every test-evidence interface preimage.
 const DOMAIN_TAG: &str = "inka:test-evidence:v1";
@@ -164,14 +165,20 @@ impl EvidenceError {
 /// JSON, declares a version other than 1, or fails a semantic check: a blank
 /// test or case id, an empty contract body, an empty execution list, or a
 /// duplicate case or test-id.
-pub fn load_files(base_dir: &Path, files: &[PathBuf]) -> Result<EvidenceSet, EvidenceError> {
+pub fn load_files(
+    base_dir: &Path,
+    files: &[PathBuf],
+    reader: &dyn ReadText,
+) -> Result<EvidenceSet, EvidenceError> {
     let mut tests = BTreeMap::new();
     for relative in files {
         let path = base_dir.join(relative);
-        let text = std::fs::read_to_string(&path).map_err(|source| EvidenceError::Unreadable {
-            path: path.clone(),
-            source,
-        })?;
+        let text = reader
+            .read_text(&path)
+            .map_err(|source| EvidenceError::Unreadable {
+                path: path.clone(),
+                source,
+            })?;
         let parsed = inka_evidence::parse(&text)
             .map_err(|error| EvidenceError::of_file(error, path.clone()))?;
         for test in parsed {
