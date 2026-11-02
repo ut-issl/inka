@@ -178,19 +178,20 @@ fn rename_to_an_existing_id_is_refused_with_the_reason() {
 
 #[test]
 fn rename_rewrites_sources_and_approvals_and_invalidates_nothing() {
-    // Arrange: a fully approved argument — the established count is the
-    // thing the rename must not move.
+    // Arrange: an argument fully approved by two approvers — the established
+    // count is the thing the rename must not move.
     let (temp, a, b) = two_file_project();
-    approve_all(temp.path());
+    approve_all(temp.path(), "alice");
+    approve_all(temp.path(), "bob");
     assert_eq!(established(temp.path()), 2, "both nodes start established");
     let client = Client::start();
 
-    // Act: rename `leaf` to `sheet` from its definition.
+    // Act: rename `leaf` to `sheet` from a *reference* site.
     client.request::<Rename>(
         2,
         serde_json::json!({
-            "textDocument": { "uri": uri_of(&b) },
-            "position": { "line": 0, "character": 6 },
+            "textDocument": { "uri": uri_of(&a) },
+            "position": { "line": 4, "character": 13 },
             "newName": "sheet",
         }),
     );
@@ -199,7 +200,7 @@ fn rename_rewrites_sources_and_approvals_and_invalidates_nothing() {
     client.shutdown();
     apply(&edit);
 
-    // Assert: the definition, the reference, and the approval record all
+    // Assert: the definition, the reference, and both approvers' records all
     // moved to the new name...
     assert!(
         std::fs::read_to_string(&b)
@@ -211,10 +212,13 @@ fn rename_rewrites_sources_and_approvals_and_invalidates_nothing() {
             .expect("a.inka")
             .contains("children: sheet")
     );
-    let records =
-        std::fs::read_to_string(temp.path().join("approvals/alice.jsonl")).expect("approvals");
-    assert!(records.contains("\"target\":\"fiat:sheet\""), "{records}");
-    assert!(!records.contains("leaf"), "{records}");
+    for approver in ["alice", "bob"] {
+        let records =
+            std::fs::read_to_string(temp.path().join(format!("approvals/{approver}.jsonl")))
+                .expect("approvals");
+        assert!(records.contains("\"target\":\"fiat:sheet\""), "{records}");
+        assert!(!records.contains("leaf"), "{records}");
+    }
 
     // ...and nothing needed re-approval: ids are filing, not contract.
     assert_eq!(
@@ -224,9 +228,49 @@ fn rename_rewrites_sources_and_approvals_and_invalidates_nothing() {
     );
 }
 
-/// Approves every node as alice, with hashes computed the way eval computes
-/// them.
-fn approve_all(root: &Path) {
+#[test]
+fn a_duplicated_id_refuses_rename_and_lists_every_definition() {
+    // Arrange: `leaf` defined in b.inka and again in c.inka — broken, but it
+    // still loads and navigation still answers.
+    let (_temp, a, b) = two_file_project();
+    let c = b.with_file_name("c.inka");
+    std::fs::write(&c, "fiat leaf {\n  ```\n  twin\n  ```\n}\n").expect("c.inka");
+    let client = Client::start();
+
+    // Act & Assert: goto definition from the reference lists both twins.
+    client.request::<GotoDefinition>(2, position_params(&uri_of(&a), 4, 13));
+    let response: GotoDefinitionResponse =
+        serde_json::from_value(result_of(&client, 2)).expect("definitions come back");
+    let GotoDefinitionResponse::Array(locations) = response else {
+        panic!("expected every definition, got {response:?}");
+    };
+    assert_eq!(locations.len(), 2);
+
+    // Rename is refused: any edit would mix the two nodes' references.
+    client.request::<Rename>(
+        3,
+        serde_json::json!({
+            "textDocument": { "uri": uri_of(&b) },
+            "position": { "line": 0, "character": 6 },
+            "newName": "sheet",
+        }),
+    );
+    let error = client
+        .receive_response(3)
+        .response_result
+        .expect_err("ambiguous rename is refused");
+    assert!(
+        error.message.contains("defined more than once"),
+        "{}",
+        error.message
+    );
+
+    client.shutdown();
+}
+
+/// Approves every node as `approver`, with hashes computed the way eval
+/// computes them.
+fn approve_all(root: &Path, approver: &str) {
     let project = load_project(root).result.expect("project loads");
     let graph = Graph::build(&project.blocks).expect("graph builds");
     let view = ArgumentView::build(&graph, &project.source_map);
@@ -237,8 +281,8 @@ fn approve_all(root: &Path) {
         let fields = RecordFields {
             target: Target::new(node.mode, &node.id).expect("valid target"),
             view_hash: hash,
-            approver: "alice".to_owned(),
-            key_id: "alice".to_owned(),
+            approver: approver.to_owned(),
+            key_id: approver.to_owned(),
             timestamp: "2026-11-02T00:00:00Z".parse().expect("valid timestamp"),
             phase: "P0".to_owned(),
             until: None,

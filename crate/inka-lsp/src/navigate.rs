@@ -64,12 +64,22 @@ fn covers(span: Span, file: FileId, offset: usize) -> bool {
 }
 
 /// The block defining `name`, if any. Duplicate ids are a check error, so
-/// taking the first match is as deterministic as the input allows.
+/// taking the first match is as deterministic as the input allows; anything
+/// that *acts* on the definition must use [`definitions`] and handle the
+/// ambiguity instead.
 pub fn definition<'p>(project: &'p Project, name: &str) -> Option<&'p Block<RenderedDescription>> {
+    definitions(project, name).into_iter().next()
+}
+
+/// Every block defining `name`. More than one means the project is broken
+/// (`inka check` reports the duplicate), but navigation still runs on broken
+/// projects, so callers see the ambiguity instead of a silent first pick.
+pub fn definitions<'p>(project: &'p Project, name: &str) -> Vec<&'p Block<RenderedDescription>> {
     project
         .blocks
         .iter()
-        .find(|block| block.common().id.value == name)
+        .filter(|block| block.common().id.value == name)
+        .collect()
 }
 
 /// The spans of every `children:` entry naming `name`, across all files.
@@ -94,11 +104,12 @@ pub fn mode_keyword(block: &Block<RenderedDescription>) -> &'static str {
     }
 }
 
-/// Markdown hover text for the node `name` resolves to: mode and id as the
-/// header, the contract text exactly as hashing sees it, and the annotations
-/// that are part of the contract (deadline, promotion, evidence reference).
-pub fn hover(project: &Project, name: &str) -> Option<String> {
-    let block = definition(project, name)?;
+/// Markdown hover text for one block: mode and id as the header, the
+/// contract text exactly as hashing sees it, and the annotations that are
+/// part of the contract (deadline, promotion, evidence reference). Taking
+/// the block — not a name — keeps hover exact when a duplicated id makes
+/// name lookup ambiguous.
+pub fn hover(block: &Block<RenderedDescription>) -> String {
     let common = block.common();
     let mut text = format!(
         "**{}** `{}`\n\n{}",
@@ -131,7 +142,7 @@ pub fn hover(project: &Project, name: &str) -> Option<String> {
             write!(text, "\n{annotation}  ").expect("writing to a String");
         }
     }
-    Some(text)
+    text
 }
 
 fn deadline_of(block: &Block<RenderedDescription>) -> Option<&Deadline> {
@@ -173,10 +184,25 @@ fn promote_of(block: &Block<RenderedDescription>) -> Option<&'static str> {
 /// definition (a dangling reference is fixed by editing it, not renaming),
 /// `new` is not a valid identifier, or `new` is already taken.
 pub fn validate_rename(project: &Project, old: &str, new: &str) -> Result<(), String> {
-    if definition(project, old).is_none() {
+    if old.contains("::") {
         return Err(format!(
-            "`{old}` has no definition; fix the reference instead of renaming"
+            "`{old}` is a namespaced reference; it is renamed at its definition, outside this project"
         ));
+    }
+    match definitions(project, old).len() {
+        0 => {
+            return Err(format!(
+                "`{old}` has no definition; fix the reference instead of renaming"
+            ));
+        }
+        1 => {}
+        // With two definitions the references are ambiguous, so any edit
+        // would move approvals and references between two different nodes.
+        _ => {
+            return Err(format!(
+                "`{old}` is defined more than once; fix the duplicate (`inka check`) before renaming"
+            ));
+        }
     }
     if !is_valid_id(new) {
         return Err(format!(
@@ -190,6 +216,11 @@ pub fn validate_rename(project: &Project, old: &str, new: &str) -> Result<(), St
 }
 
 /// Whether `name` is a block id the lexer would read back as one token.
+///
+/// This mirrors the lexer's identifier rules (`is_ident_start` /
+/// `is_ident_continue`) plus the keyword exclusion; the record-side validator
+/// in `inka-core` is looser (it admits `::` for namespaced targets), so it
+/// cannot be reused for a definition id.
 fn is_valid_id(name: &str) -> bool {
     let mut bytes = name.bytes();
     let Some(first) = bytes.next() else {
@@ -299,7 +330,7 @@ mod tests {
         let (_temp, project) = scenario();
 
         // Act
-        let text = hover(&project, "leaf").expect("leaf hovers");
+        let text = hover(definition(&project, "leaf").expect("leaf is defined"));
 
         // Assert
         assert!(text.starts_with("**fiat** `leaf`"), "got: {text}");
@@ -307,7 +338,6 @@ mod tests {
         assert!(text.contains("until: P1"));
         assert!(text.contains("reason: \"soon\""));
         assert!(text.contains("promote: bind"));
-        assert!(hover(&project, "ghost").is_none());
     }
 
     #[test]
@@ -337,6 +367,40 @@ mod tests {
             validate_rename(&project, "ghost", "sheet")
                 .expect_err("dangling")
                 .contains("no definition")
+        );
+        assert!(
+            validate_rename(&project, "ns::leaf", "sheet")
+                .expect_err("namespaced")
+                .contains("namespaced reference")
+        );
+    }
+
+    #[test]
+    fn a_duplicated_id_blocks_rename_and_lists_both_definitions() {
+        // Arrange: `leaf` defined twice — a broken project that still loads.
+        let temp = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(temp.path().join("argument")).expect("argument dir");
+        std::fs::write(temp.path().join("inka.toml"), MANIFEST).expect("manifest");
+        std::fs::write(
+            temp.path().join("argument/a.inka"),
+            "fiat leaf {\n  ```\n  first\n  ```\n}\n",
+        )
+        .expect("a.inka");
+        std::fs::write(
+            temp.path().join("argument/b.inka"),
+            "fiat leaf {\n  ```\n  second\n  ```\n}\n",
+        )
+        .expect("b.inka");
+        let project = load_project(temp.path())
+            .result
+            .expect("duplicates still load");
+
+        // Act & Assert
+        assert_eq!(definitions(&project, "leaf").len(), 2);
+        assert!(
+            validate_rename(&project, "leaf", "sheet")
+                .expect_err("ambiguous")
+                .contains("defined more than once")
         );
     }
 

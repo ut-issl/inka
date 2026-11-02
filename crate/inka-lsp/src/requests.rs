@@ -111,14 +111,21 @@ fn hover(overlays: &Overlays, params: HoverParams) -> Result<Option<Hover>, Stri
     let Some(symbol) = navigate::symbol_at(&located.project, located.file, located.offset) else {
         return Ok(None);
     };
-    let Some(markdown) = navigate::hover(&located.project, symbol.name()) else {
+    // A definition hovers as itself, so a duplicated id still reads exactly;
+    // a reference resolves by name (ambiguity there is a check error).
+    let block = match symbol {
+        navigate::Symbol::Definition(block) => block,
+        navigate::Symbol::Reference(_) => {
+            let Some(block) = navigate::definition(&located.project, symbol.name()) else {
+                return Ok(None);
+            };
+            block
+        }
+    };
+    let markdown = navigate::hover(block);
+    let Some(file) = located.project.source_map.file(located.file) else {
         return Ok(None);
     };
-    let file = located
-        .project
-        .source_map
-        .file(located.file)
-        .expect("the file was just resolved from this map");
     Ok(Some(Hover {
         contents: HoverContents::Markup(MarkupContent {
             kind: MarkupKind::Markdown,
@@ -140,13 +147,17 @@ fn definition(
     let Some(symbol) = navigate::symbol_at(&located.project, located.file, located.offset) else {
         return Ok(None);
     };
-    let Some(block) = navigate::definition(&located.project, symbol.name()) else {
-        return Ok(None);
-    };
-    Ok(
-        location_of(&located.project.source_map, block.common().id.span)
-            .map(GotoDefinitionResponse::Scalar),
-    )
+    let mut locations: Vec<Location> = navigate::definitions(&located.project, symbol.name())
+        .into_iter()
+        .filter_map(|block| location_of(&located.project.source_map, block.common().id.span))
+        .collect();
+    // A duplicated id (a check error the user is about to fix) lists every
+    // definition instead of silently picking the first.
+    Ok(match locations.len() {
+        0 => None,
+        1 => Some(GotoDefinitionResponse::Scalar(locations.remove(0))),
+        _ => Some(GotoDefinitionResponse::Array(locations)),
+    })
 }
 
 #[allow(clippy::unnecessary_wraps)] // see `hover`
@@ -186,16 +197,15 @@ fn prepare_rename(
     let Some(symbol) = navigate::symbol_at(&located.project, located.file, located.offset) else {
         return Ok(None);
     };
-    // A dangling reference is fixed by editing it, not renamed; refusing at
-    // prepare time keeps the editor from even opening the rename box.
-    if navigate::definition(&located.project, symbol.name()).is_none() {
+    // A dangling reference is fixed by editing it (not renamed), and a
+    // duplicated id is ambiguous; refusing at prepare time keeps the editor
+    // from even opening the rename box.
+    if navigate::definitions(&located.project, symbol.name()).len() != 1 {
         return Ok(None);
     }
-    let file = located
-        .project
-        .source_map
-        .file(located.file)
-        .expect("the file was just resolved from this map");
+    let Some(file) = located.project.source_map.file(located.file) else {
+        return Ok(None);
+    };
     Ok(Some(PrepareRenameResponse::Range(position::range(
         file,
         symbol.span(),
@@ -214,8 +224,8 @@ fn rename_to(overlays: &Overlays, params: RenameParams) -> Result<Option<Workspa
     if new == old {
         return Ok(None);
     }
-    let block =
-        navigate::definition(&located.project, &old).expect("validated: the definition exists");
+    let block = navigate::definition(&located.project, &old)
+        .ok_or("the definition disappeared while renaming")?;
     let mode_keyword = navigate::mode_keyword(block);
 
     // `Uri` hashes by its string; the interior mutability clippy sees is a
@@ -237,8 +247,7 @@ fn rename_to(overlays: &Overlays, params: RenameParams) -> Result<Option<Workspa
 
     // The approvals move with the node: ids are filing, not contract, so the
     // records keep expressing the same judgement under the new name.
-    let rewrites = rename::approval_rewrites(&located.root, mode_keyword, &old, overlays)
-        .map_err(|error| format!("cannot read the approvals: {error}"))?;
+    let rewrites = rename::approval_rewrites(&located.root, mode_keyword, &old, overlays)?;
     for rewrite in rewrites {
         let uri =
             uri::from_path(&rewrite.path).ok_or("an approvals path cannot be named as a URI")?;

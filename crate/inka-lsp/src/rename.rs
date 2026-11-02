@@ -34,22 +34,26 @@ pub struct FileRewrites {
 ///
 /// # Errors
 ///
-/// Returns the underlying I/O error when the approvals directory or one of
-/// its files cannot be read (a missing directory is not an error).
+/// Returns a user-facing message when the approvals directory or one of its
+/// files cannot be read (a missing directory is not an error), or when a
+/// record targets the node but spells the target with JSON escapes this
+/// rewrite cannot locate — renaming around such a record would silently
+/// orphan it, so the rename refuses instead.
 pub fn approval_rewrites(
     root: &Path,
     mode_keyword: &str,
     old: &str,
     reader: &dyn ReadText,
-) -> std::io::Result<Vec<FileRewrites>> {
+) -> Result<Vec<FileRewrites>, String> {
     let directory = root.join(APPROVALS_DIR);
     let entries = match std::fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error),
+        Err(error) => return Err(format!("cannot read {}: {error}", directory.display())),
     };
     let mut paths: Vec<PathBuf> = entries
-        .collect::<Result<Vec<_>, _>>()?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("cannot read {}: {error}", directory.display()))?
         .into_iter()
         .map(|entry| entry.path())
         .filter(|path| {
@@ -61,8 +65,16 @@ pub fn approval_rewrites(
 
     let mut rewrites = Vec::new();
     for path in paths {
-        let text = reader.read_text(&path)?;
-        let ranges = target_ranges(&text, mode_keyword, old);
+        let text = reader
+            .read_text(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+        let ranges = target_ranges(&text, mode_keyword, old).map_err(|line| {
+            format!(
+                "{}:{line}: a record targets `{mode_keyword}:{old}` with an escaped \
+                 spelling this rename cannot rewrite; edit that record by hand first",
+                path.display()
+            )
+        })?;
         if !ranges.is_empty() {
             rewrites.push(FileRewrites { path, text, ranges });
         }
@@ -78,24 +90,30 @@ pub fn approval_rewrites(
 /// same spelling appearing earlier in the line inside another string (a
 /// comment quoting the target, say) — interior quotes there are escaped, so
 /// they can never follow a bare `"target":` key.
-fn target_ranges(text: &str, mode_keyword: &str, old: &str) -> Vec<(usize, usize)> {
+///
+/// # Errors
+///
+/// Returns the 1-based line number of a record that parses to the target but
+/// spells it with JSON escapes the scan cannot locate (`inka` never writes
+/// such a record, but a hand edit can).
+fn target_ranges(text: &str, mode_keyword: &str, old: &str) -> Result<Vec<(usize, usize)>, usize> {
     let target = format!("{mode_keyword}:{old}");
     let needle = format!("\"{target}\"");
     let mut ranges = Vec::new();
     let mut line_start = 0usize;
-    for line in text.split_inclusive('\n') {
+    for (index, line) in text.split_inclusive('\n').enumerate() {
         let record = line.trim_end_matches(['\n', '\r']);
         if !record.trim().is_empty()
             && let Ok(value) = serde_json::from_str::<serde_json::Value>(record)
             && value.get("target").and_then(serde_json::Value::as_str) == Some(target.as_str())
-            && let Some(found) = value_offset(record, &needle)
         {
+            let found = value_offset(record, &needle).ok_or(index + 1)?;
             let id_start = line_start + found + 1 + mode_keyword.len() + 1;
             ranges.push((id_start, id_start + old.len()));
         }
         line_start += line.len();
     }
-    ranges
+    Ok(ranges)
 }
 
 /// The byte offset of the occurrence of `needle` that sits in value
@@ -134,13 +152,41 @@ mod tests {
         );
 
         // Act
-        let ranges = target_ranges(text, "fiat", "leaf");
+        let ranges = target_ranges(text, "fiat", "leaf").expect("plain spellings locate");
 
         // Assert: exactly the first line's id, by its bytes.
         assert_eq!(ranges.len(), 1);
         let (start, end) = ranges[0];
         assert_eq!(&text[start..end], "leaf");
         assert!(text[..start].ends_with("fiat:"));
+    }
+
+    #[test]
+    fn crlf_record_lines_keep_their_byte_arithmetic() {
+        // Arrange: the same record twice, with CRLF endings.
+        let text = concat!(
+            "{\"v\":1,\"target\":\"fiat:other\",\"view_hash\":\"sha256:aa\"}\r\n",
+            "{\"v\":1,\"target\":\"fiat:leaf\",\"view_hash\":\"sha256:bb\"}\r\n",
+        );
+
+        // Act
+        let ranges = target_ranges(text, "fiat", "leaf").expect("plain spellings locate");
+
+        // Assert
+        assert_eq!(ranges.len(), 1);
+        let (start, end) = ranges[0];
+        assert_eq!(&text[start..end], "leaf");
+    }
+
+    #[test]
+    fn an_escaped_target_spelling_is_an_error_not_a_silent_skip() {
+        // Arrange: `\u0066` is `f`, so the parsed target matches while the
+        // text never contains the plain spelling.
+        let text = "{\"v\":1,\"target\":\"\\u0066iat:leaf\",\"view_hash\":\"sha256:aa\"}\n";
+
+        // Act & Assert: the record would be orphaned by a rewrite, so the
+        // scan refuses with its line number.
+        assert_eq!(target_ranges(text, "fiat", "leaf"), Err(1));
     }
 
     #[test]
@@ -154,7 +200,7 @@ mod tests {
         );
 
         // Act
-        let ranges = target_ranges(text, "fiat", "leaf");
+        let ranges = target_ranges(text, "fiat", "leaf").expect("plain spellings locate");
 
         // Assert
         assert_eq!(ranges.len(), 1);
