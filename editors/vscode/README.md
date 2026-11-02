@@ -17,4 +17,9 @@ scopes once the server provides them.
    folder containing an inka project in the development host.
 
 When `inka-lsp` is not on `PATH`, point the `inka.serverPath` setting at the
-built binary, for example `${workspaceFolder}/target/debug/inka-lsp`.
+built binary with an **absolute** path, for example
+`/home/you/inka/target/debug/inka-lsp` — settings do not expand
+`${workspaceFolder}`. The setting is machine-scoped, so a workspace cannot
+quietly point it at a script of its own. The binary is churned by
+`cargo build`, so consider adding `**/target/**` to `files.watcherExclude`
+if your editor does not already exclude it.

@@ -12,14 +12,15 @@ use std::time::Duration;
 
 use lsp_server::{Connection, Message, Notification, Request, RequestId};
 use lsp_types::notification::{
-    DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
-    Notification as _, PublishDiagnostics,
+    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument, Exit,
+    Initialized, Notification as _, PublishDiagnostics,
 };
 use lsp_types::request::{Initialize, Shutdown};
 use lsp_types::{
-    DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, PublishDiagnosticsParams, TextDocumentContentChangeEvent,
-    TextDocumentIdentifier, TextDocumentItem, Uri, VersionedTextDocumentIdentifier,
+    DiagnosticSeverity, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, FileChangeType, FileEvent,
+    PublishDiagnosticsParams, TextDocumentContentChangeEvent, TextDocumentIdentifier,
+    TextDocumentItem, Uri, VersionedTextDocumentIdentifier,
 };
 
 const MANIFEST: &str = concat!(
@@ -331,6 +332,42 @@ fn an_unsupported_request_is_refused_not_ignored() {
         .response_result
         .expect_err("hover is not implemented yet");
     assert!(error.message.contains("textDocument/hover"));
+
+    client.shutdown();
+}
+
+#[test]
+fn deleting_the_manifest_clears_the_projects_diagnostics() {
+    // Arrange: a broken buffer, so the project carries findings.
+    let (temp, argument) = scenario_project();
+    let uri = uri_of(&argument);
+    let client = Client::start();
+    client.open(&uri, BROKEN_ARGUMENT);
+    assert_ne!(
+        client.receive_diagnostics().diagnostics,
+        [] as [lsp_types::Diagnostic; 0]
+    );
+
+    // Act: the project stops being one — its manifest disappears.
+    let manifest = temp.path().join("inka.toml");
+    std::fs::remove_file(&manifest).expect("manifest is removable");
+    let params = DidChangeWatchedFilesParams {
+        changes: vec![FileEvent {
+            uri: uri_of(&manifest),
+            typ: FileChangeType::DELETED,
+        }],
+    };
+    client.notify::<DidChangeWatchedFiles>(serde_json::to_value(params).expect("valid params"));
+    let published = client.receive_diagnostics();
+
+    // Assert: the gone project's findings are cleared, not re-anchored to a
+    // file that no longer exists.
+    assert_eq!(published.uri, uri);
+    assert!(
+        published.diagnostics.is_empty(),
+        "expected cleared diagnostics, got {:?}",
+        published.diagnostics
+    );
 
     client.shutdown();
 }

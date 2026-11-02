@@ -20,10 +20,21 @@ pub fn range(file: &SourceFile, span: Span) -> Range {
 ///
 /// Coordinates saturate at `u32::MAX` rather than panic: the protocol caps
 /// them at 32 bits, and a client is required to clamp out-of-range values.
+/// A malformed offset (past the end of the file, or not on a character
+/// boundary) degrades to a clamped or byte-counted column for the same
+/// reason — a bad span from analysis must not take the whole server down.
+///
+/// Known divergence: core counts lines by `\n` alone, while LSP also treats
+/// a lone `\r` as a line break, so old-Mac line endings report lower line
+/// numbers than a strict client would use. CRLF and LF agree everywhere.
 pub fn position(file: &SourceFile, offset: usize) -> Position {
+    let offset = offset.min(file.text.len());
     let (line, byte_column) = file.line_col(offset);
     let line_start = offset - byte_column;
-    let character = file.text[line_start..offset].encode_utf16().count();
+    let character = file
+        .text
+        .get(line_start..offset)
+        .map_or(byte_column, |prefix| prefix.encode_utf16().count());
     Position {
         line: u32::try_from(line).unwrap_or(u32::MAX),
         character: u32::try_from(character).unwrap_or(u32::MAX),

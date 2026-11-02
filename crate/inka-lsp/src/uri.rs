@@ -10,6 +10,11 @@
 //! must round-trip: a path published here and the same path arriving in a
 //! later notification have to name the same overlay entry. Both directions
 //! therefore normalize nothing beyond percent-coding.
+//!
+//! Knowingly out of scope: non-UTF-8 path bytes resolve to `None` (the
+//! project loader works in `String` anyway), and Windows drive-letter URIs
+//! (`file:///c:/…`) are not mapped — the decoded `/c:/…` is not an absolute
+//! `PathBuf` there. Both would extend `decode`/`from_path`, not the callers.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -22,10 +27,10 @@ pub fn to_path(uri: &Uri) -> Option<PathBuf> {
     if !uri.scheme()?.as_str().eq_ignore_ascii_case("file") {
         return None;
     }
-    if uri
-        .authority()
-        .is_some_and(|authority| !authority.as_str().is_empty())
-    {
+    // RFC 8089: an empty authority and `localhost` both mean this machine.
+    if uri.authority().is_some_and(|authority| {
+        !authority.as_str().is_empty() && !authority.as_str().eq_ignore_ascii_case("localhost")
+    }) {
         return None;
     }
     let decoded = decode(uri.path().as_str())?;
@@ -64,6 +69,11 @@ fn decode(encoded: &str) -> Option<String> {
     while let Some(&byte) = rest.first() {
         if byte == b'%' {
             let hex = rest.get(1..3)?;
+            // from_str_radix alone would admit signs ("%+1"); an escape is
+            // exactly two hex digits.
+            if !hex.iter().all(u8::is_ascii_hexdigit) {
+                return None;
+            }
             let hex = std::str::from_utf8(hex).ok()?;
             decoded.push(u8::from_str_radix(hex, 16).ok()?);
             rest = &rest[3..];

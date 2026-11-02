@@ -18,6 +18,14 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": [
+        "inka.serverPath"
+      ]
+    }
+  },
   "contributes": {
     "languages": [
       {
@@ -44,7 +52,8 @@
         "inka.serverPath": {
           "type": "string",
           "default": "inka-lsp",
-          "description": "Command used to launch the inka language server."
+          "scope": "machine-overridable",
+          "markdownDescription": "Command used to launch the inka language server. Build it with `cargo build -p inka-lsp` or install it on `PATH`; otherwise set an absolute path (`${workspaceFolder}` is not expanded in settings)."
         }
       }
     }

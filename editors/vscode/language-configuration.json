@@ -15,9 +15,14 @@
     },
     {
       "open": "\"",
-      "close": "\""
+      "close": "\"",
+      "notIn": [
+        "string",
+        "comment"
+      ]
     }
   ],
+  "wordPattern": "[A-Za-z0-9_-]+",
   "surroundingPairs": [
     [
       "{",
