@@ -108,6 +108,11 @@ when the case axis is free.
 
 - Vitest >= 5 on Node ^22.18 or >= 24.11 (the `--target nodejs` wasm
   build; `@babel/parser` is loaded through `require(esm)`).
+- Vite is pinned to 8.3.4 through `overrides` in this package only: with
+  Vitest 5.0.5 and Vite 8.3.5 an error thrown by a reporter crashes
+  Vitest's error formatting (`code.charCodeAt is not a function`,
+  vitest-dev/vitest#11682), which hides the reporter's explicit
+  failures. Drop the override once a Vitest release ships the fix.
 - `includeTaskLocation: true` is required; its absence is an explicit
   error.
 - The tagged-template form of `each` is rejected explicitly: Vitest
