@@ -5,7 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use inka_core::ast::{Block, SourceRef};
-use inka_core::project::{LoadError, LoadOutcome, Project, load_project};
+use inka_core::project::{LoadError, LoadOutcome, Project, load_project, load_project_with};
+use inka_core::read::{DiskText, ReadText};
 use inka_core::values::ValuesError;
 
 mod common;
@@ -476,4 +477,76 @@ fn reports_parser_diagnostics_before_interpolation() {
             .all(|error| !error.message.contains("undefined variable")),
         "interpolation must not run while syntax errors exist: {errors:?}"
     );
+}
+
+/// A reader serving in-memory texts for some paths and the disk for the rest,
+/// the shape a language server uses for its open buffers.
+struct OverlayReader {
+    overlays: Vec<(PathBuf, String)>,
+}
+
+impl ReadText for OverlayReader {
+    fn read_text(&self, path: &std::path::Path) -> std::io::Result<String> {
+        match self.overlays.iter().find(|(overlaid, _)| overlaid == path) {
+            Some((_, text)) => Ok(text.clone()),
+            None => DiskText.read_text(path),
+        }
+    }
+}
+
+#[test]
+fn load_project_with_prefers_overlay_text_over_the_disk() {
+    // Arrange: the disk holds one fiat; the overlay holds an edited version
+    // of the same file that the editor has not saved yet.
+    let project = TempProject::new("overlay-wins");
+    project.write("inka.toml", MANIFEST_WITHOUT_VALUES);
+    project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
+    let reader = OverlayReader {
+        overlays: vec![(
+            project.root.join("argument/a.inka"),
+            "fiat a {\n  ```\n  edited text\n  ```\n}\n".to_owned(),
+        )],
+    };
+
+    // Act
+    let loaded = load_project_with(&project.root, &reader)
+        .result
+        .expect("overlaid project should load");
+
+    // Assert: analysis saw the buffer, not the file.
+    assert_eq!(loaded.blocks.len(), 1);
+    assert_eq!(
+        loaded.blocks[0].common().description.rendered().trim(),
+        "edited text"
+    );
+}
+
+#[test]
+fn load_project_with_reads_unoverlaid_files_from_the_disk() {
+    // Arrange: an overlay for one argument file only; the manifest and the
+    // second argument file must still come from the disk.
+    let project = TempProject::new("overlay-fallback");
+    project.write("inka.toml", MANIFEST_WITHOUT_VALUES);
+    project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
+    project.write(
+        "argument/b.inka",
+        "fiat b {\n  ```\n  from the disk\n  ```\n}\n",
+    );
+    let reader = OverlayReader {
+        overlays: vec![(
+            project.root.join("argument/a.inka"),
+            "fiat a {\n  ```\n  from the buffer\n  ```\n}\n".to_owned(),
+        )],
+    };
+
+    // Act
+    let loaded = load_project_with(&project.root, &reader)
+        .result
+        .expect("partially overlaid project should load");
+
+    // Assert
+    let rendered = rendered_descriptions(&loaded);
+    assert_eq!(rendered.len(), 2);
+    assert!(rendered.iter().any(|text| text.contains("from the buffer")));
+    assert!(rendered.iter().any(|text| text.contains("from the disk")));
 }

@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::interpolate::is_variable_name;
+use crate::read::ReadText;
 
 /// A reason values files could not be loaded or merged.
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +43,8 @@ pub enum ValuesError {
 /// Reads and merges the values files listed in a manifest.
 ///
 /// Relative paths are resolved against `manifest_dir`, the directory holding
-/// `inka.toml`.
+/// `inka.toml`. Texts come through `reader`, so an editor can substitute its
+/// open buffers for the disk.
 ///
 /// # Errors
 ///
@@ -51,15 +53,18 @@ pub enum ValuesError {
 pub fn load_values(
     manifest_dir: &Path,
     files: &[PathBuf],
+    reader: &dyn ReadText,
 ) -> Result<HashMap<String, String>, ValuesError> {
     let texts = files
         .iter()
         .map(|relative| {
             let path = manifest_dir.join(relative);
-            let text = std::fs::read_to_string(&path).map_err(|source| ValuesError::Read {
-                path: path.clone(),
-                source,
-            })?;
+            let text = reader
+                .read_text(&path)
+                .map_err(|source| ValuesError::Read {
+                    path: path.clone(),
+                    source,
+                })?;
             Ok((path, text))
         })
         .collect::<Result<Vec<_>, ValuesError>>()?;

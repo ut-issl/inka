@@ -1,0 +1,64 @@
+{
+  "name": "inka-vscode",
+  "displayName": "inka",
+  "description": "Language support for the inka argumentation DSL",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "publisher": "ut-issl",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ut-issl/inka"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "inka",
+        "aliases": [
+          "inka"
+        ],
+        "extensions": [
+          ".inka"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "inka",
+        "scopeName": "source.inka",
+        "path": "./syntaxes/inka.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "inka",
+      "properties": {
+        "inka.serverPath": {
+          "type": "string",
+          "default": "inka-lsp",
+          "description": "Command used to launch the inka language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "check": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.0"
+  }
+}
