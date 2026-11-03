@@ -21,7 +21,7 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument,
     DidSaveTextDocument, Notification as _, PublishDiagnostics,
 };
-use lsp_types::request::{CodeLensRefresh, Request as _};
+use lsp_types::request::{CodeLensRefresh, InlayHintRefreshRequest, Request as _};
 use lsp_types::{
     CodeLensOptions, Diagnostic, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
     DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
@@ -54,7 +54,7 @@ pub fn run(connection: &Connection) -> Result<(), ServerError> {
     let mut server = Server {
         overlays: Overlays::default(),
         published: HashMap::new(),
-        lens_refresh: supports_lens_refresh(initialize),
+        refreshes: refresh_support(initialize),
         sent_requests: 0,
     };
     for message in &connection.receiver {
@@ -77,15 +77,31 @@ pub fn run(connection: &Connection) -> Result<(), ServerError> {
     Ok(())
 }
 
-/// Whether the client takes `workspace/codeLens/refresh`. A params value that
-/// does not parse reads as not supporting it, never as a startup failure.
-fn supports_lens_refresh(initialize: serde_json::Value) -> bool {
-    serde_json::from_value::<InitializeParams>(initialize)
+/// The refresh requests a client said it takes.
+#[derive(Clone, Copy)]
+struct RefreshSupport {
+    lens: bool,
+    hint: bool,
+}
+
+/// What the client's `initialize` declared. A params value that does not
+/// parse reads as supporting nothing, never as a startup failure.
+fn refresh_support(initialize: serde_json::Value) -> RefreshSupport {
+    let workspace = serde_json::from_value::<InitializeParams>(initialize)
         .ok()
-        .and_then(|params| params.capabilities.workspace)
-        .and_then(|workspace| workspace.code_lens)
-        .and_then(|code_lens| code_lens.refresh_support)
-        .unwrap_or(false)
+        .and_then(|params| params.capabilities.workspace);
+    RefreshSupport {
+        lens: workspace
+            .as_ref()
+            .and_then(|workspace| workspace.code_lens.as_ref())
+            .and_then(|code_lens| code_lens.refresh_support)
+            .unwrap_or(false),
+        hint: workspace
+            .as_ref()
+            .and_then(|workspace| workspace.inlay_hint.as_ref())
+            .and_then(|inlay_hint| inlay_hint.refresh_support)
+            .unwrap_or(false),
+    }
 }
 
 /// What this server can do. Full-text sync matches the analysis model: every
@@ -130,8 +146,8 @@ struct Server {
     /// Files that carried findings in the last publish, per project root, so
     /// a finding that disappears is cleared on the client too.
     published: HashMap<PathBuf, HashSet<PathBuf>>,
-    /// Whether the client takes `workspace/codeLens/refresh`.
-    lens_refresh: bool,
+    /// The refresh requests the client takes.
+    refreshes: RefreshSupport,
     /// How many requests this server has sent, numbering the next one.
     sent_requests: i32,
 }
@@ -151,7 +167,7 @@ impl Server {
                     return Ok(());
                 };
                 self.overlays.open(path.clone(), params.text_document.text);
-                self.refresh(connection, &[path])
+                self.reanalyze(connection, &[path])
             }
             DidChangeTextDocument::METHOD => {
                 let Some(params) = cast::<DidChangeTextDocumentParams>(notification) else {
@@ -165,7 +181,7 @@ impl Server {
                     return Ok(());
                 };
                 self.overlays.open(path.clone(), change.text);
-                self.refresh(connection, &[path])
+                self.reanalyze(connection, &[path])
             }
             DidSaveTextDocument::METHOD => {
                 // The overlay already holds the saved text; a reanalysis
@@ -175,7 +191,7 @@ impl Server {
                     return Ok(());
                 };
                 match uri::to_path(&params.text_document.uri) {
-                    Some(path) => self.refresh(connection, &[path]),
+                    Some(path) => self.reanalyze(connection, &[path]),
                     None => Ok(()),
                 }
             }
@@ -187,7 +203,7 @@ impl Server {
                     return Ok(());
                 };
                 self.overlays.close(&path);
-                self.refresh(connection, &[path])
+                self.reanalyze(connection, &[path])
             }
             DidChangeWatchedFiles::METHOD => {
                 let Some(params) = cast::<DidChangeWatchedFilesParams>(notification) else {
@@ -198,12 +214,7 @@ impl Server {
                     .iter()
                     .filter_map(|event| uri::to_path(&event.uri))
                     .collect();
-                self.refresh(connection, &paths)?;
-                // A watched change (an approval record, evidence, a manifest)
-                // moves code-lens content without any document edit, and
-                // lenses are pulled, not published — so nudge a client that
-                // opted in to re-request them.
-                self.request_lens_refresh(connection)
+                self.reanalyze(connection, &paths)
             }
             _ => Ok(()),
         }
@@ -273,22 +284,41 @@ impl Server {
         Ok(())
     }
 
-    /// Asks the client to re-request every code lens, when it said it takes
-    /// the request.
-    fn request_lens_refresh(&mut self, connection: &Connection) -> Result<(), ServerError> {
-        if !self.lens_refresh {
-            return Ok(());
+    /// Reanalyzes the affected projects, then nudges a capable client to
+    /// re-pull what it renders. Lens and hint content can depend on *other*
+    /// files than the one that changed — a child's contract and hash live at
+    /// its definition, and approval records live outside the argument — while
+    /// clients re-request pulled decorations only for the document that was
+    /// edited.
+    fn reanalyze(
+        &mut self,
+        connection: &Connection,
+        changed: &[PathBuf],
+    ) -> Result<(), ServerError> {
+        self.refresh(connection, changed)?;
+        if self.refreshes.lens {
+            self.send_request(connection, CodeLensRefresh::METHOD)?;
         }
-        self.sent_requests += 1;
+        if self.refreshes.hint {
+            self.send_request(connection, InlayHintRefreshRequest::METHOD)?;
+        }
+        Ok(())
+    }
+
+    /// Sends one parameterless server-to-client request. The response — an
+    /// error included — is dropped by the main loop on purpose: a refused
+    /// refresh loses one nudge, nothing more.
+    fn send_request(&mut self, connection: &Connection, method: &str) -> Result<(), ServerError> {
+        self.sent_requests = self.sent_requests.wrapping_add(1);
         let request = Request::new(
             RequestId::from(self.sent_requests),
-            CodeLensRefresh::METHOD.to_owned(),
+            method.to_owned(),
             serde_json::Value::Null,
         );
         connection
             .sender
             .send(Message::Request(request))
-            .map_err(|error| format!("cannot send a code lens refresh: {error}"))?;
+            .map_err(|error| format!("cannot send {method}: {error}"))?;
         Ok(())
     }
 }

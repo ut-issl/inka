@@ -7,6 +7,7 @@
 //! approve` outside it. The server asks clients that support it to re-request
 //! lenses when a watched file changes (see the server's refresh request).
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use lsp_types::{CodeLens, Command, Range};
@@ -22,18 +23,30 @@ use crate::position;
 
 /// The lenses for every block defined in `file`, or `None` when the argument
 /// cannot be evaluated at all (a graph that does not build, a phase the order
-/// does not list) — those are diagnostics' findings, not lens content.
+/// does not list) — those are diagnostics' findings, not lens content. The
+/// graph gate comes first, so a broken argument answers `None` whatever the
+/// record store looks like.
 pub fn lenses(root: &Path, project: &Project, file: FileId) -> Option<Vec<CodeLens>> {
     let source = project.source_map.file(file)?;
+    let graph = Graph::build(&project.blocks).ok()?;
+    let view = ArgumentView::build(&graph, &project.source_map);
     let records = match approvals::load_dir(&root.join(APPROVALS_DIR)) {
         Ok(records) => records,
         // A record store that cannot be read is one loud lens, not a guess:
         // judging without the records would misreport every node.
         Err(error) => return Some(vec![note(format!("approvals unreadable: {error}"))]),
     };
-    let graph = Graph::build(&project.blocks).ok()?;
-    let view = ArgumentView::build(&graph, &project.source_map);
     let evaluation = evaluate(&view, &project.manifest.phases, &records, &project.evidence).ok()?;
+    let established: HashMap<&str, bool> = evaluation
+        .nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node.established))
+        .collect();
+    let blamed: HashMap<&str, &Blame> = evaluation
+        .blame
+        .iter()
+        .map(|blame| (blame.node.as_str(), blame))
+        .collect();
 
     let mut found = Vec::new();
     for block in &project.blocks {
@@ -41,14 +54,13 @@ pub fn lenses(root: &Path, project: &Project, file: FileId) -> Option<Vec<CodeLe
         if id.span.file_id != file {
             continue;
         }
-        let Some(status) = evaluation.nodes.iter().find(|node| node.id == id.value) else {
+        let Some(&is_established) = established.get(id.value.as_str()) else {
             continue;
         };
-        let blame = evaluation.blame.iter().find(|blame| blame.node == id.value);
         found.push(CodeLens {
             range: position::range(source, id.span),
             command: Some(Command {
-                title: title(status.established, blame),
+                title: title(is_established, blamed.get(id.value.as_str()).copied()),
                 command: String::new(),
                 arguments: None,
             }),

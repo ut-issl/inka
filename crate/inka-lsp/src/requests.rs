@@ -1,11 +1,18 @@
-//! Answering positional requests: hover, goto definition, references, and
-//! rename (with its prepare step).
+//! Answering document requests: hover, goto definition, references, rename
+//! (with its prepare step), semantic tokens, inlay hints, and code lenses.
 //!
 //! Every request loads the project fresh through the overlay store, exactly
 //! like diagnostics do, so an answer always describes what is on screen. A
 //! request about something that is not an identifier (or not inside a
 //! loadable project) answers `null`; only rename reports errors, because a
 //! refused rename needs a reason the editor can show.
+//!
+//! The decoration surfaces follow the same rule by design: while an edit
+//! keeps the project from loading, tokens, hints, and lenses answer `null`
+//! and diagnostics are the surface that says why. The server keeps no
+//! last-good result to serve instead — the no-incremental-state policy — so
+//! a client may show the editor's fallback styling until the text loads
+//! again.
 
 use std::collections::HashMap;
 

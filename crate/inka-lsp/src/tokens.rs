@@ -189,17 +189,15 @@ struct DedentedLine {
     length: usize,
 }
 
-/// Rebuilds the fence content with trailing whitespace stripped and the
-/// common space indent removed, keeping per line the way back into the raw
-/// slice. The indent rule mirrors `normalize::common_indent`: only spaces
-/// count, measured over non-blank lines.
+/// Rebuilds the fence content close to the way `normalize::description`
+/// reads it — line endings unified, trailing whitespace stripped, the common
+/// space indent removed — keeping per line the way back into the raw slice.
+/// The indent rule mirrors `normalize::common_indent`: only spaces count,
+/// measured over non-blank lines. NFC composition is deliberately skipped:
+/// the mapping must stay byte-exact, and composition never changes markup
+/// structure.
 fn dedent(raw: &str) -> (String, Vec<DedentedLine>) {
-    let mut raw_lines: Vec<(usize, &str)> = Vec::new();
-    let mut offset = 0;
-    for line in raw.split('\n') {
-        raw_lines.push((offset, line.trim_end()));
-        offset += line.len() + 1;
-    }
+    let raw_lines = split_lines(raw);
     let indent = raw_lines
         .iter()
         .filter(|(_, line)| !line.is_empty())
@@ -228,11 +226,42 @@ fn dedent(raw: &str) -> (String, Vec<DedentedLine>) {
     (dedented, lines)
 }
 
+/// Lines of `raw` with their start offsets, split at `\n`, `\r\n`, and lone
+/// `\r` — the same three endings `normalize::description` unifies — each
+/// already trimmed of trailing whitespace.
+fn split_lines(raw: &str) -> Vec<(usize, &str)> {
+    let bytes = raw.as_bytes();
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut index = 0;
+    while index < bytes.len() {
+        let advance = match bytes[index] {
+            b'\r' if bytes.get(index + 1) == Some(&b'\n') => 2,
+            b'\n' | b'\r' => 1,
+            _ => {
+                index += 1;
+                continue;
+            }
+        };
+        lines.push((start, raw[start..index].trim_end()));
+        index += advance;
+        start = index;
+    }
+    lines.push((start, raw[start..].trim_end()));
+    lines
+}
+
 /// Maps a dedented byte range back to raw-slice ranges, one per line it
 /// touches. Line breaks separate segments, so nothing here can span one.
+/// `lines` is ordered by `dedented_start`, so the scan starts at the first
+/// line reaching `start` and stops past `end`.
 fn map_back(lines: &[DedentedLine], start: usize, end: usize) -> Vec<(usize, usize)> {
     let mut segments = Vec::new();
-    for line in lines {
+    let first = lines.partition_point(|line| line.dedented_start + line.length <= start);
+    for line in &lines[first..] {
+        if line.dedented_start >= end {
+            break;
+        }
         let line_end = line.dedented_start + line.length;
         let segment_start = start.max(line.dedented_start);
         let segment_end = end.min(line_end);
@@ -299,6 +328,29 @@ mod tests {
 
         // Assert: two segments, neither containing the line break.
         assert_eq!(segments, [(2, 5), (8, 11)]);
+    }
+
+    #[test]
+    fn lone_carriage_returns_split_lines_like_normalize() {
+        // Arrange: old-Mac endings — no `\n` anywhere in the fence.
+        let (dedented, lines) = dedent("  # Goal\r  body\r");
+
+        // Assert: two lines, so the heading cannot swallow the body…
+        assert_eq!(dedented, "# Goal\nbody\n");
+        // …and both map back behind their own line's indent.
+        assert_eq!(map_back(&lines, 0, 6), [(2, 8)]);
+        assert_eq!(map_back(&lines, 7, 11), [(11, 15)]);
+    }
+
+    #[test]
+    fn crlf_endings_neither_pad_lengths_nor_shift_the_mapping() {
+        // Arrange
+        let (dedented, lines) = dedent("  one\r\n  two\r\n");
+
+        // Assert: `two` sits at dedented [4, 7) and raw [9, 12) — the `\r`
+        // bytes are separators, never columns.
+        assert_eq!(dedented, "one\ntwo\n");
+        assert_eq!(map_back(&lines, 4, 7), [(9, 12)]);
     }
 
     #[test]
@@ -370,9 +422,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn nested_markup_emits_only_the_outermost_construct() {
-        // Arrange: a bold span containing inline code, inside one block.
+    /// Loads a one-file project around `argument` and hands back its tokens.
+    fn tokens_of(argument: &str) -> SemanticTokens {
         let temp = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(temp.path().join("argument")).expect("argument dir");
         std::fs::write(
@@ -380,11 +431,7 @@ mod tests {
             "[project]\nname = \"t\"\n\n[phases]\norder = [\"P0\"]\ncurrent = \"P0\"\n\n[values]\nfiles = []\n",
         )
         .expect("manifest");
-        std::fs::write(
-            temp.path().join("argument/a.inka"),
-            "fiat leaf {\n  ```\n  holds **`tight`**\n  ```\n}\n",
-        )
-        .expect("argument");
+        std::fs::write(temp.path().join("argument/a.inka"), argument).expect("argument");
         let project = inka_core::project::load_project(temp.path())
             .result
             .expect("the scenario loads");
@@ -393,9 +440,13 @@ mod tests {
             .files()
             .next()
             .expect("one file is loaded");
+        full(&project, file).expect("the file is in the map")
+    }
 
-        // Act
-        let tokens = full(&project, file).expect("the file is in the map");
+    #[test]
+    fn nested_markup_emits_only_the_outermost_construct() {
+        // Arrange & Act: a bold span containing inline code, in one block.
+        let tokens = tokens_of("fiat leaf {\n  ```\n  holds **`tight`**\n  ```\n}\n");
 
         // Assert: the id plus one bold token covering `**`tight`**` whole —
         // no separate code token inside it.
@@ -403,5 +454,26 @@ mod tests {
         assert_eq!(types, [TYPE_TOKEN, BOLD_TOKEN]);
         // The whole of ``**`tight`**``, delimiters included: 11 columns.
         assert_eq!(tokens.data[1].length, 11);
+    }
+
+    #[test]
+    fn multibyte_text_maps_tokens_onto_utf16_columns() {
+        // Arrange & Act: three CJK characters (3 bytes, 1 UTF-16 unit each)
+        // sit before the bold span.
+        let tokens = tokens_of("fiat leaf {\n  ```\n  日本語 **太字** です\n  ```\n}\n");
+
+        // Assert: the bold token starts at UTF-16 column 6 (two spaces, three
+        // CJK units, one space) and is 6 units long — byte offsets would put
+        // it at column 12 with length 10.
+        let bold = &tokens.data[1];
+        assert_eq!(
+            (
+                bold.delta_line,
+                bold.delta_start,
+                bold.length,
+                bold.token_type
+            ),
+            (2, 6, 6, BOLD_TOKEN)
+        );
     }
 }

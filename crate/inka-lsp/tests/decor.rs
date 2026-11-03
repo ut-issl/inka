@@ -203,17 +203,71 @@ fn a_watched_change_nudges_a_refresh_capable_client() {
         "changes": [{ "uri": uri_of(&temp.path().join("approvals/alice.jsonl")), "type": 1 }]
     }));
 
-    // Assert: the server asks this client to re-request its lenses.
-    let request = loop {
+    // Assert: the server asks this client to re-request its lenses, as a
+    // parameterless request.
+    let request = next_server_request(&client);
+    assert_eq!(request.method, "workspace/codeLens/refresh");
+    assert!(request.params.is_null(), "got {:?}", request.params);
+
+    client.shutdown();
+}
+
+#[test]
+fn an_edit_in_another_file_nudges_both_lens_and_hint_refresh() {
+    // Arrange: `a.inka`'s hint and lens depend on `leaf`, defined in `b.inka`.
+    let (_temp, _a, b) = marked_project();
+    let client = Client::start_with(serde_json::json!({
+        "workspace": {
+            "codeLens": { "refreshSupport": true },
+            "inlayHint": { "refreshSupport": true },
+        }
+    }));
+
+    // Act: an unsaved edit to the child's contract.
+    client.open(&uri_of(&b), "fiat leaf {\n  ```\n  reworded\n  ```\n}\n");
+
+    // Assert: both pulled surfaces are asked to re-request, so `a.inka`
+    // picks up the new wording and hash without being touched.
+    let methods = [
+        next_server_request(&client).method,
+        next_server_request(&client).method,
+    ];
+    assert_eq!(
+        methods,
+        ["workspace/codeLens/refresh", "workspace/inlayHint/refresh"]
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn a_client_without_refresh_support_receives_no_requests() {
+    // Arrange
+    let (_temp, a, _b) = marked_project();
+    let client = Client::start();
+    let uri = uri_of(&a);
+
+    // Act: an edit, then an ordinary request as a fence.
+    client.open(&uri, MARKED_ARGUMENT);
+    client.request::<CodeLensRequest>(2, document(&uri));
+
+    // Assert: everything before the fence's response is a notification;
+    // `receive_response` panics on any server-to-client request.
+    let response = client.receive_response(2);
+    assert!(response.response_result.is_ok());
+
+    client.shutdown();
+}
+
+/// The next server-to-client request, skipping notifications.
+fn next_server_request(client: &Client) -> lsp_server::Request {
+    loop {
         match client.receive() {
-            Message::Request(request) => break request,
+            Message::Request(request) => return request,
             Message::Notification(_) => {}
             Message::Response(response) => panic!("unexpected response: {response:?}"),
         }
-    };
-    assert_eq!(request.method, "workspace/codeLens/refresh");
-
-    client.shutdown();
+    }
 }
 
 fn request_lenses(client: &Client, id: i32, uri: &Uri) -> Vec<CodeLens> {
