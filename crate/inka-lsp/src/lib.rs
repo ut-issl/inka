@@ -8,7 +8,10 @@
 //! result of one plain load over current text.
 
 mod diagnostics;
+mod navigate;
 mod position;
+mod rename;
+mod requests;
 mod roots;
 mod server;
 mod state;

@@ -24,13 +24,14 @@ use lsp_types::notification::{
 use lsp_types::{
     Diagnostic, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
     DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-    PublishDiagnosticsParams, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions,
+    HoverProviderCapability, OneOf, PublishDiagnosticsParams, RenameOptions, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
 };
 use serde::de::DeserializeOwned;
 
 use crate::state::Overlays;
-use crate::{diagnostics, roots, uri};
+use crate::{diagnostics, requests, roots, uri};
 
 /// One boxed error type for everything that can end the server: protocol
 /// violations, closed channels, and serialization failures alike.
@@ -58,7 +59,10 @@ pub fn run(connection: &Connection) -> Result<(), ServerError> {
                 if connection.handle_shutdown(&request)? {
                     return Ok(());
                 }
-                refuse(connection, request)?;
+                match requests::answer(&server.overlays, request) {
+                    Ok(response) => respond(connection, response)?,
+                    Err(request) => refuse(connection, request)?,
+                }
             }
             Message::Notification(notification) => server.handle(connection, notification)?,
             // The server sends no requests, so no response can be pending.
@@ -81,6 +85,13 @@ fn capabilities() -> ServerCapabilities {
                 ..TextDocumentSyncOptions::default()
             },
         )),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
+        definition_provider: Some(OneOf::Left(true)),
+        references_provider: Some(OneOf::Left(true)),
+        rename_provider: Some(OneOf::Right(RenameOptions {
+            prepare_provider: Some(true),
+            work_done_progress_options: WorkDoneProgressOptions::default(),
+        })),
         ..ServerCapabilities::default()
     }
 }
@@ -251,11 +262,17 @@ fn publish(
 /// Answers a request this server does not implement, which keeps a waiting
 /// client from hanging on it.
 fn refuse(connection: &Connection, request: Request) -> Result<(), ServerError> {
-    let response = Response::new_err(
-        request.id,
-        ErrorCode::MethodNotFound as i32,
-        format!("inka-lsp does not implement {}", request.method),
-    );
+    respond(
+        connection,
+        Response::new_err(
+            request.id,
+            ErrorCode::MethodNotFound as i32,
+            format!("inka-lsp does not implement {}", request.method),
+        ),
+    )
+}
+
+fn respond(connection: &Connection, response: Response) -> Result<(), ServerError> {
     connection
         .sender
         .send(Message::Response(response))
