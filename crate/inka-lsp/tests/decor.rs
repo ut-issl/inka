@@ -140,6 +140,59 @@ fn inlay_hints_carry_the_referenced_first_contract_line() {
 }
 
 #[test]
+fn inlay_hints_annotate_every_child_on_one_line() {
+    // Arrange: one `children:` line naming two leaves.
+    let temp = tempfile::tempdir().expect("temp dir");
+    std::fs::create_dir_all(temp.path().join("argument")).expect("argument dir");
+    std::fs::write(temp.path().join("inka.toml"), MANIFEST).expect("manifest");
+    let a = temp.path().join("argument/a.inka");
+    std::fs::write(
+        &a,
+        concat!(
+            "objective root {\n  ```\n  goal\n  ```\n  children: one, two\n}\n",
+            "fiat one {\n  ```\n  first leaf\n  ```\n}\n",
+            "fiat two {\n  ```\n  second leaf\n  ```\n}\n",
+        ),
+    )
+    .expect("a.inka");
+    let client = Client::start();
+
+    // Act
+    client.request::<InlayHintRequest>(
+        2,
+        serde_json::json!({
+            "textDocument": { "uri": uri_of(&a) },
+            "range": {
+                "start": { "line": 0, "character": 0 },
+                "end": { "line": 16, "character": 0 },
+            },
+        }),
+    );
+    let response = client.receive_response(2);
+
+    // Assert: both references carry their own leaf's contract.
+    let hints: Vec<InlayHint> =
+        serde_json::from_value(response.response_result.expect("hints are answered"))
+            .expect("valid inlay hints");
+    let labels: Vec<(Position, String)> = hints
+        .into_iter()
+        .map(|hint| match hint.label {
+            InlayHintLabel::String(label) => (hint.position, label),
+            InlayHintLabel::LabelParts(parts) => panic!("expected a string label, got {parts:?}"),
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            (Position::new(4, 15), "first leaf".to_owned()),
+            (Position::new(4, 20), "second leaf".to_owned()),
+        ]
+    );
+
+    client.shutdown();
+}
+
+#[test]
 fn code_lenses_follow_the_approval_state() {
     // Arrange
     let (temp, a, b) = marked_project();

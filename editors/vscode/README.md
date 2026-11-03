@@ -17,7 +17,9 @@ language server. The server provides:
 
 The grammar stays flat on purpose — rich highlighting inside fenced
 descriptions is the server's job via semantic tokens, which supersede these
-scopes once the server provides them.
+scopes once the server provides them. Beyond keywords and ids it only colors
+the phase after `until:` (as a function name: pale yellow in the default dark
+theme) and the mode after `promote:` (like the mode keyword opening a block).
 
 ## How to run
 
