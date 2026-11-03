@@ -2,11 +2,27 @@
 
 Minimal language support for `.inka` files: language registration, a
 deliberately simple TextMate grammar, and a client for the `inka-lsp`
-language server (diagnostics follow every edit, saved or not).
+language server. The server provides:
+
+- diagnostics that follow every edit, saved or not;
+- hover, go to definition, find references, and rename (which also rewrites
+  approval record targets, so renaming invalidates nothing);
+- semantic tokens — ids read as type names (teal in the default dark theme),
+  and the CommonMark inside fenced descriptions is highlighted the way the
+  current theme styles Markdown;
+- inlay hints showing each child's first contract line after its
+  `children:` entry, with the whole contract as a tooltip. VS Code caps the
+  combined hint length per line and drops hints past the cap, so this
+  extension sets `editor.inlayHints.maximumLength` to `0` (no cap) for inka
+  files only — override it under `"[inka]"` in your settings if you prefer;
+- read-only code lenses with every block's approval state (established, or
+  the reason it is not), refreshed when approval records change on disk.
 
 The grammar stays flat on purpose — rich highlighting inside fenced
 descriptions is the server's job via semantic tokens, which supersede these
-scopes once the server provides them.
+scopes once the server provides them. Beyond keywords and ids it only colors
+the phase after `until:` (as a function name: pale yellow in the default dark
+theme) and the mode after `promote:` (like the mode keyword opening a block).
 
 ## How to run
 

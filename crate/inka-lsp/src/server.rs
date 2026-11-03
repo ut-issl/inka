@@ -16,22 +16,24 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
+use lsp_server::{Connection, ErrorCode, Message, Notification, Request, RequestId, Response};
 use lsp_types::notification::{
     DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument,
     DidSaveTextDocument, Notification as _, PublishDiagnostics,
 };
+use lsp_types::request::{CodeLensRefresh, InlayHintRefreshRequest, Request as _};
 use lsp_types::{
-    Diagnostic, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
+    CodeLensOptions, Diagnostic, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
     DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-    HoverProviderCapability, OneOf, PublishDiagnosticsParams, RenameOptions, ServerCapabilities,
+    HoverProviderCapability, InitializeParams, OneOf, PublishDiagnosticsParams, RenameOptions,
+    SemanticTokensFullOptions, SemanticTokensOptions, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
     TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
 };
 use serde::de::DeserializeOwned;
 
 use crate::state::Overlays;
-use crate::{diagnostics, requests, roots, uri};
+use crate::{diagnostics, requests, roots, tokens, uri};
 
 /// One boxed error type for everything that can end the server: protocol
 /// violations, closed channels, and serialization failures alike.
@@ -47,11 +49,13 @@ type ServerError = Box<dyn std::error::Error + Send + Sync>;
 /// a clean `shutdown`/`exit` is `Ok`.
 pub fn run(connection: &Connection) -> Result<(), ServerError> {
     let capabilities = serde_json::to_value(capabilities())?;
-    connection.initialize(capabilities)?;
+    let initialize = connection.initialize(capabilities)?;
 
     let mut server = Server {
         overlays: Overlays::default(),
         published: HashMap::new(),
+        refreshes: refresh_support(initialize),
+        sent_requests: 0,
     };
     for message in &connection.receiver {
         match message {
@@ -65,11 +69,39 @@ pub fn run(connection: &Connection) -> Result<(), ServerError> {
                 }
             }
             Message::Notification(notification) => server.handle(connection, notification)?,
-            // The server sends no requests, so no response can be pending.
+            // The only requests this server sends are refresh nudges, whose
+            // responses carry nothing worth reading.
             Message::Response(_) => {}
         }
     }
     Ok(())
+}
+
+/// The refresh requests a client said it takes.
+#[derive(Clone, Copy)]
+struct RefreshSupport {
+    lens: bool,
+    hint: bool,
+}
+
+/// What the client's `initialize` declared. A params value that does not
+/// parse reads as supporting nothing, never as a startup failure.
+fn refresh_support(initialize: serde_json::Value) -> RefreshSupport {
+    let workspace = serde_json::from_value::<InitializeParams>(initialize)
+        .ok()
+        .and_then(|params| params.capabilities.workspace);
+    RefreshSupport {
+        lens: workspace
+            .as_ref()
+            .and_then(|workspace| workspace.code_lens.as_ref())
+            .and_then(|code_lens| code_lens.refresh_support)
+            .unwrap_or(false),
+        hint: workspace
+            .as_ref()
+            .and_then(|workspace| workspace.inlay_hint.as_ref())
+            .and_then(|inlay_hint| inlay_hint.refresh_support)
+            .unwrap_or(false),
+    }
 }
 
 /// What this server can do. Full-text sync matches the analysis model: every
@@ -92,6 +124,19 @@ fn capabilities() -> ServerCapabilities {
             prepare_provider: Some(true),
             work_done_progress_options: WorkDoneProgressOptions::default(),
         })),
+        semantic_tokens_provider: Some(
+            SemanticTokensOptions {
+                work_done_progress_options: WorkDoneProgressOptions::default(),
+                legend: tokens::legend(),
+                range: None,
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+            }
+            .into(),
+        ),
+        inlay_hint_provider: Some(OneOf::Left(true)),
+        code_lens_provider: Some(CodeLensOptions {
+            resolve_provider: Some(false),
+        }),
         ..ServerCapabilities::default()
     }
 }
@@ -101,6 +146,10 @@ struct Server {
     /// Files that carried findings in the last publish, per project root, so
     /// a finding that disappears is cleared on the client too.
     published: HashMap<PathBuf, HashSet<PathBuf>>,
+    /// The refresh requests the client takes.
+    refreshes: RefreshSupport,
+    /// How many requests this server has sent, numbering the next one.
+    sent_requests: i32,
 }
 
 impl Server {
@@ -118,7 +167,7 @@ impl Server {
                     return Ok(());
                 };
                 self.overlays.open(path.clone(), params.text_document.text);
-                self.refresh(connection, &[path])
+                self.reanalyze(connection, &[path])
             }
             DidChangeTextDocument::METHOD => {
                 let Some(params) = cast::<DidChangeTextDocumentParams>(notification) else {
@@ -132,7 +181,7 @@ impl Server {
                     return Ok(());
                 };
                 self.overlays.open(path.clone(), change.text);
-                self.refresh(connection, &[path])
+                self.reanalyze(connection, &[path])
             }
             DidSaveTextDocument::METHOD => {
                 // The overlay already holds the saved text; a reanalysis
@@ -142,7 +191,7 @@ impl Server {
                     return Ok(());
                 };
                 match uri::to_path(&params.text_document.uri) {
-                    Some(path) => self.refresh(connection, &[path]),
+                    Some(path) => self.reanalyze(connection, &[path]),
                     None => Ok(()),
                 }
             }
@@ -154,7 +203,7 @@ impl Server {
                     return Ok(());
                 };
                 self.overlays.close(&path);
-                self.refresh(connection, &[path])
+                self.reanalyze(connection, &[path])
             }
             DidChangeWatchedFiles::METHOD => {
                 let Some(params) = cast::<DidChangeWatchedFilesParams>(notification) else {
@@ -165,7 +214,7 @@ impl Server {
                     .iter()
                     .filter_map(|event| uri::to_path(&event.uri))
                     .collect();
-                self.refresh(connection, &paths)
+                self.reanalyze(connection, &paths)
             }
             _ => Ok(()),
         }
@@ -232,6 +281,44 @@ impl Server {
             publish(connection, &path, current)?;
         }
         self.published.insert(root.to_path_buf(), carrying);
+        Ok(())
+    }
+
+    /// Reanalyzes the affected projects, then nudges a capable client to
+    /// re-pull what it renders. Lens and hint content can depend on *other*
+    /// files than the one that changed — a child's contract and hash live at
+    /// its definition, and approval records live outside the argument — while
+    /// clients re-request pulled decorations only for the document that was
+    /// edited.
+    fn reanalyze(
+        &mut self,
+        connection: &Connection,
+        changed: &[PathBuf],
+    ) -> Result<(), ServerError> {
+        self.refresh(connection, changed)?;
+        if self.refreshes.lens {
+            self.send_request(connection, CodeLensRefresh::METHOD)?;
+        }
+        if self.refreshes.hint {
+            self.send_request(connection, InlayHintRefreshRequest::METHOD)?;
+        }
+        Ok(())
+    }
+
+    /// Sends one parameterless server-to-client request. The response — an
+    /// error included — is dropped by the main loop on purpose: a refused
+    /// refresh loses one nudge, nothing more.
+    fn send_request(&mut self, connection: &Connection, method: &str) -> Result<(), ServerError> {
+        self.sent_requests = self.sent_requests.wrapping_add(1);
+        let request = Request::new(
+            RequestId::from(self.sent_requests),
+            method.to_owned(),
+            serde_json::Value::Null,
+        );
+        connection
+            .sender
+            .send(Message::Request(request))
+            .map_err(|error| format!("cannot send {method}: {error}"))?;
         Ok(())
     }
 }

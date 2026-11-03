@@ -46,6 +46,55 @@
         "path": "./syntaxes/inka.tmLanguage.json"
       }
     ],
+    "configurationDefaults": {
+      "[inka]": {
+        "editor.inlayHints.maximumLength": 0
+      }
+    },
+    "semanticTokenTypes": [
+      {
+        "id": "markupHeading",
+        "description": "A Markdown heading inside an inka description"
+      },
+      {
+        "id": "markupBold",
+        "description": "Bold Markdown text inside an inka description"
+      },
+      {
+        "id": "markupItalic",
+        "description": "Italic Markdown text inside an inka description"
+      },
+      {
+        "id": "markupCode",
+        "description": "Markdown code inside an inka description"
+      },
+      {
+        "id": "markupLink",
+        "description": "A Markdown link inside an inka description"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "inka",
+        "scopes": {
+          "markupHeading": [
+            "markup.heading"
+          ],
+          "markupBold": [
+            "markup.bold"
+          ],
+          "markupItalic": [
+            "markup.italic"
+          ],
+          "markupCode": [
+            "markup.inline.raw"
+          ],
+          "markupLink": [
+            "markup.underline.link"
+          ]
+        }
+      }
+    ],
     "configuration": {
       "title": "inka",
       "properties": {

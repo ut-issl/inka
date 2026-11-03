@@ -8,6 +8,8 @@
 //! result of one plain load over current text.
 
 mod diagnostics;
+mod hints;
+mod lens;
 mod navigate;
 mod position;
 mod rename;
@@ -15,6 +17,7 @@ mod requests;
 mod roots;
 mod server;
 mod state;
+mod tokens;
 mod uri;
 
 pub use server::run;

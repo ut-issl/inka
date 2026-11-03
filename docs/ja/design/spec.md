@@ -39,7 +39,8 @@ fiat <id> {
   必須、`bind` → `test:` か `veriq:` を厳密に1つ必須、`fiat` → どちらも不可。
 - 注釈は `until:` をアンカーとするグループ — `reason:` と `promote:` は `until:`
   がある場合にのみ書ける。`until: <phase>` と `reason: "<短文>"` は全ブロックに
-  書ける。`promote:` は後継モードの宣言で任意(`promote:` なしの `until:` は単純な
+  書ける。`phases.order` にないフェーズを `until:` に書くと check がエラーにする。
+  `promote:` は後継モードの宣言で任意(`promote:` なしの `until:` は単純な
   期限切れ): fiat では `structure` | `bind`、objective では `structure` のみ。
   structure と bind に `promote:` は書けない — モード変更の予告は想定しない。
   `reason`・`test:`・`veriq:` プロパティは二重引用符の1行文字列値でエスケープなし —

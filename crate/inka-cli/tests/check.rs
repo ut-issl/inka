@@ -68,6 +68,22 @@ fn undefined_reference_fails_and_renders_a_snippet() {
 }
 
 #[test]
+fn an_undeclared_until_phase_fails_and_renders_a_snippet() {
+    // Act: `until: P9` names a phase the manifest's order does not list.
+    let assert = inka()
+        .current_dir(local_fixture("unknown-until"))
+        .args(["check", "."])
+        .assert()
+        .failure()
+        .code(1);
+
+    // Assert: freeze the snippet pointing at the phase name.
+    let stderr = String::from_utf8(assert.get_output().stderr.clone())
+        .expect("diagnostic output should be valid UTF-8");
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
 fn unreachable_node_is_a_warning_and_still_exits_zero() {
     // Assert: a warning-only project is well-formed, so the exit status is 0
     // even though a diagnostic is printed.

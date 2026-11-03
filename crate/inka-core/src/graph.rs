@@ -25,6 +25,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::Dfs;
 
 use crate::ast::Block;
+use crate::deadline;
 use crate::interpolate::RenderedDescription;
 use crate::project::Project;
 use crate::source::{Diagnostics, Error, Warning};
@@ -367,11 +368,17 @@ impl<'p> Graph<'p> {
 /// This is the graph half of `inka check`: construction problems (duplicate
 /// ids, duplicate or undefined references) and shape problems (a missing
 /// objective, cycles, unreachable nodes) come back as one [`Diagnostics`]
-/// either way. A project with no blocks has no objective, so an empty
+/// either way, together with every `until:` naming a phase the manifest does
+/// not declare. A project with no blocks has no objective, so an empty
 /// argument is rejected here too.
 #[must_use]
 pub fn check(project: &Project) -> Diagnostics {
-    check_blocks(&project.blocks)
+    let Diagnostics {
+        mut errors,
+        warnings,
+    } = check_blocks(&project.blocks);
+    errors.extend(deadline::check(&project.blocks, &project.manifest.phases));
+    Diagnostics { errors, warnings }
 }
 
 /// Checks graph construction and shape in one pass. A partially resolved

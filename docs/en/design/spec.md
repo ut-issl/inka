@@ -42,7 +42,8 @@ fiat <id> {
   `fiat` → neither allowed.
 - Annotations form a group anchored on `until:` — `reason:` and `promote:` may
   only appear together with `until:`. `until: <phase>` and `reason: "<short
-  text>"` may appear on any block. `promote:` names the successor mode and is
+  text>"` may appear on any block; `check` rejects an `until:` phase that
+  `phases.order` does not list. `promote:` names the successor mode and is
   optional (an `until:` without `promote:` is plain expiry): on fiat the
   target is `structure` or `bind`; on the objective it is `structure` only.
   structure and bind take no `promote:` — announcing a mode change there is

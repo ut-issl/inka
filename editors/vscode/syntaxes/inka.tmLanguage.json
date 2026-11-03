@@ -20,7 +20,31 @@
           "name": "keyword.control.mode.inka"
         },
         "2": {
-          "name": "entity.name.section.inka"
+          "name": "entity.name.type.inka"
+        }
+      }
+    },
+    {
+      "comment": "The phase an `until:` names. entity.name.function is borrowed for its color (pale yellow in Dark+), so a phase reads apart from ids and modes.",
+      "match": "\\b(until)\\s*:\\s*([A-Za-z_][A-Za-z0-9_-]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.annotation.inka"
+        },
+        "2": {
+          "name": "entity.name.function.phase.inka"
+        }
+      }
+    },
+    {
+      "comment": "The mode a `promote:` announces, colored like the mode keyword that opens a block.",
+      "match": "\\b(promote)\\s*:\\s*(structure|bind)(?![A-Za-z0-9_-])",
+      "captures": {
+        "1": {
+          "name": "keyword.other.annotation.inka"
+        },
+        "2": {
+          "name": "keyword.control.mode.inka"
         }
       }
     },

@@ -51,6 +51,20 @@ impl<D> Block<D> {
         }
     }
 
+    /// Returns the block's `until:` annotation, whichever mode carries it.
+    ///
+    /// Promotion targets differ by mode, so they stay on the mode-specific
+    /// types; this is the part every mode shares.
+    #[must_use]
+    pub fn deadline(&self) -> Option<&Deadline> {
+        match self {
+            Block::Objective(b) => b.deadline.as_ref().map(|d| &d.deadline),
+            Block::Structure(b) => b.deadline.as_ref(),
+            Block::Bind(b) => b.deadline.as_ref(),
+            Block::Fiat(b) => b.deadline.as_ref().map(|d| &d.deadline),
+        }
+    }
+
     /// Rebuilds the block around a new description, moving every other field.
     ///
     /// This is the only way a block changes description stage, so a stage

@@ -10,6 +10,7 @@ publish.workspace = true
 inka-core = { workspace = true }
 lsp-server = { workspace = true }
 lsp-types = { workspace = true }
+pulldown-cmark = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

@@ -6,7 +6,9 @@ use std::path::Path;
 
 use lsp_server::{Message, RequestId};
 use lsp_types::notification::DidChangeWatchedFiles;
-use lsp_types::{DiagnosticSeverity, DidChangeWatchedFilesParams, FileChangeType, FileEvent};
+use lsp_types::{
+    DiagnosticSeverity, DidChangeWatchedFilesParams, FileChangeType, FileEvent, Position, Range,
+};
 
 mod common;
 use common::{BROKEN_ARGUMENT, CLEAN_ARGUMENT, Client, scenario_project, uri_of};
@@ -72,6 +74,38 @@ fn an_unsaved_edit_is_diagnosed_and_a_fix_clears_it() {
         fixed.diagnostics.is_empty(),
         "expected cleared diagnostics, got {:?}",
         fixed.diagnostics
+    );
+
+    client.shutdown();
+}
+
+#[test]
+fn an_undeclared_until_phase_is_reported_at_the_phase_name() {
+    // Arrange: the manifest declares only `P0`.
+    let (_temp, argument) = scenario_project();
+    let uri = uri_of(&argument);
+    let client = Client::start();
+    let typo = CLEAN_ARGUMENT.replace(
+        "fiat leaf {\n  ```\n  ok\n  ```\n}",
+        "fiat leaf {\n  ```\n  ok\n  ```\n  until: P9\n}",
+    );
+
+    // Act
+    client.open(&uri, &typo);
+    let published = client.receive_diagnostics();
+
+    // Assert: one error covering exactly `P9` on line 11.
+    let [diagnostic] = published.diagnostics.as_slice() else {
+        panic!("expected one diagnostic, got {:?}", published.diagnostics);
+    };
+    assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::ERROR));
+    assert_eq!(
+        diagnostic.message,
+        "unknown phase `P9` in `until:`; phases.order lists `P0`"
+    );
+    assert_eq!(
+        diagnostic.range,
+        Range::new(Position::new(11, 9), Position::new(11, 11))
     );
 
     client.shutdown();

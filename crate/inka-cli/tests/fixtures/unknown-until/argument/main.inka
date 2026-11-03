@@ -1,0 +1,14 @@
+objective root {
+  ```
+  the root claim
+  ```
+  children: leaf
+}
+
+fiat leaf {
+  ```
+  taken as given for now
+  ```
+  until: P9
+  promote: bind
+}
