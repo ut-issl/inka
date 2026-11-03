@@ -24,6 +24,7 @@ petgraph = { version = "0.8", default-features = false, features = ["std"] }
 predicates = "3"
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 proptest = "1"
+pulldown-cmark = { version = "0.13", default-features = false }
 pyo3 = { version = "0.30.1", features = ["abi3-py310", "extension-module"] }
 roxmltree = "0.21.1"
 serde = { version = "1", features = ["derive"] }

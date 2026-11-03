@@ -46,6 +46,28 @@
         "path": "./syntaxes/inka.tmLanguage.json"
       }
     ],
+    "semanticTokenScopes": [
+      {
+        "language": "inka",
+        "scopes": {
+          "markupHeading": [
+            "markup.heading"
+          ],
+          "markupBold": [
+            "markup.bold"
+          ],
+          "markupItalic": [
+            "markup.italic"
+          ],
+          "markupCode": [
+            "markup.inline.raw"
+          ],
+          "markupLink": [
+            "markup.underline.link"
+          ]
+        }
+      }
+    ],
     "configuration": {
       "title": "inka",
       "properties": {

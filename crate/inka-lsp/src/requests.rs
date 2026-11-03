@@ -11,11 +11,13 @@ use std::collections::HashMap;
 
 use lsp_server::{ErrorCode, Request, Response};
 use lsp_types::request::{
-    GotoDefinition, HoverRequest, PrepareRenameRequest, References, Rename, Request as _,
+    CodeLensRequest, GotoDefinition, HoverRequest, InlayHintRequest, PrepareRenameRequest,
+    References, Rename, Request as _, SemanticTokensFullRequest,
 };
 use lsp_types::{
-    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams, Location,
-    MarkupContent, MarkupKind, Position, PrepareRenameResponse, ReferenceParams, RenameParams,
+    CodeLens, CodeLensParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
+    HoverParams, InlayHint, InlayHintParams, Location, MarkupContent, MarkupKind, Position,
+    PrepareRenameResponse, ReferenceParams, RenameParams, SemanticTokens, SemanticTokensParams,
     TextDocumentIdentifier, TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
 };
 use serde::Serialize;
@@ -25,7 +27,7 @@ use inka_core::project::{Project, load_project_with};
 use inka_core::source::{FileId, SourceMap, Span};
 
 use crate::state::Overlays;
-use crate::{navigate, position, rename, roots, uri};
+use crate::{hints, lens, navigate, position, rename, roots, tokens, uri};
 
 /// Answers one request, or hands it back when the method is not one of ours.
 pub fn answer(overlays: &Overlays, request: Request) -> Result<Response, Request> {
@@ -35,6 +37,9 @@ pub fn answer(overlays: &Overlays, request: Request) -> Result<Response, Request
         References::METHOD => Ok(dispatch(overlays, request, references)),
         PrepareRenameRequest::METHOD => Ok(dispatch(overlays, request, prepare_rename)),
         Rename::METHOD => Ok(dispatch(overlays, request, rename_to)),
+        SemanticTokensFullRequest::METHOD => Ok(dispatch(overlays, request, semantic_tokens)),
+        InlayHintRequest::METHOD => Ok(dispatch(overlays, request, inlay_hints)),
+        CodeLensRequest::METHOD => Ok(dispatch(overlays, request, code_lens)),
         _ => Err(request),
     }
 }
@@ -68,20 +73,32 @@ struct Located {
     offset: usize,
 }
 
+/// A request's document resolved against a freshly loaded project: the root
+/// it belongs to, the loaded project, and the document's file id in it.
+fn load_document(
+    overlays: &Overlays,
+    text_document: &TextDocumentIdentifier,
+) -> Option<(std::path::PathBuf, Project, FileId)> {
+    let path = uri::to_path(&text_document.uri)?;
+    let root = roots::project_root(&path)?;
+    let project = load_project_with(&root, overlays).result.ok()?;
+    let file = project
+        .source_map
+        .files()
+        .find(|(_, source)| source.path == path)
+        .map(|(file, _)| file)?;
+    Some((root, project, file))
+}
+
 fn locate(
     overlays: &Overlays,
     text_document: &TextDocumentIdentifier,
     at: Position,
 ) -> Option<Located> {
-    let path = uri::to_path(&text_document.uri)?;
-    let root = roots::project_root(&path)?;
-    let project = load_project_with(&root, overlays).result.ok()?;
-    let (file, offset) = {
-        let (file, source) = project
-            .source_map
-            .files()
-            .find(|(_, source)| source.path == path)?;
-        (file, position::offset_of(source, at))
+    let (root, project, file) = load_document(overlays, text_document)?;
+    let offset = {
+        let source = project.source_map.file(file)?;
+        position::offset_of(source, at)
     };
     Some(Located {
         root,
@@ -210,6 +227,41 @@ fn prepare_rename(
         file,
         symbol.span(),
     ))))
+}
+
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)] // see `hover`
+fn semantic_tokens(
+    overlays: &Overlays,
+    params: SemanticTokensParams,
+) -> Result<Option<SemanticTokens>, String> {
+    let Some((_, project, file)) = load_document(overlays, &params.text_document) else {
+        return Ok(None);
+    };
+    Ok(tokens::full(&project, file))
+}
+
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)] // see `hover`
+fn inlay_hints(
+    overlays: &Overlays,
+    params: InlayHintParams,
+) -> Result<Option<Vec<InlayHint>>, String> {
+    let Some((_, project, file)) = load_document(overlays, &params.text_document) else {
+        return Ok(None);
+    };
+    let Some(source) = project.source_map.file(file) else {
+        return Ok(None);
+    };
+    let start = position::offset_of(source, params.range.start);
+    let end = position::offset_of(source, params.range.end);
+    Ok(Some(hints::hints(&project, file, start, end)))
+}
+
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)] // see `hover`
+fn code_lens(overlays: &Overlays, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>, String> {
+    let Some((root, project, file)) = load_document(overlays, &params.text_document) else {
+        return Ok(None);
+    };
+    Ok(lens::lenses(&root, &project, file))
 }
 
 fn rename_to(overlays: &Overlays, params: RenameParams) -> Result<Option<WorkspaceEdit>, String> {

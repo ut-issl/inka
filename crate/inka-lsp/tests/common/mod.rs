@@ -50,6 +50,12 @@ pub struct Client {
 
 impl Client {
     pub fn start() -> Self {
+        Self::start_with(serde_json::json!({}))
+    }
+
+    /// Starts a client that declares `capabilities` in its `initialize`.
+    #[allow(clippy::needless_pass_by_value)] // call sites hand over a `json!` literal
+    pub fn start_with(capabilities: serde_json::Value) -> Self {
         let (server_side, client_side) = Connection::memory();
         let server = std::thread::spawn(move || {
             inka_lsp::run(&server_side).expect("server runs to a clean end");
@@ -58,7 +64,7 @@ impl Client {
             connection: client_side,
             server: Some(server),
         };
-        client.request::<Initialize>(1, serde_json::json!({ "capabilities": {} }));
+        client.request::<Initialize>(1, serde_json::json!({ "capabilities": capabilities }));
         let response = client.receive();
         assert!(
             matches!(response, Message::Response(ref r) if r.response_result.is_ok()),
