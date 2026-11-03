@@ -11,7 +11,10 @@ language server. The server provides:
   and the CommonMark inside fenced descriptions is highlighted the way the
   current theme styles Markdown;
 - inlay hints showing each child's first contract line after its
-  `children:` entry;
+  `children:` entry, with the whole contract as a tooltip. VS Code caps the
+  combined hint length per line and drops hints past the cap, so this
+  extension sets `editor.inlayHints.maximumLength` to `0` (no cap) for inka
+  files only — override it under `"[inka]"` in your settings if you prefer;
 - read-only code lenses with every block's approval state (established, or
   the reason it is not), refreshed when approval records change on disk.
 

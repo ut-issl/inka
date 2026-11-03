@@ -8,7 +8,10 @@ use std::path::{Path, PathBuf};
 use lsp_server::Message;
 use lsp_types::notification::DidChangeWatchedFiles;
 use lsp_types::request::{CodeLensRequest, InlayHintRequest, SemanticTokensFullRequest};
-use lsp_types::{CodeLens, InlayHint, InlayHintLabel, Position, Range, SemanticTokens, Uri};
+use lsp_types::{
+    CodeLens, InlayHint, InlayHintLabel, InlayHintTooltip, MarkupKind, Position, Range,
+    SemanticTokens, Uri,
+};
 
 use inka_core::approvals::{self, APPROVALS_DIR};
 use inka_core::graph::Graph;
@@ -151,7 +154,7 @@ fn inlay_hints_annotate_every_child_on_one_line() {
         concat!(
             "objective root {\n  ```\n  goal\n  ```\n  children: one, two\n}\n",
             "fiat one {\n  ```\n  first leaf\n  ```\n}\n",
-            "fiat two {\n  ```\n  second leaf\n  ```\n}\n",
+            "fiat two {\n  ```\n  second leaf\n  and **more**\n  ```\n}\n",
         ),
     )
     .expect("a.inka");
@@ -170,22 +173,37 @@ fn inlay_hints_annotate_every_child_on_one_line() {
     );
     let response = client.receive_response(2);
 
-    // Assert: both references carry their own leaf's contract.
+    // Assert: both references carry their own leaf's first line; only the
+    // two-line contract, which the label cannot show whole, gets a Markdown
+    // tooltip.
     let hints: Vec<InlayHint> =
         serde_json::from_value(response.response_result.expect("hints are answered"))
             .expect("valid inlay hints");
-    let labels: Vec<(Position, String)> = hints
+    let seen: Vec<(Position, String, Option<String>)> = hints
         .into_iter()
-        .map(|hint| match hint.label {
-            InlayHintLabel::String(label) => (hint.position, label),
-            InlayHintLabel::LabelParts(parts) => panic!("expected a string label, got {parts:?}"),
+        .map(|hint| {
+            let InlayHintLabel::String(label) = hint.label else {
+                panic!("expected a string label, got {:?}", hint.label);
+            };
+            let tooltip = hint.tooltip.map(|tooltip| {
+                let InlayHintTooltip::MarkupContent(content) = tooltip else {
+                    panic!("expected a Markdown tooltip, got {tooltip:?}");
+                };
+                assert_eq!(content.kind, MarkupKind::Markdown);
+                content.value
+            });
+            (hint.position, label, tooltip)
         })
         .collect();
     assert_eq!(
-        labels,
+        seen,
         [
-            (Position::new(4, 15), "first leaf".to_owned()),
-            (Position::new(4, 20), "second leaf".to_owned()),
+            (Position::new(4, 15), "first leaf".to_owned(), None),
+            (
+                Position::new(4, 20),
+                "second leaf".to_owned(),
+                Some("second leaf\nand **more**".to_owned())
+            ),
         ]
     );
 

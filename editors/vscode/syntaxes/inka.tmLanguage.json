@@ -38,7 +38,7 @@
     },
     {
       "comment": "The mode a `promote:` announces, colored like the mode keyword that opens a block.",
-      "match": "\\b(promote)\\s*:\\s*(structure|bind)\\b",
+      "match": "\\b(promote)\\s*:\\s*(structure|bind)(?![A-Za-z0-9_-])",
       "captures": {
         "1": {
           "name": "keyword.other.annotation.inka"

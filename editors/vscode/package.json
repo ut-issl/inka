@@ -46,6 +46,11 @@
         "path": "./syntaxes/inka.tmLanguage.json"
       }
     ],
+    "configurationDefaults": {
+      "[inka]": {
+        "editor.inlayHints.maximumLength": 0
+      }
+    },
     "semanticTokenTypes": [
       {
         "id": "markupHeading",

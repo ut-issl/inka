@@ -1,7 +1,14 @@
 //! Inlay hints: each `children:` entry carries the first line of the child's
-//! contract, so an argument reads in place instead of one jump per name.
+//! contract, so an argument reads in place instead of one jump per name. When
+//! the label does not show the whole contract, a Markdown tooltip does.
+//!
+//! VS Code caps the *combined* label length of every hint on one line
+//! (`editor.inlayHints.maximumLength`, 43 by default) and drops the hints past
+//! the cap, so a `children:` line naming several blocks would show only the
+//! first. The bundled extension lifts that cap for inka files; other clients
+//! get the same per-hint labels and their own line policy.
 
-use lsp_types::{InlayHint, InlayHintLabel};
+use lsp_types::{InlayHint, InlayHintLabel, InlayHintTooltip, MarkupContent, MarkupKind};
 
 use inka_core::normalize;
 use inka_core::project::Project;
@@ -33,16 +40,21 @@ pub fn hints(project: &Project, file: FileId, start: usize, end: usize) -> Vec<I
                 continue;
             };
             let description = normalize::description(definition.common().description.rendered());
-            let Some(first_line) = description.lines().next().filter(|line| !line.is_empty())
+            let Some(label) = description
+                .lines()
+                .next()
+                .filter(|line| !line.is_empty())
+                .map(truncate)
             else {
                 continue;
             };
+            let tooltip = tooltip(&label, description);
             found.push(InlayHint {
                 position: position::position(source, child.span.end),
-                label: InlayHintLabel::String(truncate(first_line)),
+                label: InlayHintLabel::String(label),
                 kind: None,
                 text_edits: None,
-                tooltip: None,
+                tooltip,
                 padding_left: Some(true),
                 padding_right: None,
                 data: None,
@@ -50,6 +62,15 @@ pub fn hints(project: &Project, file: FileId, start: usize, end: usize) -> Vec<I
         }
     }
     found
+}
+
+/// The whole contract as Markdown, or nothing when the label already shows
+/// all of it — a one-line contract within the budget.
+fn tooltip(label: &str, description: String) -> Option<InlayHintTooltip> {
+    (label != description).then_some(InlayHintTooltip::MarkupContent(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: description,
+    }))
 }
 
 /// The first `LABEL_BUDGET` characters, with `…` marking a cut.
