@@ -63,7 +63,7 @@
     "check": "tsc -p . --noEmit"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^11.0.0"
   },
   "devDependencies": {
     "@types/node": "26.6.6",
