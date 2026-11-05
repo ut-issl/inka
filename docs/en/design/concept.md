@@ -23,12 +23,15 @@ repository, evaluated by a pure function.
    one-to-one onto approval targets.
 
 2. **Approvals bind to the local view.** The local view of a node is its own
-   rendered description + deadline annotations + its direct children's
-   descriptions — nothing deeper. Every approval record stores a hash of that
-   view. Consequences: editing a description invalidates exactly the node's own
-   approvals and its direct parents' structure approvals, nothing else; renames
-   and child reordering invalidate nothing (IDs, tags, and comments are not part
-   of the contract); re-approval cost is proportional to the diff.
+   rendered description + deadline annotations + the comments attached to it
+   and to its child entries + its direct children's descriptions — nothing
+   deeper. Every approval record stores a hash of that view. Consequences:
+   editing a description invalidates exactly the node's own approvals and its
+   direct parents' structure approvals, nothing else; renames
+   and child reordering invalidate nothing (IDs and tags are not part of the
+   contract); re-approval cost is proportional to the diff. A comment is a note
+   on the element it is attached to and is shown at review, so it is contract
+   content.
 
 3. **Truth and validity are separated.** Whether evidence *passes* is machine
    truth, re-established by re-executing the evidence; eval only reconciles
@@ -48,9 +51,9 @@ repository, evaluated by a pure function.
    as selectors (mode × id/namespace/`#tag`) and predicates (`any`, `role`,
    `including`, `not-author`, `fresh`, `forbidden`, …). Phases have a declared
    total order; `fresh` compares recorded phases, never timestamps. Deadline
-   annotations let authors declare debt that expires: `until: <phase>` with a
-   quoted `reason:` on any node (`reason:` and `promote:` only ever accompany
-   an `until:`), plus `promote:` to name the successor mode — `structure` or
+   annotations let authors declare debt that expires: `until: <phase>` on any
+   node, its rationale written as a comment on it, plus `promote:` (which only
+   ever accompanies an `until:`) to name the successor mode — `structure` or
    `bind` on a fiat, `structure` only on the objective. Expiry is hard — past the deadline no approval of
    the node counts, even freshly granted ones — so keeping things as they are
    requires visibly editing the annotation (a contract change), never silent
@@ -67,10 +70,10 @@ repository, evaluated by a pure function.
 
 ## Lifecycle
 
-A proposition typically starts `fiat` with `until:` / `promote:` / `reason:`
-(explicit, expiring debt), then becomes `bind` when evidence exists, or
-`structure` when decomposed. A structure or bind whose grounds feel weak
-carries `until:` + `reason:` as an obligation to revise its children or source
+A proposition typically starts `fiat` with `until:` / `promote:` and a comment
+saying why (explicit, expiring debt), then becomes `bind` when evidence exists,
+or `structure` when decomposed. A structure or bind whose grounds feel weak
+carries a commented `until:` as an obligation to revise its children or source
 by the deadline. Because parents bind only to children's descriptions, neither
 a child's mode change nor its annotations ever invalidate the parent's
 approval.
