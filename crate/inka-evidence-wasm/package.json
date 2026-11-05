@@ -39,7 +39,7 @@
     "wasm-pack": "0.15.1"
   },
   "dependencies": {
-    "@babel/parser": "8.0.10"
+    "@babel/parser": "8.1.0"
   },
   "bin": {
     "inka-evidence-merge": "dist/merge-cli.js"
