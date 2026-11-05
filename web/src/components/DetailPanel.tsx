@@ -51,7 +51,6 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
         <p className="detail__row detail__row--deadline">
           <span className="detail__label">Until</span> {node.deadline.until}
           {node.deadline.promote ? ` · promote to ${node.deadline.promote}` : ''}
-          {node.deadline.reason ? <span className="detail__reason">{node.deadline.reason}</span> : null}
         </p>
       ) : null}
 

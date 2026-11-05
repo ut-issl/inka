@@ -14,7 +14,7 @@ use inka_core::evidence::{self, EvidenceSet};
 use inka_core::hash::LocalView;
 use inka_core::manifest::PhasesSection;
 use inka_core::record::{Record, RecordFields, Target};
-use inka_core::view::{ArgumentView, Evidence, EvidenceKind, Mode, ViewNode};
+use inka_core::view::{ArgumentView, Evidence, EvidenceKind, Mode, NodeComments, ViewNode};
 
 /// The bind under test and its contract fixtures.
 const BIND_ID: &str = "hash_claim";
@@ -81,6 +81,7 @@ fn bind_view() -> ArgumentView {
         }),
         deadline: None,
         children: Vec::new(),
+        comments: NodeComments::default(),
     };
     ArgumentView {
         nodes: vec![node],

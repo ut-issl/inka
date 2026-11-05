@@ -50,7 +50,7 @@ pub fn symbol_at(project: &Project, file: FileId, offset: usize) -> Option<Symbo
         if covers(block.common().id.span, file, offset) {
             return Some(Symbol::Definition(block));
         }
-        for child in block.children() {
+        for child in block.children().iter().map(|entry| &entry.id) {
             if covers(child.span, file, offset) {
                 return Some(Symbol::Reference(child));
             }
@@ -88,8 +88,8 @@ pub fn references(project: &Project, name: &str) -> Vec<Span> {
         .blocks
         .iter()
         .flat_map(Block::children)
-        .filter(|child| child.value == name)
-        .map(|child| child.span)
+        .filter(|child| child.id.value == name)
+        .map(|child| child.id.span)
         .collect()
 }
 
@@ -120,11 +120,7 @@ pub fn hover(block: &Block<RenderedDescription>) -> String {
 
     let mut annotations: Vec<String> = Vec::new();
     if let Some(deadline) = deadline_of(block) {
-        let mut line = format!("until: {}", deadline.until.value);
-        if let Some(reason) = &deadline.reason {
-            write!(line, " — reason: \"{}\"", reason.value).expect("writing to a String");
-        }
-        annotations.push(line);
+        annotations.push(format!("until: {}", deadline.until.value));
     }
     if let Some(promote) = promote_of(block) {
         annotations.push(format!("promote: {promote}"));
@@ -160,14 +156,14 @@ fn promote_of(block: &Block<RenderedDescription>) -> Option<&'static str> {
             .deadline
             .as_ref()
             .and_then(|d| d.promote.as_ref())
-            .map(|promote| match promote.value {
+            .map(|promote| match promote.target.value {
                 ObjectivePromoteTarget::Structure => "structure",
             }),
         Block::Fiat(fiat) => {
             fiat.deadline
                 .as_ref()
                 .and_then(|d| d.promote.as_ref())
-                .map(|promote| match promote.value {
+                .map(|promote| match promote.target.value {
                     FiatPromoteTarget::Structure => "structure",
                     FiatPromoteTarget::Bind => "bind",
                 })
@@ -264,7 +260,7 @@ mod tests {
         std::fs::write(
             temp.path().join("argument/b.inka"),
             concat!(
-                "fiat leaf {\n  ```\n  accepted as is\n  ```\n  until: P1\n  reason: \"soon\"\n",
+                "fiat leaf {\n  ```\n  accepted as is\n  ```\n  until: P1\n",
                 "  promote: bind\n}\n\n",
                 "structure helper {\n  ```\n  helps\n  ```\n  children: leaf\n}\n",
             ),
@@ -336,7 +332,6 @@ mod tests {
         assert!(text.starts_with("**fiat** `leaf`"), "got: {text}");
         assert!(text.contains("accepted as is"));
         assert!(text.contains("until: P1"));
-        assert!(text.contains("reason: \"soon\""));
         assert!(text.contains("promote: bind"));
     }
 

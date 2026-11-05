@@ -16,7 +16,7 @@ const view = buildView(
       description: 'the contract text',
       tags: ['safety'],
       evidence: { kind: 'veriq', target: 'pkg.verify_thing' },
-      deadline: { until: 'FM', promote: 'bind', reason: 'measured on the real vehicle' },
+      deadline: { until: 'FM', promote: 'bind' },
     }),
     node('c', { mode: 'fiat', namespace: 'mid' }),
     edge('a', 'b'),
@@ -36,7 +36,6 @@ describe('DetailPanel', () => {
     expect(screen.getByText('the contract text')).toBeInTheDocument()
     expect(screen.getByText('pkg.verify_thing')).toBeInTheDocument()
     expect(screen.getByText(/FM/)).toBeInTheDocument()
-    expect(screen.getByText(/measured on the real vehicle/)).toBeInTheDocument()
   })
 
   test('omits evidence and deadline from a node that declares neither', () => {

@@ -9,11 +9,18 @@
 //! the next `}` or mode keyword, so one broken block never swallows the rest of
 //! the file. Fences are single tokens from the lexer, so a `}` inside a
 //! description can never be mistaken for the end of a block.
+//!
+//! Comments never cause an error. The parser reads the comment-free token
+//! stream, records which tokens each anchor of a block covers, and then hands
+//! every comment to [`crate::attach`] to find the element it belongs to.
 
 use crate::ast::{
-    BindBlock, Block, BlockCommon, Deadline, Description, FiatBlock, FiatDeadline,
-    FiatPromoteTarget, ObjectiveBlock, ObjectiveDeadline, ObjectivePromoteTarget, SourceRef,
-    StructureBlock,
+    BindBlock, Block, BlockCommon, ChildEntry, Comment, Deadline, Description, FiatBlock,
+    FiatDeadline, FiatPromoteTarget, ObjectiveBlock, ObjectiveDeadline, ObjectivePromoteTarget,
+    Promotion, SourceRef, StructureBlock,
+};
+use crate::attach::{
+    Anchor, AnchorRange, CommentQueue, CommentSlots, PendingComment, Position, distribute,
 };
 use crate::lexer::{Token, TokenKind};
 use crate::source::{Error, FileId, Span, Spanned};
@@ -25,6 +32,8 @@ use crate::source::{Error, FileId, Span, Spanned};
 pub struct Parse {
     /// Every block that assembled cleanly enough to be represented in the AST.
     pub blocks: Vec<Block>,
+    /// The comment attached to the file rather than to any block.
+    pub comment: Option<Comment>,
     /// Every problem found, in source order.
     pub errors: Vec<Error>,
 }
@@ -69,8 +78,9 @@ struct RawBlock {
     children: Option<Spanned<Vec<Spanned<String>>>>,
     source: Option<Spanned<SourceRef>>,
     until: Option<Spanned<String>>,
-    reason: Option<Spanned<String>>,
     promote: Option<Spanned<PromoteMode>>,
+    /// The token range of every property and child entry that was accepted.
+    anchors: Vec<AnchorRange>,
 }
 
 /// The validated common pieces of a block, handed to a per-mode builder.
@@ -87,30 +97,62 @@ struct BlockParts {
     promote: Option<Spanned<PromoteMode>>,
     children: Option<Spanned<Vec<Spanned<String>>>>,
     source: Option<Spanned<SourceRef>>,
+    comments: CommentSlots,
 }
 
 struct Parser<'a> {
     file_id: FileId,
-    tokens: &'a [Token],
+    /// The token stream without its comments.
+    tokens: Vec<&'a Token>,
     pos: usize,
     end_offset: usize,
     errors: Vec<Error>,
+    /// The comments not yet attached.
+    comments: CommentQueue,
 }
 
 impl<'a> Parser<'a> {
     fn new(file_id: FileId, tokens: &'a [Token]) -> Self {
-        let end_offset = tokens.last().map_or(0, |token| token.span.end);
+        let mut significant = Vec::with_capacity(tokens.len());
+        let mut comments = Vec::new();
+        for token in tokens {
+            if let TokenKind::Comment {
+                text,
+                trailing,
+                blank_line_after,
+            } = &token.value
+            {
+                comments.push(PendingComment {
+                    line: Spanned {
+                        span: token.span,
+                        value: text.clone(),
+                    },
+                    position: Position {
+                        next: significant.len(),
+                        trailing: *trailing,
+                    },
+                    blank_line_after: *blank_line_after,
+                });
+            } else {
+                significant.push(token);
+            }
+        }
+        // Diagnostics at the end of input point past the last real token, not
+        // past a comment that follows it.
+        let end_offset = significant.last().map_or(0, |token| token.span.end);
         Self {
             file_id,
-            tokens,
+            tokens: significant,
             pos: 0,
             end_offset,
             errors: Vec::new(),
+            comments: CommentQueue::new(comments),
         }
     }
 
     fn parse_file(mut self) -> Parse {
         let mut blocks = Vec::new();
+        let mut file_lines = self.comments.take_file_header();
 
         while !self.at_eof() {
             if self.at_mode_keyword() {
@@ -125,10 +167,18 @@ impl<'a> Parser<'a> {
                 );
                 self.recover_to_next_block();
             }
+            // Comments inside tokens no block could be read from belong to
+            // the file, so they never land on the next, unrelated block.
+            let skipped = self.comments.take_through(self.pos.saturating_sub(1));
+            file_lines.extend(skipped.into_iter().map(|comment| comment.line));
         }
+
+        // Comments after the last block belong to the file.
+        file_lines.extend(self.comments.take_rest());
 
         Parse {
             blocks,
+            comment: Comment::from_lines(file_lines),
             errors: self.errors,
         }
     }
@@ -136,6 +186,7 @@ impl<'a> Parser<'a> {
     // --- Block structure -------------------------------------------------
 
     fn parse_block(&mut self) -> Option<Block> {
+        let first = self.pos;
         let (mode, start) = {
             let token = self.peek()?;
             (mode_of(&token.value)?, token.span.start)
@@ -159,12 +210,33 @@ impl<'a> Parser<'a> {
         let mut raw = RawBlock::default();
         let end = self.parse_block_body(&mut raw);
 
+        let last = self.pos.saturating_sub(1).max(first);
+        let mut anchors = std::mem::take(&mut raw.anchors);
+        anchors.push(AnchorRange {
+            anchor: Anchor::Block,
+            first,
+            last,
+        });
+        // A block left unclosed at the end of input still owns the comments
+        // after its last token: they are inside its braces.
+        let unclosed_at_eof = self.at_eof()
+            && !matches!(
+                self.tokens.get(last).map(|t| &t.value),
+                Some(TokenKind::RightBrace)
+            );
+        let through = if unclosed_at_eof {
+            self.tokens.len()
+        } else {
+            last
+        };
+        let comments = distribute(self.comments.take_through(through), &anchors);
+
         let span = Span {
             file_id: self.file_id,
             start,
             end,
         };
-        self.assemble(mode, id, tags, span, raw)
+        self.assemble(mode, id, tags, span, raw, comments)
     }
 
     fn parse_block_id(&mut self) -> Option<Spanned<String>> {
@@ -257,6 +329,7 @@ impl<'a> Parser<'a> {
     // --- Properties ------------------------------------------------------
 
     fn parse_property(&mut self, raw: &mut RawBlock) {
+        let first = self.pos;
         let (name, name_span) = {
             let Some(Spanned {
                 span,
@@ -277,46 +350,65 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1;
 
-        match name.as_str() {
+        let anchor = match name.as_str() {
             "children" => self.parse_children(raw, name_span),
             "test" => self.parse_source(raw, name_span, SourceScheme::Test),
             "veriq" => self.parse_source(raw, name_span, SourceScheme::Veriq),
             "until" => self.parse_until(raw, name_span),
-            "reason" => self.parse_reason(raw, name_span),
             "promote" => self.parse_promote(raw, name_span),
             _ => {
                 self.error(name_span, format!("unknown property `{name}`"));
                 self.skip_to_entry_boundary();
+                None
             }
+        };
+        if let Some(anchor) = anchor {
+            raw.anchors.push(AnchorRange {
+                anchor,
+                first,
+                last: self.pos - 1,
+            });
         }
     }
 
-    fn parse_children(&mut self, raw: &mut RawBlock, name_span: Span) {
+    /// Parses a `children:` list, returning its anchor when the property is
+    /// accepted. Each entry covers its reference and the `,` after it.
+    fn parse_children(&mut self, raw: &mut RawBlock, name_span: Span) -> Option<Anchor> {
         let mut ids = Vec::new();
-        match self.parse_child_ref("expected a child identifier") {
-            Some(id) => {
-                ids.push(id);
-                while matches!(self.peek_kind(), Some(TokenKind::Comma)) {
-                    self.pos += 1;
-                    let Some(id) = self.parse_child_ref("expected a child identifier after `,`")
-                    else {
-                        self.skip_to_entry_boundary();
-                        break;
-                    };
-                    ids.push(id);
-                }
+        let mut entries = Vec::new();
+        let mut message = "expected a child identifier";
+        loop {
+            let entry_first = self.pos;
+            let Some(id) = self.parse_child_ref(message) else {
+                self.skip_to_entry_boundary();
+                break;
+            };
+            let has_comma = matches!(self.peek_kind(), Some(TokenKind::Comma));
+            if has_comma {
+                self.pos += 1;
             }
-            None => self.skip_to_entry_boundary(),
+            entries.push(AnchorRange {
+                anchor: Anchor::Child(ids.len()),
+                first: entry_first,
+                last: self.pos - 1,
+            });
+            ids.push(id);
+            if !has_comma {
+                break;
+            }
+            message = "expected a child identifier after `,`";
         }
 
         if raw.children.is_some() {
             self.error(name_span, "duplicate property `children`");
-            return;
+            return None;
         }
+        raw.anchors.extend(entries);
         raw.children = Some(Spanned {
             span: name_span,
             value: ids,
         });
+        Some(Anchor::Children)
     }
 
     /// Parses one child reference: an identifier optionally qualified with
@@ -335,10 +427,15 @@ impl<'a> Parser<'a> {
         Some(id)
     }
 
-    fn parse_source(&mut self, raw: &mut RawBlock, name_span: Span, scheme: SourceScheme) {
+    fn parse_source(
+        &mut self,
+        raw: &mut RawBlock,
+        name_span: Span,
+        scheme: SourceScheme,
+    ) -> Option<Anchor> {
         let Some(value) = self.expect_string("expected a quoted reference") else {
             self.skip_to_entry_boundary();
-            return;
+            return None;
         };
         let source = match scheme {
             SourceScheme::Test => SourceRef::Test(value.value),
@@ -354,36 +451,26 @@ impl<'a> Parser<'a> {
                 name_span,
                 "duplicate source reference; a bind takes exactly one of `test:` or `veriq:`",
             );
-            return;
+            return None;
         }
         raw.source = Some(spanned);
+        Some(Anchor::Source)
     }
 
-    fn parse_until(&mut self, raw: &mut RawBlock, name_span: Span) {
+    fn parse_until(&mut self, raw: &mut RawBlock, name_span: Span) -> Option<Anchor> {
         let Some(phase) = self.expect_ident("expected a phase name after `until:`") else {
             self.skip_to_entry_boundary();
-            return;
+            return None;
         };
         if raw.until.is_some() {
             self.error(name_span, "duplicate property `until`");
-            return;
+            return None;
         }
         raw.until = Some(phase);
+        Some(Anchor::Until)
     }
 
-    fn parse_reason(&mut self, raw: &mut RawBlock, name_span: Span) {
-        let Some(text) = self.expect_string("expected a quoted reason after `reason:`") else {
-            self.skip_to_entry_boundary();
-            return;
-        };
-        if raw.reason.is_some() {
-            self.error(name_span, "duplicate property `reason`");
-            return;
-        }
-        raw.reason = Some(text);
-    }
-
-    fn parse_promote(&mut self, raw: &mut RawBlock, name_span: Span) {
+    fn parse_promote(&mut self, raw: &mut RawBlock, name_span: Span) -> Option<Anchor> {
         let (target_span, mode) = match self.peek() {
             Some(Spanned {
                 span,
@@ -401,7 +488,7 @@ impl<'a> Parser<'a> {
                 let span = self.current_span();
                 self.error(span, "expected a promote target after `promote:`");
                 self.skip_to_entry_boundary();
-                return;
+                return None;
             }
         };
         self.pos += 1;
@@ -411,17 +498,18 @@ impl<'a> Parser<'a> {
                 target_span,
                 "invalid promote target; expected `bind` or `structure`",
             );
-            return;
+            return None;
         };
 
         if raw.promote.is_some() {
             self.error(name_span, "duplicate property `promote`");
-            return;
+            return None;
         }
         raw.promote = Some(Spanned {
             span: join(name_span, target_span),
             value: mode,
         });
+        Some(Anchor::Promote)
     }
 
     // --- Assembly --------------------------------------------------------
@@ -433,20 +521,14 @@ impl<'a> Parser<'a> {
         tags: Vec<Spanned<String>>,
         span: Span,
         mut raw: RawBlock,
+        mut comments: CommentSlots,
     ) -> Option<Block> {
         let description = self.resolve_description(&mut raw, id.span);
 
-        let deadline = if let Some(until) = raw.until.take() {
-            Some(Deadline {
-                until,
-                reason: raw.reason.take(),
-            })
-        } else {
-            if let Some(reason_span) = raw.reason.as_ref().map(|reason| reason.span) {
-                self.error(reason_span, "`reason:` requires `until:`");
-            }
-            None
-        };
+        let deadline = raw.until.take().map(|until| Deadline {
+            until,
+            comment: Comment::from_lines(std::mem::take(&mut comments.until)),
+        });
 
         let parts = BlockParts {
             id,
@@ -457,6 +539,7 @@ impl<'a> Parser<'a> {
             promote: raw.promote.take(),
             children: raw.children.take(),
             source: raw.source.take(),
+            comments,
         };
 
         match mode {
@@ -489,32 +572,60 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn build_objective(&mut self, parts: BlockParts) -> Option<Block> {
+    fn build_objective(&mut self, mut parts: BlockParts) -> Option<Block> {
         self.forbid_source(parts.source.as_ref(), "objective");
+        let promote_comment = Comment::from_lines(std::mem::take(&mut parts.comments.promote));
         let deadline = match (parts.deadline, parts.promote) {
             (Some(deadline), promote) => Some(ObjectiveDeadline {
                 deadline,
-                promote: self.objective_promote(promote),
+                promote: self.objective_promote(promote).map(|target| Promotion {
+                    target,
+                    comment: promote_comment,
+                }),
             }),
             (None, promote) => {
                 self.promote_needs_until(promote.as_ref());
                 None
             }
         };
-        let children = self.require_children(parts.children, parts.id.span, "objective");
+        let children = self.require_children(
+            parts.children,
+            &mut parts.comments,
+            parts.id.span,
+            "objective",
+        );
         Some(Block::Objective(ObjectiveBlock {
-            common: common(parts.id, parts.tags, parts.description?, parts.span),
+            children_comment: Comment::from_lines(parts.comments.children),
+            common: common(
+                parts.id,
+                parts.tags,
+                parts.description?,
+                parts.comments.block,
+                parts.span,
+            ),
             deadline,
             children,
         }))
     }
 
-    fn build_structure(&mut self, parts: BlockParts) -> Option<Block> {
+    fn build_structure(&mut self, mut parts: BlockParts) -> Option<Block> {
         self.forbid_source(parts.source.as_ref(), "structure");
         self.forbid_promote(parts.promote.as_ref(), "structure");
-        let children = self.require_children(parts.children, parts.id.span, "structure");
+        let children = self.require_children(
+            parts.children,
+            &mut parts.comments,
+            parts.id.span,
+            "structure",
+        );
         Some(Block::Structure(StructureBlock {
-            common: common(parts.id, parts.tags, parts.description?, parts.span),
+            children_comment: Comment::from_lines(parts.comments.children),
+            common: common(
+                parts.id,
+                parts.tags,
+                parts.description?,
+                parts.comments.block,
+                parts.span,
+            ),
             deadline: parts.deadline,
             children,
         }))
@@ -530,9 +641,16 @@ impl<'a> Parser<'a> {
             );
         }
         Some(Block::Bind(BindBlock {
-            common: common(parts.id, parts.tags, parts.description?, parts.span),
+            common: common(
+                parts.id,
+                parts.tags,
+                parts.description?,
+                parts.comments.block,
+                parts.span,
+            ),
             deadline: parts.deadline,
             source: parts.source?,
+            source_comment: Comment::from_lines(parts.comments.source),
         }))
     }
 
@@ -542,7 +660,10 @@ impl<'a> Parser<'a> {
         let deadline = match (parts.deadline, parts.promote) {
             (Some(deadline), promote) => Some(FiatDeadline {
                 deadline,
-                promote: fiat_promote(promote),
+                promote: fiat_promote(promote).map(|target| Promotion {
+                    target,
+                    comment: Comment::from_lines(parts.comments.promote),
+                }),
             }),
             (None, promote) => {
                 self.promote_needs_until(promote.as_ref());
@@ -550,7 +671,13 @@ impl<'a> Parser<'a> {
             }
         };
         Some(Block::Fiat(FiatBlock {
-            common: common(parts.id, parts.tags, parts.description?, parts.span),
+            common: common(
+                parts.id,
+                parts.tags,
+                parts.description?,
+                parts.comments.block,
+                parts.span,
+            ),
             deadline,
         }))
     }
@@ -574,18 +701,28 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Builds the child entries, each with its comment, or reports the
+    /// missing `children:` property.
     fn require_children(
         &mut self,
         children: Option<Spanned<Vec<Spanned<String>>>>,
+        comments: &mut CommentSlots,
         header: Span,
         mode: &str,
-    ) -> Vec<Spanned<String>> {
-        if let Some(children) = children {
-            children.value
-        } else {
+    ) -> Vec<ChildEntry> {
+        let Some(children) = children else {
             self.error(header, format!("a {mode} requires `children:`"));
-            Vec::new()
-        }
+            return Vec::new();
+        };
+        children
+            .value
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| ChildEntry {
+                id,
+                comment: comments.take_child(index),
+            })
+            .collect()
     }
 
     fn forbid_children(&mut self, children: Option<&Spanned<Vec<Spanned<String>>>>, mode: &str) {
@@ -701,8 +838,8 @@ impl<'a> Parser<'a> {
         self.errors.push(Error::new(span, message));
     }
 
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos)
+    fn peek(&self) -> Option<&'a Token> {
+        self.tokens.get(self.pos).copied()
     }
 
     fn peek_kind(&self) -> Option<&TokenKind> {
@@ -739,12 +876,14 @@ fn common(
     id: Spanned<String>,
     tags: Vec<Spanned<String>>,
     description: Description,
+    comment: Vec<Spanned<String>>,
     span: Span,
 ) -> BlockCommon {
     BlockCommon {
         id,
         tags,
         description,
+        comment: Comment::from_lines(comment),
         span,
     }
 }
@@ -828,7 +967,7 @@ mod tests {
         };
         assert_eq!(block.common.id.value, "root");
         assert_eq!(block.common.description.raw, "Root claim\n");
-        let child_ids: Vec<&str> = block.children.iter().map(|c| c.value.as_str()).collect();
+        let child_ids: Vec<&str> = block.children.iter().map(|c| c.id.value.as_str()).collect();
         assert_eq!(child_ids, vec!["alpha", "beta"]);
         assert!(block.deadline.is_none());
     }
@@ -888,25 +1027,21 @@ mod tests {
         let deadline = block.deadline.as_ref().expect("a deadline");
         assert_eq!(deadline.deadline.until.value, "FM");
         assert_eq!(
-            deadline.promote.as_ref().map(|p| p.value),
+            deadline.promote.as_ref().map(|p| p.target.value),
             Some(FiatPromoteTarget::Bind)
         );
     }
 
     #[test]
-    fn parses_reason_only_with_until() {
+    fn rejects_reason_as_an_unknown_property() {
         let parse = parse_str(
             "fiat assumed {\n```\nAssumed claim\n```\nuntil: M3\nreason: \"awaiting the test\"\n}\n",
         );
 
-        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
-        let Some(Block::Fiat(block)) = parse.blocks.first() else {
-            panic!("expected a fiat block");
-        };
-        let deadline = block.deadline.as_ref().expect("a deadline");
-        assert_eq!(
-            deadline.deadline.reason.as_ref().map(|r| r.value.as_str()),
-            Some("awaiting the test")
+        assert!(
+            has_message(&parse, "unknown property `reason`"),
+            "{:?}",
+            messages(&parse)
         );
     }
 
@@ -922,7 +1057,7 @@ mod tests {
         };
         let deadline = block.deadline.as_ref().expect("a deadline");
         assert_eq!(
-            deadline.promote.as_ref().map(|p| p.value),
+            deadline.promote.as_ref().map(|p| p.target.value),
             Some(ObjectivePromoteTarget::Structure)
         );
     }
@@ -1030,17 +1165,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_reason_without_until() {
-        let parse = parse_str("fiat f {\n```\nClaim\n```\nreason: \"why\"\n}\n");
-
-        assert!(
-            has_message(&parse, "`reason:` requires `until:`"),
-            "{:?}",
-            messages(&parse)
-        );
-    }
-
-    #[test]
     fn rejects_promote_without_until() {
         let parse = parse_str("fiat f {\n```\nClaim\n```\npromote: bind\n}\n");
 
@@ -1138,11 +1262,11 @@ mod tests {
         let Some(Block::Objective(block)) = parse.blocks.first() else {
             panic!("expected an objective block");
         };
-        let child_ids: Vec<&str> = block.children.iter().map(|c| c.value.as_str()).collect();
+        let child_ids: Vec<&str> = block.children.iter().map(|c| c.id.value.as_str()).collect();
         assert_eq!(child_ids, vec!["power::x", "y"]);
 
         let first = &block.children[0];
-        assert_eq!(&input[first.span.start..first.span.end], "power::x");
+        assert_eq!(&input[first.id.span.start..first.id.span.end], "power::x");
     }
 
     #[test]
@@ -1159,9 +1283,7 @@ mod tests {
 
     #[test]
     fn parses_bind_with_deadline() {
-        let parse = parse_str(
-            "bind b {\n```\nClaim\n```\ntest: \"tests/x.rs\"\nuntil: M2\nreason: \"pending rig\"\n}\n",
-        );
+        let parse = parse_str("bind b {\n```\nClaim\n```\ntest: \"tests/x.rs\"\nuntil: M2\n}\n");
 
         assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
         let Some(Block::Bind(block)) = parse.blocks.first() else {
@@ -1169,10 +1291,6 @@ mod tests {
         };
         let deadline = block.deadline.as_ref().expect("a deadline");
         assert_eq!(deadline.until.value, "M2");
-        assert_eq!(
-            deadline.reason.as_ref().map(|r| r.value.as_str()),
-            Some("pending rig")
-        );
     }
 
     #[test]
@@ -1185,7 +1303,7 @@ mod tests {
         };
         let deadline = block.deadline.as_ref().expect("a deadline");
         assert_eq!(
-            deadline.promote.as_ref().map(|p| p.value),
+            deadline.promote.as_ref().map(|p| p.target.value),
             Some(FiatPromoteTarget::Structure)
         );
     }
@@ -1202,15 +1320,15 @@ mod tests {
         let Some(Block::Objective(block)) = parse.blocks.first() else {
             panic!("expected an objective block");
         };
-        let child_ids: Vec<&str> = block.children.iter().map(|c| c.value.as_str()).collect();
+        let child_ids: Vec<&str> = block.children.iter().map(|c| c.id.value.as_str()).collect();
         assert_eq!(child_ids, vec!["a"]);
     }
 
     #[test]
     fn keeps_later_property_after_bad_property_value() {
-        // `until:` is given a string instead of a phase name; `reason:` must
+        // `until:` is given a string instead of a phase name; `promote:` must
         // still be seen (proved by its own requires-until diagnostic).
-        let parse = parse_str("fiat f {\n```\nClaim\n```\nuntil: \"M2\"\nreason: \"why\"\n}\n");
+        let parse = parse_str("fiat f {\n```\nClaim\n```\nuntil: \"M2\"\npromote: bind\n}\n");
 
         assert!(
             has_message(&parse, "expected a phase name after `until:`"),
@@ -1218,7 +1336,7 @@ mod tests {
             messages(&parse)
         );
         assert!(
-            has_message(&parse, "`reason:` requires `until:`"),
+            has_message(&parse, "`promote:` requires `until:`"),
             "the property after the bad value must not be swallowed: {:?}",
             messages(&parse)
         );
@@ -1265,5 +1383,222 @@ mod tests {
             "one typo must not cascade into unclosed-block errors"
         );
         assert_eq!(parse.blocks.len(), 1, "the block itself survives");
+    }
+
+    // --- Comments --------------------------------------------------------
+
+    fn text(comment: Option<&Comment>) -> Option<String> {
+        comment.map(Comment::text)
+    }
+
+    fn only_structure(parse: &Parse) -> &StructureBlock {
+        assert!(parse.errors.is_empty(), "{:?}", messages(parse));
+        let Some(Block::Structure(block)) = parse.blocks.first() else {
+            panic!("expected a structure block");
+        };
+        block
+    }
+
+    #[test]
+    fn attaches_each_comment_to_the_element_the_spec_names() {
+        let parse = parse_str(
+            "\
+// (1) file
+
+// (2) block
+structure s { // (3) block
+    ```
+    claim
+    ```
+    // (2) children
+    children:
+        // (2) child a
+        a, // (3) child a
+        b
+    until: M3 // (3) until
+    // (4) block
+}
+",
+        );
+
+        let block = only_structure(&parse);
+        assert_eq!(text(parse.comment.as_ref()).as_deref(), Some("(1) file"));
+        assert_eq!(
+            text(block.common.comment.as_ref()).as_deref(),
+            Some("(2) block\n(3) block\n(4) block")
+        );
+        assert_eq!(
+            text(block.children_comment.as_ref()).as_deref(),
+            Some("(2) children")
+        );
+        assert_eq!(
+            text(block.children[0].comment.as_ref()).as_deref(),
+            Some("(2) child a\n(3) child a")
+        );
+        assert_eq!(block.children[1].comment, None);
+        let deadline = block.deadline.as_ref().expect("a deadline");
+        assert_eq!(
+            text(deadline.comment.as_ref()).as_deref(),
+            Some("(3) until")
+        );
+    }
+
+    #[test]
+    fn a_top_of_file_comment_without_a_blank_line_belongs_to_the_first_block() {
+        let parse = parse_str("// leading\nfiat f {\n```\nClaim\n```\n}\n");
+
+        assert_eq!(parse.comment, None);
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("leading")
+        );
+    }
+
+    #[test]
+    fn only_the_first_top_of_file_run_is_the_file_comment() {
+        let parse = parse_str("// file\n\n// block\n\nfiat f {\n```\nClaim\n```\n}\n");
+
+        assert_eq!(text(parse.comment.as_ref()).as_deref(), Some("file"));
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("block")
+        );
+    }
+
+    #[test]
+    fn comments_between_blocks_go_to_the_next_block_and_after_the_last_to_the_file() {
+        let parse = parse_str(
+            "fiat a {\n```\nA\n```\n} // on a\n\n// on b\n\nfiat b {\n```\nB\n```\n}\n// tail\n",
+        );
+
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("on a")
+        );
+        assert_eq!(
+            text(parse.blocks[1].common().comment.as_ref()).as_deref(),
+            Some("on b")
+        );
+        assert_eq!(text(parse.comment.as_ref()).as_deref(), Some("tail"));
+    }
+
+    #[test]
+    fn a_comment_before_the_description_or_inside_the_header_belongs_to_the_block() {
+        let parse = parse_str("fiat // in header\n f #t {\n// before fence\n```\nClaim\n```\n}\n");
+
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("in header\nbefore fence")
+        );
+    }
+
+    #[test]
+    fn attaches_comments_to_the_source_and_promote_properties() {
+        let parse = parse_str(
+            "bind b {\n```\nB\n```\n// on test\ntest: \"t\"\n}\n\
+             fiat f {\n```\nF\n```\nuntil: M3\npromote: // on promote\n bind\n}\n",
+        );
+
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
+        let Block::Bind(bind) = &parse.blocks[0] else {
+            panic!("expected a bind block");
+        };
+        assert_eq!(
+            text(bind.source_comment.as_ref()).as_deref(),
+            Some("on test")
+        );
+        let Block::Fiat(fiat) = &parse.blocks[1] else {
+            panic!("expected a fiat block");
+        };
+        let promote = fiat
+            .deadline
+            .as_ref()
+            .and_then(|deadline| deadline.promote.as_ref())
+            .expect("a promotion");
+        assert_eq!(
+            text(promote.comment.as_ref()).as_deref(),
+            Some("on promote")
+        );
+    }
+
+    #[test]
+    fn a_comment_inside_a_property_value_belongs_to_the_property() {
+        let parse = parse_str("fiat f {\n```\nF\n```\nuntil:\n// why\nM3\n}\n");
+
+        assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
+        let deadline = parse.blocks[0].deadline().expect("a deadline");
+        assert_eq!(text(deadline.comment.as_ref()).as_deref(), Some("why"));
+    }
+
+    #[test]
+    fn empty_comment_lines_are_trimmed_and_an_all_empty_comment_is_none() {
+        let parse = parse_str(
+            "//\n// kept\n//\n// also kept\n//\nfiat a {\n```\nA\n```\n}\n//\n//\nfiat b {\n```\nB\n```\n}\n",
+        );
+
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("kept\n\nalso kept")
+        );
+        assert_eq!(parse.blocks[1].common().comment, None);
+    }
+
+    #[test]
+    fn a_file_of_only_comments_has_a_file_comment_and_no_errors() {
+        let parse = parse_str("// one\n// two\n");
+
+        assert_eq!(parse.errors, []);
+        assert_eq!(text(parse.comment.as_ref()).as_deref(), Some("one\ntwo"));
+    }
+
+    #[test]
+    fn comments_inside_a_block_that_fails_to_parse_do_not_move_to_the_next_block() {
+        let parse = parse_str(
+            "bind {\n```\nd\n```\n// inside broken\ntest: \"t\"\n}\ngarbage // after junk\nfiat ok {\n```\nd\n```\n}\n",
+        );
+
+        assert!(
+            has_message(&parse, "expected a block identifier"),
+            "{:?}",
+            messages(&parse)
+        );
+        let ok = parse.blocks.last().expect("ok survives");
+        assert_eq!(ok.common().comment, None);
+        assert_eq!(
+            text(parse.comment.as_ref()).as_deref(),
+            Some("inside broken\nafter junk")
+        );
+    }
+
+    #[test]
+    fn a_block_unclosed_at_the_end_of_input_keeps_its_dangling_comment() {
+        let parse = parse_str("fiat a {\n```\nd\n```\n// dangling\n");
+
+        assert!(
+            has_message(&parse, "unclosed block"),
+            "{:?}",
+            messages(&parse)
+        );
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("dangling")
+        );
+        assert_eq!(parse.comment, None);
+    }
+
+    #[test]
+    fn the_end_of_input_error_points_past_the_last_token_not_a_trailing_comment() {
+        let input = "fiat a {\n```\nd\n```\n// dangling\n";
+        let parse = parse_str(input);
+
+        let error = parse
+            .errors
+            .iter()
+            .find(|error| error.message.contains("unclosed block"))
+            .expect("an unclosed-block error");
+        let span = error.span.expect("anchored");
+        assert_eq!(span.start, input.find("// dangling").expect("present"));
     }
 }

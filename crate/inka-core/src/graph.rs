@@ -115,7 +115,7 @@ impl<'p> Graph<'p> {
         // parent without holding a borrow on the graph.
         for parent in (0..graph.node_count()).map(NodeIndex::new) {
             let mut seen: HashSet<&str> = HashSet::new();
-            for child in graph[parent].children() {
+            for child in graph[parent].children().iter().map(|entry| &entry.id) {
                 if !seen.insert(child.value.as_str()) {
                     errors.push(Error::new(
                         child.span,
@@ -186,7 +186,7 @@ impl<'p> Graph<'p> {
         self.block(node)
             .children()
             .iter()
-            .map(|child| self.index[child.value.as_str()])
+            .map(|child| self.index[child.id.value.as_str()])
             .collect()
     }
 

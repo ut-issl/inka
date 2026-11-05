@@ -4,5 +4,10 @@
 kind = "structure"
 description = "\r\n  In safe mode the satellite holds:\r\n\r\n  - the sun angle within 30 deg   \r\n    - measured from the array normal\r\n  \r\n"
 normalized = "In safe mode the satellite holds:\n\n- the sun angle within 30 deg\n  - measured from the array normal"
-children = ["the sun sensor is calibrated", "a control loop runs at 10 Hz"]
-view_hash = "sha256:c4b8b2e4572c6a0e8b0a737115c49b014dc7ae145781fdaa10070e1f106b03fe"
+view_hash = "sha256:a31c2ee9966c5ec975a0a75079b5308bbb2d427b193be4dda79708d39a2d8979"
+
+[[children]]
+description = "the sun sensor is calibrated"
+
+[[children]]
+description = "a control loop runs at 10 Hz"

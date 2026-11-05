@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 52c664a7808f4653d0c0ce8080bdd9ce2da1260ae7da301c30da7b96cc4a9426 # shrinks to placements = [TrailingAfter(23), TrailingAfter(23)]

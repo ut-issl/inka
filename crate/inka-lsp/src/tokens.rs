@@ -72,7 +72,7 @@ pub fn full(project: &Project, file: FileId) -> Option<SemanticTokens> {
             TYPE_TOKEN,
             DECLARATION_BIT,
         );
-        for child in block.children() {
+        for child in block.children().iter().map(|entry| &entry.id) {
             push(&mut found, source, file, child.span, TYPE_TOKEN, 0);
         }
         description_tokens(&mut found, source, file, common.description.span());

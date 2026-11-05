@@ -579,7 +579,7 @@ mod tests {
     use super::*;
 
     use crate::record::{RecordFields, Target};
-    use crate::view::{Deadline, Evidence, EvidenceKind, ViewEdge};
+    use crate::view::{Deadline, Evidence, EvidenceKind, NodeComments, ViewEdge};
 
     fn phases(current: &str) -> PhasesSection {
         PhasesSection {
@@ -604,6 +604,7 @@ mod tests {
             },
             deadline: None,
             children: children.iter().map(|&child| child.to_owned()).collect(),
+            comments: NodeComments::default(),
         }
     }
 
@@ -825,7 +826,6 @@ mod tests {
         ];
         nodes[0].deadline = Some(Deadline {
             until: "M2".to_owned(),
-            reason: None,
             promote: None,
         });
         let view = view(nodes);
@@ -938,7 +938,6 @@ mod tests {
         ];
         nodes[0].deadline = Some(Deadline {
             until: "M2".to_owned(),
-            reason: None,
             promote: None,
         });
         let view = view(nodes);
@@ -975,7 +974,6 @@ mod tests {
         ];
         nodes[1].deadline = Some(Deadline {
             until: "M2".to_owned(),
-            reason: None,
             promote: None,
         });
         let view = view(nodes);
@@ -1010,7 +1008,6 @@ mod tests {
         let mut nodes = vec![node("tested", Mode::Bind, "checked in CI", &[])];
         nodes[0].deadline = Some(Deadline {
             until: "FM".to_owned(),
-            reason: None,
             promote: None,
         });
         let view = view(nodes);
@@ -1035,7 +1032,6 @@ mod tests {
         let mut nodes = vec![node("leaf", Mode::Fiat, "taken as given", &[])];
         nodes[0].deadline = Some(Deadline {
             until: "FM".to_owned(),
-            reason: None,
             promote: None,
         });
         let view = view(nodes);

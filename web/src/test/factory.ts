@@ -9,7 +9,7 @@ type NodeOverrides = Partial<{
   tags: string[]
   root: boolean
   evidence: { kind: 'veriq' | 'test'; target: string }
-  deadline: { until: string; reason?: string; promote?: 'structure' | 'bind' }
+  deadline: { until: string; promote?: 'structure' | 'bind' }
 }>
 
 export function node(id: string, overrides: NodeOverrides = {}): ArgumentElement {

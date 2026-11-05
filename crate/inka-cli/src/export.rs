@@ -68,8 +68,6 @@ struct EvidenceData<'v> {
 struct DeadlineData<'v> {
     until: &'v str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<&'v str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     promote: Option<Mode>,
 }
 
@@ -142,7 +140,6 @@ fn evidence_data(evidence: &Evidence) -> EvidenceData<'_> {
 fn deadline_data(deadline: &Deadline) -> DeadlineData<'_> {
     DeadlineData {
         until: &deadline.until,
-        reason: deadline.reason.as_deref(),
         promote: deadline.promote,
     }
 }
@@ -174,6 +171,7 @@ pub fn run(
 mod tests {
     use super::*;
 
+    use inka_core::view::NodeComments;
     use serde_json::Value;
 
     /// A hand-built view: the export transcribes a projection, so the tests
@@ -190,6 +188,7 @@ mod tests {
                     evidence: None,
                     deadline: None,
                     children: vec!["verified".to_owned(), "assumed".to_owned()],
+                    comments: NodeComments::default(),
                 },
                 ViewNode {
                     id: "verified".to_owned(),
@@ -203,6 +202,7 @@ mod tests {
                     }),
                     deadline: None,
                     children: Vec::new(),
+                    comments: NodeComments::default(),
                 },
                 ViewNode {
                     id: "assumed".to_owned(),
@@ -213,10 +213,10 @@ mod tests {
                     evidence: None,
                     deadline: Some(Deadline {
                         until: "FM".to_owned(),
-                        reason: Some("measured later".to_owned()),
                         promote: Some(Mode::Bind),
                     }),
                     children: Vec::new(),
+                    comments: NodeComments::default(),
                 },
             ],
             edges: vec![
@@ -321,12 +321,11 @@ mod tests {
     }
 
     #[test]
-    fn carries_a_deadline_with_its_rationale_and_promotion() {
+    fn carries_a_deadline_with_its_promotion() {
         let elements = elements();
         let fiat = data_of(&elements[2]);
 
         assert_eq!(fiat["deadline"]["until"], "FM");
-        assert_eq!(fiat["deadline"]["reason"], "measured later");
         assert_eq!(fiat["deadline"]["promote"], "bind");
     }
 

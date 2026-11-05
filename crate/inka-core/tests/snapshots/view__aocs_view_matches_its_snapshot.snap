@@ -18,6 +18,13 @@ ArgumentView {
             ),
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "actuator_authority_ok is a shared node: also referenced from momentum_ok\n(momentum.inka).",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "aocs_ok",
@@ -33,6 +40,11 @@ ArgumentView {
                 "safe_mode_ok",
                 "momentum_ok",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "attitude_knowledge_ok",
@@ -48,6 +60,11 @@ ArgumentView {
             ),
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "control_law_ok",
@@ -63,6 +80,11 @@ ArgumentView {
             ),
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "detumble_convergence_ok",
@@ -78,6 +100,11 @@ ArgumentView {
             ),
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "detumble_ok",
@@ -94,6 +121,11 @@ ArgumentView {
                 "mtq_authority_ok",
                 "rate_sensor_available",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "disturbance_model_valid",
@@ -104,6 +136,11 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "fdir_transition_ok",
@@ -115,13 +152,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "FM",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "mass_properties_valid",
@@ -133,15 +174,19 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "FM",
-                    reason: Some(
-                        "promote to a veriq verification once the mass-properties test has measured the real vehicle",
-                    ),
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {
+                    Until: "promote to a veriq verification once the mass-properties test has measured the real vehicle",
+                },
+                children: {},
+            },
         },
         ViewNode {
             id: "momentum_ok",
@@ -156,6 +201,11 @@ ArgumentView {
                 "unloading_plan_ok",
                 "disturbance_model_valid",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "mtq_authority_ok",
@@ -167,13 +217,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "FM",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "pointing_ok",
@@ -192,6 +246,11 @@ ArgumentView {
                 "disturbance_model_valid",
                 "mass_properties_valid",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "rate_sensor_available",
@@ -202,6 +261,11 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "safe_mode_ok",
@@ -218,6 +282,11 @@ ArgumentView {
                 "fdir_transition_ok",
                 "safemode_power_positive",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "safemode_power_positive",
@@ -228,6 +297,13 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "Ideally shared with a power-domain argument; kept local in this\nsingle-domain example (see README on namespaces).",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "sun_pointing_stable",
@@ -243,6 +319,11 @@ ArgumentView {
             ),
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "unloading_plan_ok",
@@ -254,13 +335,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "FM",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
     ],
     edges: [

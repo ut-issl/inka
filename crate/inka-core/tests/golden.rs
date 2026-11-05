@@ -14,12 +14,13 @@
 //! which case it moves on as a parallel v2 with its own domain tags and its
 //! own vector directory.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use inka_core::hash::{InterfaceHash, LocalView};
+use inka_core::hash::{ChildContract, InterfaceHash, LocalView};
 use inka_core::normalize;
-use inka_core::view::{Deadline, Mode};
+use inka_core::view::{Deadline, Mode, NodeComments, Property};
 use serde::Deserialize;
 
 mod common;
@@ -35,14 +36,56 @@ struct Vector {
     /// What `description` normalizes to, recorded so a reader can see the
     /// pipeline rather than infer it from a digest.
     normalized: String,
-    /// Contract text of the direct children, in declaration order.
+    /// The direct children's entries, in declaration order.
     #[serde(default)]
-    children: Vec<String>,
+    children: Vec<Child>,
     /// The evidence interface hash; bind vectors only.
     interface_hash: Option<String>,
     #[serde(default)]
     annotations: Annotations,
+    #[serde(default)]
+    comments: Comments,
     view_hash: String,
+}
+
+/// One child entry: the child's contract text and the comment on the entry.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Child {
+    description: String,
+    comment: Option<String>,
+}
+
+/// The merged comment text on the node and on each of its properties.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Comments {
+    block: Option<String>,
+    children: Option<String>,
+    test: Option<String>,
+    veriq: Option<String>,
+    until: Option<String>,
+    promote: Option<String>,
+}
+
+impl Comments {
+    fn node_comments(&self) -> NodeComments {
+        let properties = [
+            (Property::Children, &self.children),
+            (Property::Test, &self.test),
+            (Property::Veriq, &self.veriq),
+            (Property::Until, &self.until),
+            (Property::Promote, &self.promote),
+        ]
+        .into_iter()
+        .filter_map(|(property, text)| Some((property, text.clone()?)))
+        .collect::<BTreeMap<_, _>>();
+        NodeComments {
+            block: self.block.clone(),
+            properties,
+            children: BTreeMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -58,7 +101,6 @@ enum Kind {
 #[serde(deny_unknown_fields)]
 struct Annotations {
     until: Option<String>,
-    reason: Option<String>,
     /// The mode `promote:` names, spelled as the DSL spells it.
     promote: Option<String>,
 }
@@ -66,19 +108,15 @@ struct Annotations {
 impl Annotations {
     /// The deadline these annotations describe, if any.
     ///
-    /// `reason` and `promote` are anchored on `until:`, so a vector naming one
-    /// without it is malformed rather than annotation-free.
+    /// `promote` is anchored on `until:`, so a vector naming it without one is
+    /// malformed rather than annotation-free.
     fn deadline(&self) -> Option<Deadline> {
         let Some(until) = &self.until else {
-            assert!(
-                self.reason.is_none() && self.promote.is_none(),
-                "`reason` and `promote` require `until`"
-            );
+            assert!(self.promote.is_none(), "`promote` requires `until`");
             return None;
         };
         Some(Deadline {
             until: until.clone(),
-            reason: self.reason.clone(),
             promote: self.promote.as_deref().map(promotion_target),
         })
     }
@@ -118,9 +156,20 @@ fn read_vector(path: &Path) -> Vector {
 }
 
 /// Rebuilds the local view a vector describes.
-fn local_view<'a>(vector: &'a Vector, deadline: Option<&'a Deadline>) -> LocalView<'a> {
-    let children: Vec<&str> = vector.children.iter().map(String::as_str).collect();
-    match vector.kind {
+fn local_view<'a>(
+    vector: &'a Vector,
+    deadline: Option<&'a Deadline>,
+    comments: &'a NodeComments,
+) -> LocalView<'a> {
+    let children: Vec<ChildContract<'a>> = vector
+        .children
+        .iter()
+        .map(|child| ChildContract {
+            description: &child.description,
+            comment: child.comment.as_deref().unwrap_or(""),
+        })
+        .collect();
+    let local = match vector.kind {
         Kind::Objective => LocalView::objective(&vector.description, deadline, children),
         Kind::Structure => LocalView::structure(&vector.description, deadline, children),
         Kind::Fiat => LocalView::fiat(&vector.description, deadline),
@@ -133,7 +182,8 @@ fn local_view<'a>(vector: &'a Vector, deadline: Option<&'a Deadline>) -> LocalVi
                 .expect("a recorded interface hash should be a `sha256:<hex>` digest");
             LocalView::bind(&vector.description, deadline, interface)
         }
-    }
+    };
+    local.with_comments(comments)
 }
 
 #[test]
@@ -151,7 +201,8 @@ fn every_recorded_vector_still_hashes_to_its_recorded_value() {
 
         // Act
         let deadline = vector.annotations.deadline();
-        let local = local_view(&vector, deadline.as_ref());
+        let comments = vector.comments.node_comments();
+        let local = local_view(&vector, deadline.as_ref(), &comments);
 
         // Assert
         assert_eq!(

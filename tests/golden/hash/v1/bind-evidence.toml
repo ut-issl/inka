@@ -4,7 +4,7 @@ kind = "bind"
 description = "normalization-equivalent local views yield the same hash"
 normalized = "normalization-equivalent local views yield the same hash"
 interface_hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-view_hash = "sha256:0007b72d5d7e1d4c8e30705bc27466b8364fc9ed57b75af3c9ba738708855e42"
+view_hash = "sha256:c78443d54cbf9463797e47aca6e2ab14f21813ed192427ad79af90f0b77a926b"
 
 [annotations]
 until = "M7"

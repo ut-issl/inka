@@ -93,18 +93,18 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
      the innermost anchor that token belongs to: a block header or its `{` →
      the block; `children:` → the property; a child entry and its `,` → that
      entry; `until: M3` → the property.
-  3. *Leading.* A comment on its own line attaches to the next anchor that
-     begins after it inside the same braces, blank lines notwithstanding. A
-     comment inside a property — between its name and the end of its value —
-     attaches to the next child entry of that property if one follows,
-     otherwise to the property.
+  3. *Leading.* A comment on its own line attaches to the anchor that the
+     next token after it begins, blank lines notwithstanding. When that token
+     begins no anchor, a comment inside a property — between its name and the
+     end of its value — attaches to the property.
   4. *Dangling.* A comment with no anchor to attach to under rules 2–3 — before
      a description fence, inside a block header, before a closing `}` —
      attaches to the enclosing block. At the top level it attaches to the next
      block, or to the file after the last block.
 - **Merging.** Several comments on one anchor join into a single text, one
   source line per text line, in source order. Blank lines between them are not
-  kept. An anchor whose merged text is empty carries no comment.
+  kept, and leading and trailing empty lines are dropped. An anchor whose
+  comment lines are all empty carries no comment.
 - **No interpolation.** `{$var}` inside a comment is literal text.
 - **Presentation.** `inka review` and the exported view show each comment with
   its anchor. File comments are not shown: they belong to no node.
@@ -141,9 +141,9 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
   count. Domain tags: `inka:objective:v1` / `inka:structure:v1` /
   `inka:fiat:v1` / `inka:bind:v1`.
   - objective = tag ‖ desc ‖ annotations ‖ comments ‖ child entries (sorted
-    bytewise)
+    by description, then by comment, bytewise)
   - structure = tag ‖ desc ‖ annotations ‖ comments ‖ child entries (sorted
-    bytewise)
+    by description, then by comment, bytewise)
   - fiat = tag ‖ desc ‖ annotations ‖ comments
   - bind = tag ‖ desc ‖ annotations ‖ comments ‖ interface_hash (raw 32 bytes)
     ‖ assumption list (empty until assumption aggregation lands; the slot

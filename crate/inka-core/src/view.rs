@@ -21,11 +21,15 @@
 //! also arrive in the canonical form [`normalize::description`] defines, once,
 //! rather than each formatter dedenting for itself — and that is the same form
 //! hashing reads, so what a reviewer sees is what their approval is bound to.
+//! Comments travel the same way: every comment attached to a block, a
+//! property, or a child entry is on the node, as the text hashing reads.
+
+use std::collections::BTreeMap;
 
 use serde::Serialize;
 
 use crate::ast::{
-    Block, Deadline as AstDeadline, FiatPromoteTarget, ObjectivePromoteTarget, SourceRef,
+    Block, Comment, Deadline as AstDeadline, FiatPromoteTarget, ObjectivePromoteTarget, SourceRef,
 };
 use crate::graph::{Graph, NodeId};
 use crate::interpolate::RenderedDescription;
@@ -77,14 +81,49 @@ pub struct Evidence {
     pub target: String,
 }
 
-/// An `until:` annotation with its optional rationale and promotion target.
+/// An `until:` annotation with its optional promotion target.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Deadline {
     /// Phase after which approvals for this node no longer count.
     pub until: String,
-    pub reason: Option<String>,
     /// Mode the node announces it will be promoted to.
     pub promote: Option<Mode>,
+}
+
+/// A block property a comment can be attached to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Property {
+    Children,
+    Test,
+    Veriq,
+    Until,
+    Promote,
+}
+
+impl Property {
+    /// The property's name as the DSL spells it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Property::Children => "children",
+            Property::Test => "test",
+            Property::Veriq => "veriq",
+            Property::Until => "until",
+            Property::Promote => "promote",
+        }
+    }
+}
+
+/// Every comment attached to one node, by anchor.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct NodeComments {
+    /// The comment on the block itself.
+    pub block: Option<String>,
+    /// Comments on the block's properties.
+    pub properties: BTreeMap<Property, String>,
+    /// Comments on the block's child entries, keyed by child id.
+    pub children: BTreeMap<String, String>,
 }
 
 /// One block, projected.
@@ -106,6 +145,7 @@ pub struct ViewNode {
     pub deadline: Option<Deadline>,
     /// Children in the order this block declares them.
     pub children: Vec<String>,
+    pub comments: NodeComments,
 }
 
 /// A parent-to-child edge, named by block id.
@@ -188,7 +228,54 @@ fn project_node(graph: &Graph<'_>, source_map: &SourceMap, node: NodeId) -> View
         children: block
             .children()
             .iter()
-            .map(|child| child.value.clone())
+            .map(|child| child.id.value.clone())
+            .collect(),
+        comments: comments_of(block),
+    }
+}
+
+/// Collects the text of every comment attached to the block, by anchor.
+fn comments_of(block: &Block<RenderedDescription>) -> NodeComments {
+    let mut properties = BTreeMap::new();
+    let mut put = |property, comment: Option<&Comment>| {
+        if let Some(comment) = comment {
+            properties.insert(property, comment.text());
+        }
+    };
+    if let Some(deadline) = block.deadline() {
+        put(Property::Until, deadline.comment.as_ref());
+    }
+    match block {
+        Block::Objective(objective) => {
+            put(Property::Children, objective.children_comment.as_ref());
+            let promote = objective.deadline.as_ref().and_then(|d| d.promote.as_ref());
+            put(Property::Promote, promote.and_then(|p| p.comment.as_ref()));
+        }
+        Block::Structure(structure) => {
+            put(Property::Children, structure.children_comment.as_ref());
+        }
+        Block::Bind(bind) => {
+            let property = match bind.source.value {
+                SourceRef::Test(_) => Property::Test,
+                SourceRef::Veriq(_) => Property::Veriq,
+            };
+            put(property, bind.source_comment.as_ref());
+        }
+        Block::Fiat(fiat) => {
+            let promote = fiat.deadline.as_ref().and_then(|d| d.promote.as_ref());
+            put(Property::Promote, promote.and_then(|p| p.comment.as_ref()));
+        }
+    }
+    NodeComments {
+        block: block.common().comment.as_ref().map(Comment::text),
+        properties,
+        children: block
+            .children()
+            .iter()
+            .filter_map(|child| {
+                let comment = child.comment.as_ref()?;
+                Some((child.id.value.clone(), comment.text()))
+            })
             .collect(),
     }
 }
@@ -235,7 +322,8 @@ fn evidence_of(block: &Block<RenderedDescription>) -> Option<Evidence> {
 ///
 /// The AST keeps them apart so an illegal promotion target cannot be built; by
 /// this point the parser has already enforced that, and what a renderer needs
-/// is the phase, the rationale, and the announced mode.
+/// is the phase and the announced mode. Their comments travel separately, in
+/// [`NodeComments`].
 fn deadline_of(block: &Block<RenderedDescription>) -> Option<Deadline> {
     match block {
         Block::Objective(objective) => objective.deadline.as_ref().map(|annotation| {
@@ -244,7 +332,7 @@ fn deadline_of(block: &Block<RenderedDescription>) -> Option<Deadline> {
                 annotation
                     .promote
                     .as_ref()
-                    .map(|promote| match promote.value {
+                    .map(|promote| match promote.target.value {
                         ObjectivePromoteTarget::Structure => Mode::Structure,
                     }),
             )
@@ -263,7 +351,7 @@ fn deadline_of(block: &Block<RenderedDescription>) -> Option<Deadline> {
                 annotation
                     .promote
                     .as_ref()
-                    .map(|promote| match promote.value {
+                    .map(|promote| match promote.target.value {
                         FiatPromoteTarget::Structure => Mode::Structure,
                         FiatPromoteTarget::Bind => Mode::Bind,
                     }),
@@ -275,10 +363,6 @@ fn deadline_of(block: &Block<RenderedDescription>) -> Option<Deadline> {
 fn deadline(annotation: &AstDeadline, promote: Option<Mode>) -> Deadline {
     Deadline {
         until: annotation.until.value.clone(),
-        reason: annotation
-            .reason
-            .as_ref()
-            .map(|reason| reason.value.clone()),
         promote,
     }
 }
@@ -341,9 +425,9 @@ fiat a_leaf {
   ```
   taken as given
   ```
+  // measured once the vehicle exists
   until: FM
   promote: bind
-  reason: \"measured once the vehicle exists\"
 }
 ";
 
@@ -518,20 +602,75 @@ bind tested {
     }
 
     #[test]
-    fn flattens_a_deadline_into_phase_rationale_and_promotion() {
+    fn flattens_a_deadline_into_phase_and_promotion() {
         let view = view(TREE);
 
         assert_eq!(
             view.node("a_leaf").and_then(|node| node.deadline.clone()),
             Some(Deadline {
                 until: "FM".to_owned(),
-                reason: Some("measured once the vehicle exists".to_owned()),
                 promote: Some(Mode::Bind),
             })
         );
         assert_eq!(
             view.node("z_root").and_then(|node| node.deadline.clone()),
             None
+        );
+    }
+
+    #[test]
+    fn carries_every_attached_comment_by_anchor() {
+        let view = view(
+            "\
+// on the root
+objective root {
+  ```
+  the root claim
+  ```
+  children:
+    // why a
+    a,
+    b
+  // provisional wording
+  until: M3
+  // once the branches settle
+  promote: structure
+}
+bind a {
+  ```
+  checked in CI
+  ```
+  veriq: \"m.f\" // the shipped check
+}
+fiat b {
+  ```
+  taken as given
+  ```
+}
+",
+        );
+
+        let root = view.node("root").expect("root is projected");
+        assert_eq!(root.comments.block.as_deref(), Some("on the root"));
+        assert_eq!(
+            root.comments.properties,
+            BTreeMap::from([
+                (Property::Until, "provisional wording".to_owned()),
+                (Property::Promote, "once the branches settle".to_owned()),
+            ])
+        );
+        assert_eq!(
+            root.comments.children,
+            BTreeMap::from([("a".to_owned(), "why a".to_owned())])
+        );
+        let bind = view.node("a").expect("a is projected");
+        assert_eq!(
+            bind.comments.properties,
+            BTreeMap::from([(Property::Veriq, "the shipped check".to_owned())])
+        );
+        assert_eq!(
+            view.node("b").map(|node| &node.comments),
+            Some(&NodeComments::default())
         );
     }
 
@@ -559,7 +698,6 @@ fiat leaf {
             view.node("root").and_then(|node| node.deadline.clone()),
             Some(Deadline {
                 until: "M3".to_owned(),
-                reason: None,
                 promote: Some(Mode::Structure),
             })
         );

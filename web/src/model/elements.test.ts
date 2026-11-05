@@ -20,7 +20,7 @@ describe('parseElements', () => {
       node('a', {
         mode: 'bind',
         evidence: { kind: 'veriq', target: 'pkg.verify' },
-        deadline: { until: 'FM', promote: 'bind', reason: 'measured later' },
+        deadline: { until: 'FM', promote: 'bind' },
       }),
     ]
 
@@ -28,7 +28,7 @@ describe('parseElements', () => {
 
     expect(element?.data).toMatchObject({
       evidence: { kind: 'veriq', target: 'pkg.verify' },
-      deadline: { until: 'FM', promote: 'bind', reason: 'measured later' },
+      deadline: { until: 'FM', promote: 'bind' },
     })
   })
 

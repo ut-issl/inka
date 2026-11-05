@@ -1,0 +1,22 @@
+# Every comment anchor a structure carries: the block, the `children:`
+# property, `until:`, and child entries, one of them over two lines. The
+# entries carry their comments, so the parent's hash commits to both.
+kind = "structure"
+description = "the pointing error stays within budget"
+normalized = "the pointing error stays within budget"
+view_hash = "sha256:b005d181c799c883e2f74a0cbe724426a526d0cbfbef70554bab143b55c2485d"
+
+[annotations]
+until = "CDR"
+
+[comments]
+block = "shared with momentum_ok"
+children = "one entry per error source"
+until = "revisit once the wheel model lands"
+
+[[children]]
+description = "the attitude knowledge error is bounded"
+comment = "from the star tracker datasheet\nand the gyro noise model"
+
+[[children]]
+description = "the control error is bounded"

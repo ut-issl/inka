@@ -18,6 +18,11 @@ ArgumentView {
                 "policy_is_reviewable",
                 "queue_minimizes_friction",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "approver_unforgeable",
@@ -29,13 +34,19 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M7",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "approver_unforgeable is the value-interpolation example; sig_scheme is defined\nin values.toml. Contracts are hashed after interpolation, so changing the value\nprecisely invalidates this approval and the parent's structure approval.",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "approvers_follow_norm",
@@ -46,6 +57,11 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "assumptions_surfaced",
@@ -57,13 +73,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M8",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "bind_validity_by_human",
@@ -74,6 +94,11 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "description_is_contract",
@@ -87,6 +112,11 @@ ArgumentView {
                 "lint_flags_leaky_contracts",
                 "approvers_follow_norm",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "edit_cost_proportional",
@@ -100,6 +130,11 @@ ArgumentView {
                 "invalidation_exact",
                 "surface_edits_free",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "eval_reproducible",
@@ -111,13 +146,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M3",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "git_hosting_intact",
@@ -128,6 +167,11 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "hash_vectors_replay",
@@ -143,6 +187,13 @@ ArgumentView {
             ),
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "The first real CI bind (#75): the broad soundness claim above stays a\nfiat, while this narrow slice of it is established through evidence the\nRust adapter emitted from an actual test run and capsula delivered.",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "id_not_in_contract",
@@ -153,6 +204,11 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "inka_ok",
@@ -168,6 +224,11 @@ ArgumentView {
                 "records_auditable",
                 "truth_validity_separated",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "invalidation_exact",
@@ -182,6 +243,11 @@ ArgumentView {
                 "local_view_hash_sound",
                 "hash_vectors_replay",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "labels_cover_reality",
@@ -192,6 +258,13 @@ ArgumentView {
             evidence: None,
             deadline: None,
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "labels_cover_reality is the markdown-description example.\nFence content is hashed near-verbatim: newlines are part of the contract.",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "lint_flags_leaky_contracts",
@@ -203,13 +276,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M9",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "local_view_binding",
@@ -221,15 +298,19 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M3",
-                    reason: Some(
-                        "bind to the scenario test: approve, edit a grandchild, stays fresh",
-                    ),
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {
+                    Until: "bind to the scenario test: approve, edit a grandchild, stays fresh",
+                },
+                children: {},
+            },
         },
         ViewNode {
             id: "local_view_hash_sound",
@@ -241,15 +322,19 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M2",
-                    reason: Some(
-                        "bind to the hash v1 golden vectors and proptests (first CI bind target)",
-                    ),
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {
+                    Until: "bind to the hash v1 golden vectors and proptests (first CI bind target)",
+                },
+                children: {},
+            },
         },
         ViewNode {
             id: "log_tamper_evident",
@@ -261,13 +346,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M7",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "policy_is_reviewable",
@@ -279,13 +368,19 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M3",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "Bind to policy parser + eval tests.",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "queue_minimizes_friction",
@@ -297,13 +392,19 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M4",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: Some(
+                    "Bind once the approve session lands.",
+                ),
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "records_auditable",
@@ -320,6 +421,11 @@ ArgumentView {
                 "eval_reproducible",
                 "git_hosting_intact",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "surface_edits_free",
@@ -333,6 +439,11 @@ ArgumentView {
                 "local_view_hash_sound",
                 "id_not_in_contract",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "target_unswappable",
@@ -345,6 +456,11 @@ ArgumentView {
             children: [
                 "local_view_hash_sound",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "truth_validity_separated",
@@ -359,6 +475,11 @@ ArgumentView {
                 "bind_validity_by_human",
                 "assumptions_surfaced",
             ],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
         ViewNode {
             id: "verification_truth_by_machine",
@@ -370,13 +491,17 @@ ArgumentView {
             deadline: Some(
                 Deadline {
                     until: "M8",
-                    reason: None,
                     promote: Some(
                         Bind,
                     ),
                 },
             ),
             children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
         },
     ],
     edges: [

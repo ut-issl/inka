@@ -11,7 +11,7 @@ fiat mass_properties_valid {
   ```
   The inertia tensor and mass properties used for control design deviate from the real vehicle within the control system's stability margins
   ```
+  // promote to a veriq verification once the mass-properties test has measured the real vehicle
   until: FM
   promote: bind
-  reason: "promote to a veriq verification once the mass-properties test has measured the real vehicle"
 }
