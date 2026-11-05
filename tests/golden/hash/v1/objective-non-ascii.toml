@@ -4,5 +4,7 @@
 kind = "objective"
 description = "the de\u0301bris budget holds"
 normalized = "the d\u00E9bris budget holds"
-children = ["the pointing error stays below 0.1\u00B0"]
-view_hash = "sha256:db198aa9fbb57599d6e4e63581ae1622b9ea1ccbe3610c6c3211b766019d1643"
+view_hash = "sha256:a21fc3d28fc8610dc17b2a5b2f55aea2b5875cf5bcccc4a0372c98a9ae984395"
+
+[[children]]
+description = "the pointing error stays below 0.1\u00B0"

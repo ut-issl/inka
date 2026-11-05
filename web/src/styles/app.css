@@ -251,12 +251,6 @@ body {
   margin: 10px 0 4px;
 }
 
-.detail__reason {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .detail__contract {
   margin: 0;
   line-height: 1.6;

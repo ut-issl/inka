@@ -1,3 +1,5 @@
+use unicode_normalization::UnicodeNormalization;
+
 use crate::source::{FileId, Span, Spanned};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +23,16 @@ pub enum TokenKind {
         info: Option<String>,
         content_span: Span,
     },
+    /// A `//` comment outside a fence, running to the end of its line.
+    Comment {
+        /// The comment's text: `//`, one following space, and trailing
+        /// whitespace removed, NFC-normalized.
+        text: String,
+        /// Whether another token precedes the comment on its line.
+        trailing: bool,
+        /// Whether the line right after the comment is blank.
+        blank_line_after: bool,
+    },
 }
 
 pub type Token = Spanned<TokenKind>;
@@ -33,6 +45,9 @@ pub struct Lexer<'a> {
     file_id: FileId,
     input: &'a str,
     offset: usize,
+    /// Whether a token other than a comment has been emitted on the current
+    /// line, which is what makes a comment trailing.
+    line_has_token: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -42,10 +57,14 @@ impl<'a> Lexer<'a> {
             file_id,
             input,
             offset: 0,
+            line_has_token: false,
         }
     }
 
     /// Tokenizes the whole input into a flat token stream.
+    ///
+    /// Comments are tokens too, in source order; the parser attaches each one
+    /// to an element.
     ///
     /// # Errors
     ///
@@ -59,11 +78,12 @@ impl<'a> Lexer<'a> {
              * Fence detection must happen before comment handling because
              * `//` inside a fenced description is ordinary text.
              */
-            if self.is_at_line_start()
-                && let Some(fence) = self.try_lex_fence()?
-            {
-                tokens.push(fence);
-                continue;
+            if self.is_at_line_start() {
+                self.line_has_token = false;
+                if let Some(fence) = self.try_lex_fence()? {
+                    tokens.push(fence);
+                    continue;
+                }
             }
 
             self.skip_horizontal_whitespace();
@@ -78,7 +98,7 @@ impl<'a> Lexer<'a> {
             }
 
             if self.starts_with("//") {
-                self.skip_to_line_end();
+                tokens.push(self.lex_comment());
                 continue;
             }
 
@@ -108,10 +128,34 @@ impl<'a> Lexer<'a> {
                 None => break,
             };
 
+            self.line_has_token = true;
             tokens.push(token);
         }
 
         Ok(tokens)
+    }
+
+    fn lex_comment(&mut self) -> Token {
+        let start = self.offset;
+        let line_end = self.find_line_end(start);
+        let body = &self.input[start + "//".len()..line_end];
+        let body = body.strip_prefix(' ').unwrap_or(body);
+        let text: String = body.trim_end().nfc().collect();
+
+        let next_line_start = self.next_line_start(line_end);
+        let next_line = &self.input[next_line_start..self.find_line_end(next_line_start)];
+        let blank_line_after = next_line_start < self.input.len() && next_line.trim().is_empty();
+
+        self.offset = line_end;
+        self.token(
+            start,
+            line_end,
+            TokenKind::Comment {
+                text,
+                trailing: self.line_has_token,
+                blank_line_after,
+            },
+        )
     }
 
     fn try_lex_fence(&mut self) -> Result<Option<Token>, LexError> {
@@ -248,16 +292,6 @@ impl<'a> Lexer<'a> {
 
     fn skip_horizontal_whitespace(&mut self) {
         while matches!(self.current_byte(), Some(b' ' | b'\t')) {
-            self.offset += 1;
-        }
-    }
-
-    fn skip_to_line_end(&mut self) {
-        while let Some(byte) = self.current_byte() {
-            if matches!(byte, b'\n' | b'\r') {
-                break;
-            }
-
             self.offset += 1;
         }
     }
@@ -436,11 +470,20 @@ mod tests {
         );
     }
 
+    fn comment(text: &str, trailing: bool, blank_line_after: bool) -> TokenKind {
+        TokenKind::Comment {
+            text: text.to_owned(),
+            trailing,
+            blank_line_after,
+        }
+    }
+
     #[test]
-    fn ignores_comments_outside_fences() {
+    fn emits_comments_outside_fences_and_marks_trailing_ones() {
         let tokens = lex(r"
+// leading comment
 objective root { // opening comment
-    children: child // property comment
+    children: child //   indented  text
 }
 ")
         .expect("input should lex successfully");
@@ -448,15 +491,50 @@ objective root { // opening comment
         assert_eq!(
             kinds(&tokens),
             vec![
+                &comment("leading comment", false, false),
                 &TokenKind::Objective,
                 &TokenKind::Ident("root".to_owned()),
                 &TokenKind::LeftBrace,
+                &comment("opening comment", true, false),
                 &TokenKind::Ident("children".to_owned()),
                 &TokenKind::Colon,
                 &TokenKind::Ident("child".to_owned()),
+                &comment("  indented  text", true, false),
                 &TokenKind::RightBrace,
             ]
         );
+    }
+
+    #[test]
+    fn a_comment_token_spans_from_the_slashes_to_the_line_end() {
+        let input = "//x  \r\nfiat";
+        let tokens = lex(input).expect("input should lex successfully");
+
+        assert_eq!(tokens[0].value, comment("x", false, false));
+        assert_eq!(&input[tokens[0].span.start..tokens[0].span.end], "//x  ");
+    }
+
+    #[test]
+    fn records_whether_a_blank_line_follows_a_comment() {
+        let tokens = lex("// a\n// b\n  \n// c\nfiat").expect("input should lex successfully");
+
+        assert_eq!(
+            kinds(&tokens),
+            vec![
+                &comment("a", false, false),
+                &comment("b", false, true),
+                &comment("c", false, false),
+                &TokenKind::Fiat,
+            ]
+        );
+    }
+
+    #[test]
+    fn composes_comment_text_to_nfc() {
+        // `e` followed by a combining acute composes to a single `é`.
+        let tokens = lex("// re\u{301}sume\u{301}").expect("input should lex successfully");
+
+        assert_eq!(tokens[0].value, comment("r\u{e9}sum\u{e9}", false, false));
     }
 
     #[test]
@@ -579,34 +657,33 @@ objective root { // opening comment
 
     #[test]
     fn lexes_string_literal_without_quotes() {
-        let tokens =
-            lex(r#"reason: "temporary assumption""#).expect("input should lex successfully");
+        let tokens = lex(r#"test: "tests/assumption.rs""#).expect("input should lex successfully");
 
         assert_eq!(
             kinds(&tokens),
             vec![
-                &TokenKind::Ident("reason".to_owned()),
+                &TokenKind::Ident("test".to_owned()),
                 &TokenKind::Colon,
-                &TokenKind::StringLiteral("temporary assumption".to_owned()),
+                &TokenKind::StringLiteral("tests/assumption.rs".to_owned()),
             ]
         );
     }
 
     #[test]
     fn rejects_unclosed_string_literal() {
-        let input = r#"reason: "temporary assumption"#;
+        let input = r#"test: "tests/assumption.rs"#;
 
         let error = lex(input).expect_err("an unclosed string literal should be rejected");
 
         assert_eq!(error.message, "unclosed string literal");
         let span = error.span.expect("lex errors are anchored");
-        assert_eq!(span.start, "reason: ".len());
+        assert_eq!(span.start, "test: ".len());
         assert_eq!(span.end, input.len());
     }
 
     #[test]
     fn rejects_multiline_string_literal() {
-        let error = lex(concat!("reason: \"first line\n", "second line\"\n",))
+        let error = lex(concat!("test: \"first line\n", "second line\"\n",))
             .expect_err("string literals must remain on one line");
 
         assert_eq!(error.message, "string literal must end on the same line");

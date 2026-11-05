@@ -1,5 +1,7 @@
 kind = "objective"
 description = "the satellite survives its first orbit"
 normalized = "the satellite survives its first orbit"
-children = ["power holds through eclipse"]
-view_hash = "sha256:eef5dbd52c4a3038f51a2fd98b34ca18a9d34d9b1cb6ce06e0eb98f349e05296"
+view_hash = "sha256:f2434b19d57dd3972eef06669fa993e37811e01e2c37fb76b29a644269a25b3e"
+
+[[children]]
+description = "power holds through eclipse"

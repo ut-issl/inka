@@ -6,17 +6,20 @@
 //! edits invalidate an approval and which do not.
 //!
 //! What a hash covers is deliberately *local*: a node's own contract text, its
-//! deadline annotation, and, for a decomposition, the contract text of its
-//! direct children. Nothing at grandchild depth is included. Editing a leaf
-//! therefore invalidates that leaf's approval and its parents' structure
-//! approvals, and stops there: re-approval cost stays proportional to the edit.
+//! deadline annotation, the comments attached to it, and, for a decomposition,
+//! the contract text of its direct children with the comments on those child
+//! entries. Nothing at grandchild depth is included. Editing a leaf therefore
+//! invalidates that leaf's approval and its parents' structure approvals, and
+//! stops there: re-approval cost stays proportional to the edit.
 //!
-//! What is excluded is equally deliberate. IDs, tags, comments, and the
+//! What is excluded is equally deliberate. IDs, tags, file comments, and the
 //! `test:` / `veriq:` reference strings are not contract content — an approver
 //! judged the claim, not its name, its filing, or where the evidence lives — so
 //! renaming a node or retagging it never asks anyone to approve again. A
 //! deadline *is* content: `until:` is a jointly-approved decline placed toward
-//! the future, and moving it changes what was agreed. Interpolation runs before
+//! the future, and moving it changes what was agreed. A comment is content
+//! too: it is presented with its element at review, so what it says is part of
+//! what was approved. Interpolation runs before
 //! all of this, so a hash never sees a `{$var}`: changing a value in
 //! `values.toml` changes the contract and invalidates exactly the approvals of
 //! the nodes that interpolate it.
@@ -36,19 +39,28 @@
 //! which keeps a fiat and a structure with identical text apart:
 //!
 //! ```text
-//! objective = field("inka:objective:v1") ‖ field(desc) ‖ list(annotations) ‖ list(children)
-//! structure = field("inka:structure:v1") ‖ field(desc) ‖ list(annotations) ‖ list(children)
+//! entries(items) = u64-LE(items.len()) ‖ field(desc[0]) ‖ field(comment[0]) ‖ ...
+//!
+//! objective = field("inka:objective:v1") ‖ field(desc) ‖ list(annotations)
+//!             ‖ list(comments) ‖ entries(children)
+//! structure = field("inka:structure:v1") ‖ field(desc) ‖ list(annotations)
+//!             ‖ list(comments) ‖ entries(children)
 //! fiat      = field("inka:fiat:v1")      ‖ field(desc) ‖ list(annotations)
+//!             ‖ list(comments)
 //! bind      = field("inka:bind:v1")      ‖ field(desc) ‖ list(annotations)
-//!             ‖ field(interface_hash) ‖ list(assumptions)
+//!             ‖ list(comments) ‖ field(interface_hash) ‖ list(assumptions)
 //! ```
 //!
 //! `view_hash = SHA-256(preimage)`.
 //!
-//! Children are listed by their contract text, sorted bytewise, so reordering a
-//! `children:` list is not an edit. Annotations are `key:value` strings sorted
-//! by key. The bind assumption list is empty until assumption aggregation
-//! lands; the slot is framed now so filling it later is not a layout change.
+//! Annotations are `key:value` strings sorted by key. Comments are
+//! `anchor:text` strings sorted bytewise, one per anchor that carries a
+//! comment, the anchor being `block` or a property name. A child entry is the
+//! child's contract text and the comment on the entry (empty when there is
+//! none); entries are sorted by text, then comment, bytewise, so reordering a
+//! `children:` list is not an edit. The bind assumption list is empty until
+//! assumption aggregation lands; the slot is framed now so filling it later is
+//! not a layout change.
 //!
 //! This layout is frozen by the golden vectors under `tests/golden/hash/v1/`.
 //! An incompatible change ships as a parallel v2 with its own domain tags, so
@@ -61,7 +73,7 @@ use serde::{Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::normalize;
-use crate::view::{ArgumentView, Deadline, Mode, ViewNode};
+use crate::view::{ArgumentView, Deadline, Mode, NodeComments, ViewNode};
 
 /// Bytes in a SHA-256 digest.
 const DIGEST_LEN: usize = 32;
@@ -191,7 +203,29 @@ pub struct LocalView<'a> {
     mode: Mode,
     description: &'a str,
     deadline: Option<&'a Deadline>,
+    /// Comments on the node itself and its properties; child-entry comments
+    /// travel with the children.
+    comments: Option<&'a NodeComments>,
     discharge: Discharge<'a>,
+}
+
+/// One child entry as its parent's local view sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChildContract<'a> {
+    /// The child's contract text.
+    pub description: &'a str,
+    /// The comment on the parent's entry for this child; empty when none.
+    pub comment: &'a str,
+}
+
+impl<'a> From<&'a str> for ChildContract<'a> {
+    /// A child entry without a comment.
+    fn from(description: &'a str) -> Self {
+        Self {
+            description,
+            comment: "",
+        }
+    }
 }
 
 /// How the node is discharged, and the extra content that carries.
@@ -201,8 +235,8 @@ pub struct LocalView<'a> {
 /// unwrap in the middle of a frozen layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Discharge<'a> {
-    /// Contract text of the direct children, in any order: hashing sorts them.
-    Decomposition(Vec<&'a str>),
+    /// The direct children's entries, in any order: hashing sorts them.
+    Decomposition(Vec<ChildContract<'a>>),
     Evidence(InterfaceHash),
     Assertion,
 }
@@ -210,31 +244,33 @@ enum Discharge<'a> {
 impl<'a> LocalView<'a> {
     /// The local view of an objective, which is discharged by decomposition.
     #[must_use]
-    pub fn objective(
+    pub fn objective<C: Into<ChildContract<'a>>>(
         description: &'a str,
         deadline: Option<&'a Deadline>,
-        children: Vec<&'a str>,
+        children: impl IntoIterator<Item = C>,
     ) -> Self {
         Self {
             mode: Mode::Objective,
             description,
             deadline,
-            discharge: Discharge::Decomposition(children),
+            comments: None,
+            discharge: Discharge::Decomposition(children.into_iter().map(Into::into).collect()),
         }
     }
 
     /// The local view of a structure, which is discharged by decomposition.
     #[must_use]
-    pub fn structure(
+    pub fn structure<C: Into<ChildContract<'a>>>(
         description: &'a str,
         deadline: Option<&'a Deadline>,
-        children: Vec<&'a str>,
+        children: impl IntoIterator<Item = C>,
     ) -> Self {
         Self {
             mode: Mode::Structure,
             description,
             deadline,
-            discharge: Discharge::Decomposition(children),
+            comments: None,
+            discharge: Discharge::Decomposition(children.into_iter().map(Into::into).collect()),
         }
     }
 
@@ -249,6 +285,7 @@ impl<'a> LocalView<'a> {
             mode: Mode::Bind,
             description,
             deadline,
+            comments: None,
             discharge: Discharge::Evidence(interface),
         }
     }
@@ -260,7 +297,20 @@ impl<'a> LocalView<'a> {
             mode: Mode::Fiat,
             description,
             deadline,
+            comments: None,
             discharge: Discharge::Assertion,
+        }
+    }
+
+    /// Adds the comments on the node itself and on its properties.
+    ///
+    /// Comments on child entries are not read from here: they are part of
+    /// each [`ChildContract`].
+    #[must_use]
+    pub fn with_comments(self, comments: &'a NodeComments) -> Self {
+        Self {
+            comments: Some(comments),
+            ..self
         }
     }
 
@@ -282,25 +332,22 @@ impl<'a> LocalView<'a> {
         interface: Option<InterfaceHash>,
     ) -> Result<Self, LocalViewError> {
         let deadline = node.deadline.as_ref();
-        match node.mode {
-            Mode::Objective => Ok(Self::objective(
-                &node.description,
-                deadline,
-                child_descriptions(view, node)?,
-            )),
-            Mode::Structure => Ok(Self::structure(
-                &node.description,
-                deadline,
-                child_descriptions(view, node)?,
-            )),
-            Mode::Fiat => Ok(Self::fiat(&node.description, deadline)),
+        let local = match node.mode {
+            Mode::Objective => {
+                Self::objective(&node.description, deadline, child_contracts(view, node)?)
+            }
+            Mode::Structure => {
+                Self::structure(&node.description, deadline, child_contracts(view, node)?)
+            }
+            Mode::Fiat => Self::fiat(&node.description, deadline),
             Mode::Bind => {
                 let interface = interface.ok_or_else(|| LocalViewError::MissingInterfaceHash {
                     id: node.id.clone(),
                 })?;
-                Ok(Self::bind(&node.description, deadline, interface))
+                Self::bind(&node.description, deadline, interface)
             }
-        }
+        };
+        Ok(local.with_comments(&node.comments))
     }
 
     /// Computes the v1 view hash.
@@ -315,15 +362,19 @@ impl<'a> LocalView<'a> {
         preimage.field(domain_tag(self.mode).as_bytes());
         preimage.field(normalize::description(self.description).as_bytes());
         preimage.list(&annotations(self.deadline));
+        preimage.list(&comments(self.comments));
 
         match &self.discharge {
             Discharge::Decomposition(children) => {
-                let mut children: Vec<String> =
-                    children.iter().map(|c| normalize::description(c)).collect();
-                // Bytewise, on the normalized text: reordering a `children:`
-                // list is a filing change, not a contract change.
-                children.sort_unstable();
-                preimage.list(&children);
+                let mut entries: Vec<(String, &str)> = children
+                    .iter()
+                    .map(|child| (normalize::description(child.description), child.comment))
+                    .collect();
+                // Bytewise, on the normalized text and then the comment:
+                // reordering a `children:` list is a filing change, not a
+                // contract change.
+                entries.sort_unstable();
+                preimage.entries(&entries);
             }
             Discharge::Evidence(interface) => {
                 preimage.field(interface.as_bytes());
@@ -360,9 +411,7 @@ fn domain_tag(mode: Mode) -> &'static str {
 
 /// The canonical form of a node's annotations: `key:value` sorted by key.
 ///
-/// Only the deadline group is annotation content today. A `reason` is taken as
-/// written, without its quotes: it is a single-line string with no escapes, so
-/// it has no normal form to reduce to.
+/// Only the deadline group is annotation content today.
 fn annotations(deadline: Option<&Deadline>) -> Vec<String> {
     let Some(deadline) = deadline else {
         return Vec::new();
@@ -375,9 +424,6 @@ fn annotations(deadline: Option<&Deadline>) -> Vec<String> {
     });
 
     let mut pairs: Vec<(&str, &str)> = vec![("until", &deadline.until)];
-    if let Some(reason) = &deadline.reason {
-        pairs.push(("reason", reason));
-    }
     if let Some(promote) = promote {
         pairs.push(("promote", promote));
     }
@@ -388,20 +434,50 @@ fn annotations(deadline: Option<&Deadline>) -> Vec<String> {
         .collect()
 }
 
-/// Contract text of a node's direct children, in declaration order.
-fn child_descriptions<'a>(
+/// The canonical form of the comments on a node and its properties:
+/// `anchor:text`, sorted bytewise.
+///
+/// The text is taken as attached: it is already NFC, with each line's `//`,
+/// leading space, and trailing whitespace removed.
+fn comments(comments: Option<&NodeComments>) -> Vec<String> {
+    let Some(comments) = comments else {
+        return Vec::new();
+    };
+    let mut canonical: Vec<String> = comments
+        .block
+        .iter()
+        .map(|text| format!("block:{text}"))
+        .chain(
+            comments
+                .properties
+                .iter()
+                .map(|(property, text)| format!("{}:{text}", property.name())),
+        )
+        .collect();
+    canonical.sort_unstable();
+    canonical
+}
+
+/// A node's direct child entries, in declaration order.
+fn child_contracts<'a>(
     view: &'a ArgumentView,
-    node: &ViewNode,
-) -> Result<Vec<&'a str>, LocalViewError> {
+    node: &'a ViewNode,
+) -> Result<Vec<ChildContract<'a>>, LocalViewError> {
     node.children
         .iter()
         .map(|child| {
-            view.node(child)
+            let description = view
+                .node(child)
                 .map(|child| child.description.as_str())
                 .ok_or_else(|| LocalViewError::UndefinedChild {
                     parent: node.id.clone(),
                     child: child.clone(),
-                })
+                })?;
+            let comment = node.comments.children.get(child).map_or("", String::as_str);
+            Ok(ChildContract {
+                description,
+                comment,
+            })
         })
         .collect()
 }
@@ -422,6 +498,15 @@ impl Preimage {
         self.0.extend_from_slice(&length(items.len()));
         for item in items {
             self.field(item.as_ref());
+        }
+    }
+
+    /// Appends `u64-LE(count)` followed by each entry as two fields.
+    pub(crate) fn entries<A: AsRef<[u8]>, B: AsRef<[u8]>>(&mut self, entries: &[(A, B)]) {
+        self.0.extend_from_slice(&length(entries.len()));
+        for (first, second) in entries {
+            self.field(first.as_ref());
+            self.field(second.as_ref());
         }
     }
 
@@ -449,23 +534,47 @@ fn write_prefixed_hex(f: &mut fmt::Formatter<'_>, bytes: &[u8; DIGEST_LEN]) -> f
 mod tests {
     use super::*;
 
-    use crate::view::{ViewEdge, ViewNode};
+    use std::collections::BTreeMap;
+
+    use crate::view::{Property, ViewEdge, ViewNode};
 
     const INTERFACE: InterfaceHash = InterfaceHash::from_bytes([0x11; DIGEST_LEN]);
 
-    fn deadline(until: &str, reason: Option<&str>, promote: Option<Mode>) -> Deadline {
+    const NO_CHILDREN: [&str; 0] = [];
+
+    fn deadline(until: &str, promote: Option<Mode>) -> Deadline {
         Deadline {
             until: until.to_owned(),
-            reason: reason.map(str::to_owned),
             promote,
+        }
+    }
+
+    fn block_comment(text: &str) -> NodeComments {
+        NodeComments {
+            block: Some(text.to_owned()),
+            ..NodeComments::default()
+        }
+    }
+
+    fn property_comment(property: Property, text: &str) -> NodeComments {
+        NodeComments {
+            properties: BTreeMap::from([(property, text.to_owned())]),
+            ..NodeComments::default()
+        }
+    }
+
+    fn commented<'a>(description: &'a str, comment: &'a str) -> ChildContract<'a> {
+        ChildContract {
+            description,
+            comment,
         }
     }
 
     #[test]
     fn the_four_kinds_never_share_a_hash_for_the_same_text() {
         // Arrange & Act: identical text, identical (absent) annotations.
-        let objective = LocalView::objective("the claim", None, Vec::new()).view_hash();
-        let structure = LocalView::structure("the claim", None, Vec::new()).view_hash();
+        let objective = LocalView::objective("the claim", None, NO_CHILDREN).view_hash();
+        let structure = LocalView::structure("the claim", None, NO_CHILDREN).view_hash();
         let fiat = LocalView::fiat("the claim", None).view_hash();
         let bind = LocalView::bind("the claim", None, INTERFACE).view_hash();
 
@@ -545,7 +654,7 @@ mod tests {
     #[test]
     fn a_deadline_is_contract_content() {
         let bare = LocalView::fiat("taken as given", None).view_hash();
-        let dated = deadline("M3", None, None);
+        let dated = deadline("M3", None);
         let dated = LocalView::fiat("taken as given", Some(&dated)).view_hash();
 
         assert_ne!(bare, dated);
@@ -553,38 +662,124 @@ mod tests {
 
     #[test]
     fn every_part_of_a_deadline_changes_the_hash() {
-        let base = deadline("M3", Some("awaiting the test"), Some(Mode::Bind));
-        let later = deadline("M4", Some("awaiting the test"), Some(Mode::Bind));
-        let requoted = deadline("M3", Some("awaiting the rig"), Some(Mode::Bind));
-        let repromoted = deadline("M3", Some("awaiting the test"), Some(Mode::Structure));
+        let base = deadline("M3", Some(Mode::Bind));
+        let later = deadline("M4", Some(Mode::Bind));
+        let repromoted = deadline("M3", Some(Mode::Structure));
 
         let hash = |d: &Deadline| LocalView::fiat("taken as given", Some(d)).view_hash();
         assert_ne!(hash(&base), hash(&later));
-        assert_ne!(hash(&base), hash(&requoted));
         assert_ne!(hash(&base), hash(&repromoted));
     }
 
     #[test]
     fn annotations_are_key_value_strings_sorted_by_key() {
         // Arrange
-        let deadline = deadline(
-            "M3",
-            Some("awaiting the mass-properties test"),
-            Some(Mode::Bind),
-        );
+        let deadline = deadline("M3", Some(Mode::Bind));
 
         // Act
         let canonical = annotations(Some(&deadline));
 
         // Assert: the spelling `spec.md` fixes.
+        assert_eq!(canonical, ["promote:bind", "until:M3"]);
+    }
+
+    #[test]
+    fn comments_are_anchor_text_strings_sorted_bytewise() {
+        // Arrange
+        let comments = NodeComments {
+            block: Some("shared with momentum_ok".to_owned()),
+            properties: BTreeMap::from([
+                (
+                    Property::Until,
+                    "awaiting the mass-properties test".to_owned(),
+                ),
+                (Property::Children, "grouped by axis".to_owned()),
+            ]),
+            children: BTreeMap::from([("a".to_owned(), "not listed here".to_owned())]),
+        };
+
+        // Act & Assert: the spelling `spec.md` fixes; child-entry comments
+        // travel with the children instead.
         assert_eq!(
-            canonical,
+            super::comments(Some(&comments)),
             [
-                "promote:bind",
-                "reason:awaiting the mass-properties test",
-                "until:M3",
+                "block:shared with momentum_ok",
+                "children:grouped by axis",
+                "until:awaiting the mass-properties test",
             ]
         );
+    }
+
+    #[test]
+    fn a_comment_is_contract_content() {
+        let bare = LocalView::fiat("taken as given", None).view_hash();
+        let noted = block_comment("measured later");
+        let noted = LocalView::fiat("taken as given", None)
+            .with_comments(&noted)
+            .view_hash();
+
+        assert_ne!(bare, noted);
+    }
+
+    #[test]
+    fn the_same_text_on_different_anchors_is_a_different_contract() {
+        let on_block = block_comment("why");
+        let on_until = property_comment(Property::Until, "why");
+        let dated = deadline("M3", None);
+        let hash = |comments: &NodeComments| {
+            LocalView::fiat("taken as given", Some(&dated))
+                .with_comments(comments)
+                .view_hash()
+        };
+
+        assert_ne!(hash(&on_block), hash(&on_until));
+    }
+
+    #[test]
+    fn a_comment_on_a_child_entry_changes_the_parents_hash() {
+        let plain = LocalView::structure("parent", None, ["alpha"]).view_hash();
+        let noted =
+            LocalView::structure("parent", None, [commented("alpha", "why alpha")]).view_hash();
+
+        assert_ne!(plain, noted);
+    }
+
+    #[test]
+    fn reordering_commented_children_leaves_the_hash_alone() {
+        let declared = LocalView::structure(
+            "parent",
+            None,
+            [commented("alpha", "first"), commented("beta", "second")],
+        )
+        .view_hash();
+        let reordered = LocalView::structure(
+            "parent",
+            None,
+            [commented("beta", "second"), commented("alpha", "first")],
+        )
+        .view_hash();
+
+        assert_eq!(declared, reordered);
+    }
+
+    #[test]
+    fn a_child_comment_stays_with_its_child() {
+        // Arrange & Act: the same two comments, swapped between the entries.
+        let one = LocalView::structure(
+            "parent",
+            None,
+            [commented("alpha", "x"), commented("beta", "y")],
+        )
+        .view_hash();
+        let other = LocalView::structure(
+            "parent",
+            None,
+            [commented("alpha", "y"), commented("beta", "x")],
+        )
+        .view_hash();
+
+        // Assert
+        assert_ne!(one, other);
     }
 
     #[test]
@@ -670,6 +865,7 @@ mod tests {
                     evidence: None,
                     deadline: None,
                     children: Vec::new(),
+                    comments: NodeComments::default(),
                 },
                 ViewNode {
                     id: "root".to_owned(),
@@ -680,6 +876,10 @@ mod tests {
                     evidence: None,
                     deadline: None,
                     children: vec!["leaf".to_owned()],
+                    comments: NodeComments {
+                        children: BTreeMap::from([("leaf".to_owned(), "why".to_owned())]),
+                        ..NodeComments::default()
+                    },
                 },
             ],
             edges: vec![ViewEdge {
@@ -699,10 +899,13 @@ mod tests {
         // Act
         let local = LocalView::of_node(&view, root, None).expect("a structure needs no interface");
 
-        // Assert: the parent's own text plus its children's, and nothing else.
+        // Assert: the parent's own text plus its children's entries, and
+        // nothing else.
+        let comments = &view.nodes[1].comments;
         assert_eq!(
             local,
-            LocalView::structure("the claim", None, vec!["taken as given"])
+            LocalView::structure("the claim", None, [commented("taken as given", "why")])
+                .with_comments(comments)
         );
     }
 

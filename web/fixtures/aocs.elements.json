@@ -111,7 +111,6 @@
       "root": false,
       "deadline": {
         "until": "FM",
-        "reason": "promote to a veriq verification once the mass-properties test has measured the real vehicle",
         "promote": "bind"
       }
     }

@@ -179,7 +179,6 @@
       "root": false,
       "deadline": {
         "until": "M3",
-        "reason": "bind to the scenario test: approve, edit a grandchild, stays fresh",
         "promote": "bind"
       }
     }
@@ -194,7 +193,6 @@
       "root": false,
       "deadline": {
         "until": "M2",
-        "reason": "bind to the hash v1 golden vectors and proptests (first CI bind target)",
         "promote": "bind"
       }
     }

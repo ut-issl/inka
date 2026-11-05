@@ -99,11 +99,12 @@ fiat leaf {
 ";
 
 #[test]
-fn renaming_ids_retagging_and_editing_comments_leaves_every_hash_alone() {
-    // Arrange: the same three contracts under different names, tags, and
-    // comments.
+fn renaming_ids_retagging_and_adding_a_file_comment_leaves_every_hash_alone() {
+    // Arrange: the same three contracts under different names and tags, in a
+    // file that carries a file comment.
     let renamed = "\
-// A comment the lexer drops before anything else sees it.
+// A file comment, which belongs to no node.
+
 objective survival #mission #reviewed {
   ```
   the satellite survives its first orbit
@@ -114,7 +115,6 @@ structure power {
   ```
   power holds through eclipse
   ```
-  // Another comment, this time inside a block.
   children: battery
 }
 fiat battery {
@@ -128,6 +128,40 @@ fiat battery {
     assert_eq!(
         hashes(&view_of(ARGUMENT, &[])),
         hashes(&view_of(renamed, &[]))
+    );
+}
+
+#[test]
+fn a_comment_changes_only_the_hash_of_the_node_it_is_attached_to() {
+    // Arrange: one comment on the branch block, one on the root's entry for
+    // the leaf.
+    let on_block = ARGUMENT.replace(
+        "structure branch {",
+        "// Shared with the thermal argument.\nstructure branch {",
+    );
+    let on_entry = ARGUMENT.replace(
+        "children: branch, leaf",
+        "children: branch, leaf // Listed directly as well.",
+    );
+    let base = view_of(ARGUMENT, &[]);
+
+    // Act
+    let with_block_comment = view_of(&on_block, &[]);
+    let with_entry_comment = view_of(&on_entry, &[]);
+
+    // Assert: a block comment is the block's contract; an entry comment is
+    // the parent's, and the child itself is untouched.
+    assert_ne!(
+        hash_of(&base, "branch"),
+        hash_of(&with_block_comment, "branch")
+    );
+    assert_eq!(hash_of(&base, "root"), hash_of(&with_block_comment, "root"));
+    assert_eq!(hash_of(&base, "leaf"), hash_of(&with_block_comment, "leaf"));
+    assert_ne!(hash_of(&base, "root"), hash_of(&with_entry_comment, "root"));
+    assert_eq!(hash_of(&base, "leaf"), hash_of(&with_entry_comment, "leaf"));
+    assert_eq!(
+        hash_of(&base, "branch"),
+        hash_of(&with_entry_comment, "branch")
     );
 }
 
@@ -266,8 +300,8 @@ fiat leaf {
   ```
   taken as given
   ```
+  // measured once the vehicle exists
   until: M3
-  reason: \"measured once the vehicle exists\"
 }
 ";
     let later = source.replace("until: M3", "until: M7");

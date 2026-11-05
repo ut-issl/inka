@@ -10,7 +10,7 @@
  * { "data": { "id": "detumble_ok", "mode": "structure", "namespace": "safety",
  *             "description": "…", "tags": ["safety"], "root": false,
  *             "evidence": { "kind": "veriq", "target": "aocs.verify_detumble" },
- *             "deadline": { "until": "FM", "promote": "bind", "reason": "…" } } }
+ *             "deadline": { "until": "FM", "promote": "bind" } } }
  * ```
  *
  * An edge element points from a parent to one child:
@@ -41,10 +41,9 @@ const evidenceSchema = z.object({
   target: z.string().min(1),
 })
 
-/** An `until:` annotation, with the optional rationale and promotion target. */
+/** An `until:` annotation, with the optional promotion target. */
 const deadlineSchema = z.object({
   until: z.string().min(1),
-  reason: z.string().optional(),
   promote: z.enum(['structure', 'bind']).optional(),
 })
 

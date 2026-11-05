@@ -43,7 +43,7 @@ is validated against it before anything is drawn.
               "evidence": { "kind": "veriq", "target": "aocs.verify_detumble" } } },
   { "data": { "id": "mtq_authority_ok", "mode": "fiat", "namespace": "safety",
               "description": "…", "tags": [], "root": false,
-              "deadline": { "until": "FM", "promote": "bind", "reason": "…" } } },
+              "deadline": { "until": "FM", "promote": "bind" } } },
   { "data": { "id": "detumble_ok->mtq_authority_ok",
               "source": "detumble_ok", "target": "mtq_authority_ok" } }
 ]

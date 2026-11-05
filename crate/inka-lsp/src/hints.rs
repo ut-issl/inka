@@ -31,7 +31,7 @@ pub fn hints(project: &Project, file: FileId, start: usize, end: usize) -> Vec<I
     };
     let mut found = Vec::new();
     for block in &project.blocks {
-        for child in block.children() {
+        for child in block.children().iter().map(|entry| &entry.id) {
             if child.span.file_id != file || child.span.end < start || child.span.start > end {
                 continue;
             }
