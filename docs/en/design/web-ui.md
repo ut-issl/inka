@@ -87,7 +87,7 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
 ## Detail
 
 - Hovering a node reveals its full description.
-- Selecting a node shows its contract, evidence target, and deadline.
+- Selecting a node shows its contract, comments, evidence target, and deadline.
 
 ## Not invariant
 

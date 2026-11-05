@@ -18,6 +18,7 @@ nav = [
   { "Design" = [
     { "Concept" = "design/concept.md" },
     { "Specification" = "design/spec.md" },
+    { "Formatting" = "design/formatting.md" },
     { "PoC Plan" = "design/poc-plan.md" },
     { "Full Plan" = "design/full-plan.md" },
     { "Test Evidence" = "design/test-evidence.md" },

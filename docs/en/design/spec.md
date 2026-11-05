@@ -10,25 +10,32 @@ changes ship as a parallel v2). Japanese version: [日本語版](https://www.spa
 ## DSL syntax
 
 ````text
+// Comment on the block.
 structure <id> #tag1 #tag2 {
-  ```
-  description (markdown allowed; {$var} interpolation; fence ``` or longer)
-  ```
-  children: <id>, <id>, ...
+    ```
+    description (markdown allowed; {$var} interpolation; fence ``` or longer)
+    ```
+    children:
+        <id>,
+        // Comment on this child.
+        <id>
 }
 
 bind <id> {
-  ```...```
-  test: "<test-id>"   // or veriq: "<module>.<name>"
+    ```...```
+    test: "<test-id>"
 }
 
 fiat <id> {
-  ```...```
-  until: <phase>
-  promote: bind
-  reason: "<short rationale>"
+    ```...```
+    // Short rationale for the deadline.
+    until: <phase>
+    promote: bind
 }
 ````
+
+The examples use the layout the [formatter](formatting.md) produces; the parser
+itself accepts any layout.
 
 - Blocks: `objective` / `structure` / `bind` / `fiat` + id + optional tags +
   `{}`. Indentation is never structurally significant.
@@ -40,19 +47,19 @@ fiat <id> {
 - Mode-required properties, enforced at parse time: `structure`/`objective` →
   `children:` required; `bind` → exactly one of `test:` / `veriq:` required;
   `fiat` → neither allowed.
-- Annotations form a group anchored on `until:` — `reason:` and `promote:` may
-  only appear together with `until:`. `until: <phase>` and `reason: "<short
-  text>"` may appear on any block; `check` rejects an `until:` phase that
-  `phases.order` does not list. `promote:` names the successor mode and is
-  optional (an `until:` without `promote:` is plain expiry): on fiat the
-  target is `structure` or `bind`; on the objective it is `structure` only.
-  structure and bind take no `promote:` — announcing a mode change there is
-  not supported. The `reason`, `test:`, and `veriq:` properties take a
+- Annotations form a group anchored on `until:` — `promote:` may only appear
+  together with `until:`. `until: <phase>` may appear on any block; `check`
+  rejects an `until:` phase that `phases.order` does not list. `promote:` names
+  the successor mode and is optional (an `until:` without `promote:` is plain
+  expiry): on fiat the target is `structure` or `bind`; on the objective it is
+  `structure` only. structure and bind take no `promote:` — announcing a mode
+  change there is not supported. The rationale for a deadline is written as a
+  [comment](#comments) on `until:`. The `test:` and `veriq:` properties take a
   double-quoted, single-line string value with no escape sequences — the only
   quoted values in the language. A `test:` / `veriq:` value is the opaque
   evidence target, which `check` does not interpret. Descriptions never use
   quotes.
-- `//` line comments; dropped at the lexer, never hashed.
+- `//` line comments are part of the syntax tree; see [Comments](#comments).
 - No escape for `{$` — only the exact pattern `{$identifier}` is interpolation;
   everything else is literal.
 - Property order is free; duplicate properties are an error.
@@ -65,6 +72,42 @@ fiat <id> {
   references keep Python's dotted `module.function` names.
 - `test:` / `veriq:` references get a format check only at `check` time;
   existence and pass/fail are eval's job.
+
+## Comments
+
+A comment is a note on the element it is attached to. Comments are part of the
+syntax tree, are presented with their element at review, and — except file
+comments — are contract content that enters the view hash. A comment is never
+a syntax error: every `//` outside a fence attaches to exactly one place.
+
+- **Anchors.** A comment attaches to a block, to one property of a block
+  (`children`, `test`, `veriq`, `until`, `promote`), to one entry of a
+  `children:` list, or to the file. The description fence is not an anchor.
+- **Text.** A comment runs from `//` to the end of the line. Its text drops the
+  `//`, then one following space if present, then trailing whitespace, and is
+  NFC-normalized. `//` inside a fence is description text, not a comment.
+- **Attachment.** Rules apply in order:
+  1. *File comment.* The run of comment lines at the very top of the file
+     attaches to the file when a blank line follows it.
+  2. *Trailing.* A comment that follows a token on the same line attaches to
+     the innermost anchor that token belongs to: a block header or its `{` →
+     the block; `children:` → the property; a child entry and its `,` → that
+     entry; `until: M3` → the property.
+  3. *Leading.* A comment on its own line attaches to the next anchor that
+     begins after it inside the same braces, blank lines notwithstanding. A
+     comment inside a property — between its name and the end of its value —
+     attaches to the next child entry of that property if one follows,
+     otherwise to the property.
+  4. *Dangling.* A comment with no anchor to attach to under rules 2–3 — before
+     a description fence, inside a block header, before a closing `}` —
+     attaches to the enclosing block. At the top level it attaches to the next
+     block, or to the file after the last block.
+- **Merging.** Several comments on one anchor join into a single text, one
+  source line per text line, in source order. Blank lines between them are not
+  kept. An anchor whose merged text is empty carries no comment.
+- **No interpolation.** `{$var}` inside a comment is literal text.
+- **Presentation.** `inka review` and the exported view show each comment with
+  its anchor. File comments are not shown: they belong to no node.
 
 ## Project layout
 
@@ -85,20 +128,30 @@ fiat <id> {
   space indent; join with `\n`. Idempotent. Internal newlines and spacing are
   contract content (near-verbatim; no markdown-AST normalization).
 - Annotation canonical form: `key:value` strings sorted by key
-  (e.g. `["promote:bind", "reason:awaiting the mass-properties test",
-  "until:M3"]`; the `reason` value is the string content without quotes).
+  (e.g. `["promote:bind", "until:M3"]`).
+- Comment canonical form: one `anchor:text` string per anchor of the node that
+  carries a comment, sorted bytewise, where the anchor is `block` or the
+  property name (`children` / `test` / `veriq` / `until` / `promote`) and the
+  text is the merged comment text (e.g. `["block:shared with momentum_ok",
+  "until:awaiting the mass-properties test"]`). Child-entry comments are not
+  in this list; they travel with the child entry.
+- Child entry: the child's normalized description followed by the comment on
+  that entry (empty when there is none), each as a field.
 - Framing: every field is u64-LE length-prefixed; lists carry a u64-LE element
   count. Domain tags: `inka:objective:v1` / `inka:structure:v1` /
   `inka:fiat:v1` / `inka:bind:v1`.
-  - objective = tag ‖ desc ‖ annotations ‖ children descs (sorted bytewise)
-  - structure = tag ‖ desc ‖ annotations ‖ children descs (sorted bytewise)
-  - fiat = tag ‖ desc ‖ annotations
-  - bind = tag ‖ desc ‖ annotations ‖ interface_hash (raw 32 bytes) ‖
-    assumption list (empty until assumption aggregation lands; the slot exists
-    so filling it later is not a layout change)
-- Excluded from hashes: IDs, tags, comments, `test:` / `veriq:` reference strings.
-  Included: deadline annotations. Interpolation happens before normalization
-  and hashing — hashes never see placeholders.
+  - objective = tag ‖ desc ‖ annotations ‖ comments ‖ child entries (sorted
+    bytewise)
+  - structure = tag ‖ desc ‖ annotations ‖ comments ‖ child entries (sorted
+    bytewise)
+  - fiat = tag ‖ desc ‖ annotations ‖ comments
+  - bind = tag ‖ desc ‖ annotations ‖ comments ‖ interface_hash (raw 32 bytes)
+    ‖ assumption list (empty until assumption aggregation lands; the slot
+    exists so filling it later is not a layout change)
+- Excluded from hashes: IDs, tags, file comments, `test:` / `veriq:` reference
+  strings. Included: deadline annotations and every other comment.
+  Interpolation happens before normalization and hashing — hashes never see
+  placeholders.
 
 ## Approval records (v1)
 

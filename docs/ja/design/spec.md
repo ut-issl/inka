@@ -9,25 +9,31 @@
 ## DSL 構文
 
 ````text
+// ブロックへのコメント。
 structure <id> #tag1 #tag2 {
-  ```
-  description(markdown 可。{$var} の値埋め込み可。フェンスは ``` 以上)
-  ```
-  children: <id>, <id>, ...
+    ```
+    description(markdown 可。{$var} の値埋め込み可。フェンスは ``` 以上)
+    ```
+    children:
+        <id>,
+        // この子へのコメント。
+        <id>
 }
 
 bind <id> {
-  ```...```
-  test: "<test-id>"   // または veriq: "<module>.<name>"
+    ```...```
+    test: "<test-id>"
 }
 
 fiat <id> {
-  ```...```
-  until: <phase>
-  promote: bind
-  reason: "<短い理由>"
+    ```...```
+    // 期限の短い理由。
+    until: <phase>
+    promote: bind
 }
 ````
+
+例は[フォーマッタ](formatting.md)が出力するレイアウトで書いている。パーサ自体はどんなレイアウトも受理する。
 
 - ブロック: `objective` / `structure` / `bind` / `fiat` + id + 任意のタグ + `{}`。
   インデントは構造的に無意味。
@@ -37,16 +43,16 @@ fiat <id> {
   フェンス内=自然言語のみ、フェンス外=キーワードのみ。
 - モード別必須プロパティ(パース時に強制): `structure`/`objective` → `children:`
   必須、`bind` → `test:` か `veriq:` を厳密に1つ必須、`fiat` → どちらも不可。
-- 注釈は `until:` をアンカーとするグループ — `reason:` と `promote:` は `until:`
-  がある場合にのみ書ける。`until: <phase>` と `reason: "<短文>"` は全ブロックに
-  書ける。`phases.order` にないフェーズを `until:` に書くと check がエラーにする。
-  `promote:` は後継モードの宣言で任意(`promote:` なしの `until:` は単純な
-  期限切れ): fiat では `structure` | `bind`、objective では `structure` のみ。
-  structure と bind に `promote:` は書けない — モード変更の予告は想定しない。
-  `reason`・`test:`・`veriq:` プロパティは二重引用符の1行文字列値でエスケープなし —
+- 注釈は `until:` をアンカーとするグループ — `promote:` は `until:` がある場合に
+  のみ書ける。`until: <phase>` は全ブロックに書ける。`phases.order` にないフェーズを
+  `until:` に書くと check がエラーにする。`promote:` は後継モードの宣言で任意
+  (`promote:` なしの `until:` は単純な期限切れ): fiat では `structure` | `bind`、
+  objective では `structure` のみ。structure と bind に `promote:` は書けない —
+  モード変更の予告は想定しない。期限の理由は `until:` へのコメント(後述「コメント」節)として
+  書く。`test:`・`veriq:` プロパティは二重引用符の1行文字列値でエスケープなし —
   言語中で唯一の引用符値。`test:` / `veriq:` の値は不透明な evidence ターゲットで、
   check は中身を解釈しない。description は引用符を使わない。
-- `//` 行コメント。字句段階で落ち、ハッシュされない。
+- `//` 行コメントは構文木の一部。後述「コメント」節を参照。
 - `{$` のエスケープは無い — 正確なパターン `{$識別子}` のみが補間で、それ以外は
   文字通り。
 - プロパティの順序は自由。重複は error。
@@ -57,6 +63,34 @@ fiat <id> {
   同一名前空間内の参照は接頭辞省略可。ID の中に `::` は書けない。ポリシーセレクタも
   同記法(`power::*`)。`veriq:` 参照は Python の `module.function` 名のまま。
 - `test:` / `veriq:` 参照は check では形式検査のみ。実在と pass/fail は eval の仕事。
+
+## コメント
+
+コメントは付着先の要素についての注記である。コメントは構文木の一部で、review では付着先の要素と
+一緒に提示され、ファイルコメントを除いて契約内容としてビューハッシュに入る。コメントが構文エラーに
+なることはない: フェンス外の `//` はすべて、ちょうど1か所に付着する。
+
+- **付着先(アンカー)。** コメントはブロック、ブロックのプロパティ1つ(`children`・`test`・
+  `veriq`・`until`・`promote`)、`children:` リストの要素1つ、またはファイルに付着する。
+  description のフェンスはアンカーではない。
+- **本文。** コメントは `//` から行末まで。本文は `//` を除き、続く空白があれば1つ除き、
+  行末空白を除いて NFC 正規化したもの。フェンス内の `//` は description の本文でありコメントではない。
+- **付着規則。** 次の順に適用する:
+  1. *ファイルコメント。* ファイル最先頭のコメント行の連なりは、直後に空行があればファイルに付着する。
+  2. *行末。* 同じ行のトークンの後ろに続くコメントは、そのトークンが属する最も内側のアンカーに
+     付着する: ブロックヘッダやその `{` → ブロック、`children:` → そのプロパティ、子要素とその
+     `,` → その子要素、`until: M3` → そのプロパティ。
+  3. *直前行。* 単独行のコメントは、同じ波括弧の中で後ろに始まる次のアンカーに付着する(間に空行が
+     あっても)。プロパティの内側 — 名前から値の終わりまで — にあるコメントは、そのプロパティの
+     子要素が後ろに続けばその子要素に、続かなければそのプロパティに付着する。
+  4. *ぶら下がり。* 2〜3 で付着先が決まらないコメント — description フェンスの前、ブロック
+     ヘッダの途中、閉じ `}` の前 — は囲んでいるブロックに付着する。トップレベルでは次のブロックに、
+     最後のブロックより後ならファイルに付着する。
+- **連結。** 1つのアンカーに付いた複数のコメントは、ソース順に、ソースの1行を本文の1行として
+  1つの本文に連結する。間の空行は保持しない。連結後の本文が空のアンカーはコメントを持たない。
+- **値展開しない。** コメント中の `{$var}` は文字通りの本文。
+- **提示。** `inka review` とエクスポートされるビューは、各コメントを付着先と一緒に表示する。
+  ファイルコメントはどのノードにも属さないので表示しない。
 
 ## プロジェクト構成
 
@@ -73,19 +107,24 @@ fiat <id> {
 - 展開済み description の正規化(順に): NFC、CRLF/CR→LF、行末空白除去、先頭末尾の
   空行除去、共通スペースインデントの剥ぎ取り、`\n` で連結。冪等。内部の改行と空白は
   契約の一部(ほぼ verbatim。markdown-AST 正規化はしない)。
-- 注釈の正規形: キーでソートした `key:value` 文字列列(例
-  `["promote:bind", "reason:awaiting the mass-properties test", "until:M3"]`。
-  `reason` の値は引用符を除いた本文そのもの)。
+- 注釈の正規形: キーでソートした `key:value` 文字列列(例 `["promote:bind", "until:M3"]`)。
+- コメントの正規形: ノードのアンカーのうちコメントを持つものごとに1つの `anchor:text` 文字列を
+  バイト列順にソートした列。anchor は `block` またはプロパティ名(`children` / `test` /
+  `veriq` / `until` / `promote`)、text は連結後のコメント本文(例
+  `["block:shared with momentum_ok", "until:awaiting the mass-properties test"]`)。
+  子要素へのコメントはこの列に入らず、子要素と一緒に運ばれる。
+- 子要素: 子の正規化済み description と、その子要素へのコメント(無ければ空)を、それぞれ
+  フィールドとして並べたもの。
 - フレーミング: 全フィールドは u64-LE の長さ接頭辞付き。リストは u64-LE の要素数を
   前置。ドメインタグ: `inka:objective:v1` / `inka:structure:v1` /
   `inka:fiat:v1` / `inka:bind:v1`。
-  - objective = tag ‖ desc ‖ annotations ‖ 子 desc 群(バイト列順ソート)
-  - structure = tag ‖ desc ‖ annotations ‖ 子 desc 群(バイト列順ソート)
-  - fiat = tag ‖ desc ‖ annotations
-  - bind = tag ‖ desc ‖ annotations ‖ interface_hash(生32バイト)‖ 仮定リスト
+  - objective = tag ‖ desc ‖ annotations ‖ comments ‖ 子要素群(バイト列順ソート)
+  - structure = tag ‖ desc ‖ annotations ‖ comments ‖ 子要素群(バイト列順ソート)
+  - fiat = tag ‖ desc ‖ annotations ‖ comments
+  - bind = tag ‖ desc ‖ annotations ‖ comments ‖ interface_hash(生32バイト)‖ 仮定リスト
     (仮定集約が入るまでは空。席があるので後から埋めてもレイアウト変更にならない)
-- ハッシュ非包含: ID、タグ、コメント、`test:` / `veriq:` の参照文字列。包含: 期限注釈。
-  値展開は正規化・ハッシュの前段 — ハッシュはプレースホルダを見ない。
+- ハッシュ非包含: ID、タグ、ファイルコメント、`test:` / `veriq:` の参照文字列。包含: 期限注釈と
+  それ以外のすべてのコメント。値展開は正規化・ハッシュの前段 — ハッシュはプレースホルダを見ない。
 
 ## 承認レコード(v1)
 
