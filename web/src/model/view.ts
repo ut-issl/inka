@@ -12,6 +12,7 @@
 import {
   isEdgeData,
   type ArgumentElement,
+  type Comments,
   type Deadline,
   type DischargeMode,
   type EdgeData,
@@ -31,6 +32,8 @@ export interface ArgumentNode {
   readonly root: boolean
   readonly evidence?: Evidence | undefined
   readonly deadline?: Deadline | undefined
+  /** Comments on the block and its properties; entry comments are on edges. */
+  readonly comments: Comments
   /** Position in the export, i.e. rank in sorted block-ID order. */
   readonly index: number
   /** Parents in sorted block-ID order. */

@@ -10,13 +10,16 @@
  * { "data": { "id": "detumble_ok", "mode": "structure", "namespace": "safety",
  *             "description": "…", "tags": ["safety"], "root": false,
  *             "evidence": { "kind": "veriq", "target": "aocs.verify_detumble" },
- *             "deadline": { "until": "FM", "promote": "bind" } } }
+ *             "deadline": { "until": "FM", "promote": "bind" },
+ *             "comments": { "block": "…", "until": "…" } } }
  * ```
  *
- * An edge element points from a parent to one child:
+ * An edge element points from a parent to one child — one `children:` entry —
+ * and carries the comment on that entry, if any:
  *
  * ```json
- * { "data": { "id": "detumble_ok->mtq_authority_ok", "source": "detumble_ok", "target": "mtq_authority_ok" } }
+ * { "data": { "id": "detumble_ok->mtq_authority_ok", "source": "detumble_ok",
+ *             "target": "mtq_authority_ok", "comment": "…" } }
  * ```
  *
  * Two properties of the array are load-bearing and hold by construction on the
@@ -47,6 +50,19 @@ const deadlineSchema = z.object({
   promote: z.enum(['structure', 'bind']).optional(),
 })
 
+/**
+ * The comments attached to a block and to its properties, keyed by `block` or
+ * the property name. Comments on `children:` entries ride on the edges.
+ */
+const commentsSchema = z.object({
+  block: z.string().optional(),
+  children: z.string().optional(),
+  test: z.string().optional(),
+  veriq: z.string().optional(),
+  until: z.string().optional(),
+  promote: z.string().optional(),
+})
+
 const nodeDataSchema = z.object({
   id: z.string().min(1),
   mode: z.enum(DISCHARGE_MODES),
@@ -59,12 +75,15 @@ const nodeDataSchema = z.object({
   root: z.boolean().default(false),
   evidence: evidenceSchema.optional(),
   deadline: deadlineSchema.optional(),
+  comments: commentsSchema.default({}),
 })
 
 const edgeDataSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
   target: z.string().min(1),
+  /** The comment on the parent's `children:` entry for this child. */
+  comment: z.string().optional(),
 })
 
 /** Shape shared by both kinds, checked before either is chosen. */
@@ -74,6 +93,7 @@ const elementSchema = z.object({ data: z.union([edgeDataSchema, nodeDataSchema])
 
 export type Evidence = z.infer<typeof evidenceSchema>
 export type Deadline = z.infer<typeof deadlineSchema>
+export type Comments = z.infer<typeof commentsSchema>
 export type NodeData = z.infer<typeof nodeDataSchema>
 export type EdgeData = z.infer<typeof edgeDataSchema>
 export type ArgumentElement = z.infer<typeof elementSchema>

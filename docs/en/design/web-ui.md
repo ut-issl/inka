@@ -87,7 +87,10 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
 ## Detail
 
 - Hovering a node reveals its full description.
-- Selecting a node shows its contract, comments, evidence target, and deadline.
+- An edge whose `children:` entry carries a comment is drawn dashed, and
+  hovering it reveals the parent, the child, and the comment.
+- Selecting a node shows its contract, evidence target, children, and deadline,
+  each with the comment attached to it.
 
 ## Not invariant
 

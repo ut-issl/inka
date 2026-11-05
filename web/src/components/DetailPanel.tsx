@@ -1,7 +1,8 @@
 /**
  * The detail panel: what the current focus is about.
  *
- * A focused node shows its contract, its evidence target and its deadline; a
+ * A focused node shows its contract, its evidence target, its children and its
+ * deadline, each element with the comment attached to it; a
  * focused namespace shows its size and its one-hop surroundings; the whole
  * view names the objective roots the argument hangs from. Nothing here links
  * to an action — the viewer only reads the argument.
@@ -39,11 +40,20 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
           </span>
         ))}
       </p>
+      <Comment text={node.comments.block} />
 
       {node.evidence ? (
         <p className="detail__row">
           <span className="detail__label">Verified by</span> {node.evidence.kind}:{' '}
           <code>{node.evidence.target}</code>
+          <Comment text={node.comments[node.evidence.kind]} />
+        </p>
+      ) : null}
+
+      {node.children.length > 0 ? (
+        <p className="detail__row">
+          <span className="detail__label">Children</span> {node.children.join(', ')}
+          <Comment text={node.comments.children} />
         </p>
       ) : null}
 
@@ -51,6 +61,8 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
         <p className="detail__row detail__row--deadline">
           <span className="detail__label">Until</span> {node.deadline.until}
           {node.deadline.promote ? ` · promote to ${node.deadline.promote}` : ''}
+          <Comment text={node.comments.until} />
+          <Comment text={node.comments.promote} />
         </p>
       ) : null}
 
@@ -58,6 +70,11 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
       <p className="detail__contract">{node.description}</p>
     </section>
   )
+}
+
+/** A comment attached to the element it follows, or nothing. */
+function Comment({ text }: { text: string | undefined }) {
+  return text === undefined ? null : <span className="detail__comment">{text}</span>
 }
 
 function NamespaceDetail({ name, sets }: { name: string; sets: FocusSets }) {

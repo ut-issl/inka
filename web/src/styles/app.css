@@ -251,6 +251,13 @@ body {
   margin: 10px 0 4px;
 }
 
+.detail__comment {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .detail__contract {
   margin: 0;
   line-height: 1.6;

@@ -4,7 +4,9 @@ structure pointing_ok #mission {
   ```
   In steady-state observation mode, the pointing control error is at most {$pointing_accuracy}
   ```
-  children: attitude_knowledge_ok, control_law_ok, actuator_authority_ok, disturbance_model_valid, mass_properties_valid
+  children: attitude_knowledge_ok, control_law_ok, actuator_authority_ok, disturbance_model_valid,
+    // still a fiat until the mass-properties test measures the real vehicle
+    mass_properties_valid
 }
 
 bind attitude_knowledge_ok {

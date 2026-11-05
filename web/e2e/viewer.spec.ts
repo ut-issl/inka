@@ -29,6 +29,15 @@ async function centre(page: Page, id: string) {
   )
 }
 
+/** Rendered midpoint of an edge, for hovering it. */
+async function edgeMidpoint(page: Page, id: string) {
+  return page.evaluate((edgeId) => {
+    const cy = (document.querySelector('.graph__canvas') as HTMLElement & { _cyreg?: { cy: unknown } })
+      ._cyreg?.cy as { getElementById: (id: string) => { renderedMidpoint: () => { x: number; y: number } } }
+    return cy.getElementById(edgeId).renderedMidpoint()
+  }, id)
+}
+
 test('the whole view is a top-down DAG with the objective on top', async ({ page }) => {
   await ready(page)
 
@@ -84,6 +93,10 @@ test('the detail panel shows the contract, the evidence target and the deadline'
   await expect(page.locator('.detail')).toContainText('Contract')
   await expect(page.locator('.detail')).toContainText('Until FM')
   await expect(page.locator('.detail')).toContainText('promote to bind')
+  // The comment on `until:` sits with the deadline it explains.
+  await expect(page.locator('.detail__row--deadline .detail__comment')).toContainText(
+    'once the mass-properties test has measured the real vehicle',
+  )
 
   await page.click('.node-list__item:has-text("detumble_convergence_ok")')
   await expect(page.locator('.detail')).toContainText('aocs.verify_detumble')
@@ -128,6 +141,21 @@ test('hovering a node reveals its full description', async ({ page }) => {
   const tooltip = page.locator('.tooltip')
   await expect(tooltip).toBeVisible()
   await expect(tooltip).toContainText('detumbling')
+})
+
+test('hovering a commented children entry reveals its comment', async ({ page }) => {
+  await ready(page)
+
+  await page.click('.node-list__item:has-text("pointing_ok")')
+  await page.waitForTimeout(900)
+  const box = (await page.locator('.graph__canvas').boundingBox()) as { x: number; y: number }
+  const midpoint = await edgeMidpoint(page, 'pointing_ok->mass_properties_valid')
+  await page.mouse.move(box.x + midpoint.x, box.y + midpoint.y)
+
+  const tooltip = page.locator('.tooltip')
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip).toContainText('pointing_ok → mass_properties_valid')
+  await expect(tooltip).toContainText('still a fiat until the mass-properties test')
 })
 
 test('Esc and a background tap both restore the whole view', async ({ page }) => {

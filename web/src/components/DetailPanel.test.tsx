@@ -9,7 +9,13 @@ import { DetailPanel } from './DetailPanel'
 
 const view = buildView(
   parseElements([
-    node('a', { mode: 'objective', namespace: 'top', root: true, description: 'the objective' }),
+    node('a', {
+      mode: 'objective',
+      namespace: 'top',
+      root: true,
+      description: 'the objective',
+      comments: { children: 'one per branch' },
+    }),
     node('b', {
       mode: 'bind',
       namespace: 'mid',
@@ -17,6 +23,12 @@ const view = buildView(
       tags: ['safety'],
       evidence: { kind: 'veriq', target: 'pkg.verify_thing' },
       deadline: { until: 'FM', promote: 'bind' },
+      comments: {
+        block: 'shared with the thermal argument',
+        veriq: 'the shipped check',
+        until: 'revisit at CDR\nonce the model lands',
+        promote: 'once the rig exists',
+      },
     }),
     node('c', { mode: 'fiat', namespace: 'mid' }),
     edge('a', 'b'),
@@ -38,11 +50,30 @@ describe('DetailPanel', () => {
     expect(screen.getByText(/FM/)).toBeInTheDocument()
   })
 
+  test('shows each comment with the element it is attached to', () => {
+    renderPanel({ kind: 'node', id: 'b' })
+
+    expect(screen.getByText('shared with the thermal argument')).toHaveClass('detail__comment')
+    expect(screen.getByText('the shipped check').closest('p')).toHaveTextContent(/Verified by/)
+    expect(screen.getByText(/revisit at CDR/).closest('p')).toHaveTextContent(/Until/)
+    expect(screen.getByText(/revisit at CDR/).textContent).toBe('revisit at CDR\nonce the model lands')
+    expect(screen.getByText('once the rig exists').closest('p')).toHaveTextContent(/Until/)
+  })
+
+  test('lists the children with the comment on the children property', () => {
+    renderPanel({ kind: 'node', id: 'a' })
+
+    const row = screen.getByText('one per branch').closest('p')
+    expect(row).toHaveTextContent(/Children/)
+    expect(row).toHaveTextContent(/b, c/)
+  })
+
   test('omits evidence and deadline from a node that declares neither', () => {
     renderPanel({ kind: 'node', id: 'c' })
 
     expect(screen.queryByText(/Verified by/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Until/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Children/)).not.toBeInTheDocument()
   })
 
   test('summarises a focused namespace and its one-hop surroundings', () => {

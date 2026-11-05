@@ -22,7 +22,14 @@ export function cytoscapeElements(view: ArgumentView): ElementDefinition[] {
   })
   const edges: ElementDefinition[] = view.edges.map((edge) => ({
     group: 'edges',
-    data: { id: edge.id, source: edge.source, target: edge.target },
+    // `commented` is what the stylesheet selects on; the text itself is read
+    // from the view when the edge is hovered.
+    data: {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      commented: edge.comment !== undefined,
+    },
   }))
   return [...nodes, ...edges]
 }

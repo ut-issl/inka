@@ -249,7 +249,9 @@ ArgumentView {
             comments: NodeComments {
                 block: None,
                 properties: {},
-                children: {},
+                children: {
+                    "mass_properties_valid": "still a fiat until the mass-properties test measures the real vehicle",
+                },
             },
         },
         ViewNode {

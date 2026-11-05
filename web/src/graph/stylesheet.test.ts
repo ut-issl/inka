@@ -35,6 +35,10 @@ describe('stylesheet', () => {
     expect(style['source-arrow-shape']).toBeUndefined()
   })
 
+  test('dashes an edge whose children entry carries a comment', () => {
+    expect(find('edge[?commented]').style['line-style']).toBe('dashed')
+  })
+
   test('offers a swatch for every mode, so the list and the legend agree with the graph', () => {
     for (const mode of DISCHARGE_MODES) {
       expect(MODE_COLORS[mode]).toMatch(/^#[0-9a-f]{6}$/i)

@@ -32,6 +32,22 @@ describe('parseElements', () => {
     })
   })
 
+  test('keeps node comments by anchor and an entry comment on its edge', () => {
+    const [parent, entry] = parseElements([
+      node('a', { comments: { block: 'why a', until: 'why the deadline' } }),
+      edge('a', 'b', 'why b'),
+    ])
+
+    expect(parent?.data).toMatchObject({ comments: { block: 'why a', until: 'why the deadline' } })
+    expect(entry?.data).toMatchObject({ comment: 'why b' })
+  })
+
+  test('reads a node without comments as one with none', () => {
+    const [element] = parseElements([{ data: { id: 'a', mode: 'fiat', namespace: 'n', description: '' } }])
+
+    expect(element?.data).toMatchObject({ comments: {} })
+  })
+
   test('distinguishes edge payloads from node payloads', () => {
     const parsed = parseElements([node('a'), edge('a', 'b')])
 

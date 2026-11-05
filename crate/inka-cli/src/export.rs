@@ -12,17 +12,25 @@
 //! ```json
 //! [
 //!   { "data": { "id": "detumble_ok", "mode": "structure", "namespace": "safety",
-//!               "description": "…", "tags": [], "root": false } },
+//!               "description": "…", "tags": [], "root": false,
+//!               "comments": { "block": "…", "until": "…" } } },
 //!   { "data": { "id": "detumble_ok->mtq_authority_ok",
-//!               "source": "detumble_ok", "target": "mtq_authority_ok" } }
+//!               "source": "detumble_ok", "target": "mtq_authority_ok",
+//!               "comment": "…" } }
 //! ]
 //! ```
+//!
+//! Comments follow their anchors: a node carries the comments on its block
+//! (`block`) and on its properties (keyed by property name), and an edge — one
+//! `children:` entry — carries the comment on that entry. Both are omitted
+//! when there is none.
 //!
 //! Two properties consumers rely on: node elements come in the view's sorted
 //! block-ID order, and edge elements come parent by parent in each parent's
 //! declaration order. There is no `label` field — a node's label is its id, so
 //! a renderer reads `id` and the two cannot drift apart.
 
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -56,6 +64,10 @@ struct NodeData<'v> {
     evidence: Option<EvidenceData<'v>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     deadline: Option<DeadlineData<'v>>,
+    /// The comments on the block and its properties, keyed by `block` or the
+    /// property name.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    comments: BTreeMap<&'static str, &'v str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +89,9 @@ struct EdgeData<'v> {
     id: String,
     source: &'v str,
     target: &'v str,
+    /// The comment on the parent's `children:` entry for this child.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comment: Option<&'v str>,
 }
 
 /// Serializes a view as cytoscape `elements` JSON, ending in a newline.
@@ -93,7 +108,7 @@ pub fn to_json(view: &ArgumentView) -> serde_json::Result<String> {
         .nodes
         .iter()
         .map(|node| node_element(view, node))
-        .chain(view.edges.iter().map(edge_element))
+        .chain(view.edges.iter().map(|edge| edge_element(view, edge)))
         .collect();
     let mut json = serde_json::to_string_pretty(&elements)?;
     json.push('\n');
@@ -111,16 +126,38 @@ fn node_element<'v>(view: &'v ArgumentView, node: &'v ViewNode) -> Element<'v> {
             root: view.roots.iter().any(|root| root == &node.id),
             evidence: node.evidence.as_ref().map(evidence_data),
             deadline: node.deadline.as_ref().map(deadline_data),
+            comments: comments_data(node),
         },
     }
 }
 
-fn edge_element(edge: &ViewEdge) -> Element<'_> {
+fn comments_data(node: &ViewNode) -> BTreeMap<&'static str, &str> {
+    let comments = &node.comments;
+    comments
+        .block
+        .as_deref()
+        .map(|text| ("block", text))
+        .into_iter()
+        .chain(
+            comments
+                .properties
+                .iter()
+                .map(|(property, text)| (property.name(), text.as_str())),
+        )
+        .collect()
+}
+
+fn edge_element<'v>(view: &'v ArgumentView, edge: &'v ViewEdge) -> Element<'v> {
+    let comment = view
+        .node(&edge.parent)
+        .and_then(|parent| parent.comments.children.get(&edge.child))
+        .map(String::as_str);
     Element::Edge {
         data: EdgeData {
             id: format!("{}->{}", edge.parent, edge.child),
             source: &edge.parent,
             target: &edge.child,
+            comment,
         },
     }
 }
@@ -171,7 +208,7 @@ pub fn run(
 mod tests {
     use super::*;
 
-    use inka_core::view::NodeComments;
+    use inka_core::view::{NodeComments, Property};
     use serde_json::Value;
 
     /// A hand-built view: the export transcribes a projection, so the tests
@@ -188,7 +225,17 @@ mod tests {
                     evidence: None,
                     deadline: None,
                     children: vec!["verified".to_owned(), "assumed".to_owned()],
-                    comments: NodeComments::default(),
+                    comments: NodeComments {
+                        block: Some("the mission statement".to_owned()),
+                        properties: BTreeMap::from([(
+                            Property::Children,
+                            "one per hazard".to_owned(),
+                        )]),
+                        children: BTreeMap::from([(
+                            "assumed".to_owned(),
+                            "pending the mass test".to_owned(),
+                        )]),
+                    },
                 },
                 ViewNode {
                     id: "verified".to_owned(),
@@ -327,6 +374,33 @@ mod tests {
 
         assert_eq!(fiat["deadline"]["until"], "FM");
         assert_eq!(fiat["deadline"]["promote"], "bind");
+    }
+
+    #[test]
+    fn carries_block_and_property_comments_on_the_node() {
+        let elements = elements();
+        let objective = data_of(&elements[0]);
+
+        assert_eq!(objective["comments"]["block"], "the mission statement");
+        assert_eq!(objective["comments"]["children"], "one per hazard");
+    }
+
+    #[test]
+    fn carries_a_child_entry_comment_on_its_edge_only() {
+        let elements = elements();
+
+        // Edges follow the three nodes: root->verified, then root->assumed.
+        assert!(data_of(&elements[3]).get("comment").is_none());
+        assert_eq!(data_of(&elements[4])["comment"], "pending the mass test");
+        assert!(data_of(&elements[0])["comments"].get("assumed").is_none());
+    }
+
+    #[test]
+    fn omits_comments_rather_than_emitting_empty_objects() {
+        let elements = elements();
+
+        assert!(data_of(&elements[1]).get("comments").is_none());
+        assert!(data_of(&elements[2]).get("comments").is_none());
     }
 
     #[test]
