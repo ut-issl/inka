@@ -90,7 +90,8 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
 - An edge whose `children:` entry carries a comment is drawn dashed, and
   hovering it reveals the parent, the child, and the comment.
 - Selecting a node shows its contract, evidence target, children, and deadline,
-  each with the comment attached to it.
+  each with the comment attached to it; each child is listed with the comment
+  on its entry, so no comment is reachable only by hovering.
 
 ## Not invariant
 

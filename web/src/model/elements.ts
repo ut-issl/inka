@@ -54,13 +54,15 @@ const deadlineSchema = z.object({
  * The comments attached to a block and to its properties, keyed by `block` or
  * the property name. Comments on `children:` entries ride on the edges.
  */
+const commentText = z.string().min(1)
+
 const commentsSchema = z.object({
-  block: z.string().optional(),
-  children: z.string().optional(),
-  test: z.string().optional(),
-  veriq: z.string().optional(),
-  until: z.string().optional(),
-  promote: z.string().optional(),
+  block: commentText.optional(),
+  children: commentText.optional(),
+  test: commentText.optional(),
+  veriq: commentText.optional(),
+  until: commentText.optional(),
+  promote: commentText.optional(),
 })
 
 const nodeDataSchema = z.object({
@@ -83,7 +85,7 @@ const edgeDataSchema = z.object({
   source: z.string().min(1),
   target: z.string().min(1),
   /** The comment on the parent's `children:` entry for this child. */
-  comment: z.string().optional(),
+  comment: commentText.optional(),
 })
 
 /** Shape shared by both kinds, checked before either is chosen. */

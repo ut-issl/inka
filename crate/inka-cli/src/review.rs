@@ -455,9 +455,9 @@ fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
 /// One queued target, rendered as the local view the decision would judge:
 /// the expanded description, the evidence reference, where the local view
 /// includes them the direct children's descriptions, and the deadline, each
-/// with the comment attached to it written above it as `//` lines — the
-/// layout the formatter gives a source file. Nothing deeper is shown — the
-/// local view is all an approval binds to.
+/// with the comment attached to it written above it as `//` lines, the way
+/// the formatter places comments in a source file. Nothing deeper is shown —
+/// the local view is all an approval binds to.
 fn write_target(
     node: &ViewNode,
     item: &QueueItem,
@@ -481,7 +481,8 @@ fn write_target(
             EvidenceKind::Test => Property::Test,
             EvidenceKind::Veriq => Property::Veriq,
         };
-        write_property(comments, property, &reference.target, out)?;
+        let quoted = format!("\"{}\"", reference.target);
+        write_property(comments, property, &quoted, out)?;
     }
     write_children(node, view, out)?;
     if let Some(deadline) = &node.deadline {
@@ -551,13 +552,21 @@ fn write_indented(text: &str, indent: usize, out: &mut impl Write) -> io::Result
     Ok(())
 }
 
-/// Control characters out of a source file must not reach the terminal,
-/// where an escape sequence could spoof the prompt the reviewer answers. Tabs
-/// are ordinary content.
+/// Text out of a source file or a record, made safe for the terminal.
+///
+/// Control characters must not reach it, where an escape sequence could spoof
+/// the prompt the reviewer answers; tabs are ordinary content. Bidirectional
+/// embedding, override, and isolate controls go too, so text cannot be shown
+/// in an order other than the one that was hashed. Other format characters,
+/// such as the joiners emoji are built from, stay.
 fn sanitize(line: &str) -> String {
     line.chars()
-        .filter(|&c| !c.is_control() || c == '\t')
+        .filter(|&c| (!c.is_control() || c == '\t') && !is_bidi_control(c))
         .collect()
+}
+
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 fn state_line(state: &QueueState) -> String {
@@ -565,20 +574,23 @@ fn state_line(state: &QueueState) -> String {
         QueueState::Missing => "no approval covers the current content".to_owned(),
         QueueState::Stale { approvers } => format!(
             "approvals are stale: {} approved an earlier version",
-            approvers.join(", ")
+            sanitize(&approvers.join(", "))
         ),
-        QueueState::Declined { by } => format!("declined by {}", by.join(", ")),
+        QueueState::Declined { by } => format!("declined by {}", sanitize(&by.join(", "))),
     }
 }
 
 fn blocked_line(reason: &BlockedReason) -> String {
     match reason {
         BlockedReason::MissingEvidence { target } => {
-            format!("no imported test evidence provides `{target}`")
+            format!("no imported test evidence provides `{}`", sanitize(target))
         }
         BlockedReason::VeriqNotEvaluated => "veriq evidence is not evaluated yet".to_owned(),
         BlockedReason::UntilExpired { until } => {
-            format!("approvals no longer count: the current phase is past until:{until}")
+            format!(
+                "approvals no longer count: the current phase is past until:{}",
+                sanitize(until)
+            )
         }
     }
 }
@@ -613,8 +625,11 @@ pub fn now() -> Timestamp {
 mod tests {
     use super::*;
 
+    use std::collections::BTreeMap;
     use std::fs;
     use std::io::Cursor;
+
+    use inka_core::view::Evidence;
 
     /// Writes the three-node scenario project and returns its directory.
     fn scenario_project() -> tempfile::TempDir {
@@ -794,17 +809,14 @@ fiat leaf {
             namespace: "arg".to_owned(),
             description: "checked by a solver".to_owned(),
             tags: Vec::new(),
-            evidence: Some(inka_core::view::Evidence {
+            evidence: Some(Evidence {
                 kind: EvidenceKind::Veriq,
                 target: "aocs.check".to_owned(),
             }),
             deadline: None,
             children: Vec::new(),
             comments: NodeComments {
-                properties: std::collections::BTreeMap::from([(
-                    Property::Veriq,
-                    "the shipped check".to_owned(),
-                )]),
+                properties: BTreeMap::from([(Property::Veriq, "the shipped check".to_owned())]),
                 ..NodeComments::default()
             },
         };
@@ -827,8 +839,44 @@ fiat leaf {
         // Assert
         let text = String::from_utf8(out).expect("UTF-8");
         assert!(
-            text.ends_with("  checked by a solver\n  // the shipped check\n  veriq: aocs.check\n"),
+            text.ends_with(
+                "  checked by a solver\n  // the shipped check\n  veriq: \"aocs.check\"\n"
+            ),
             "{text}"
+        );
+    }
+
+    #[test]
+    fn source_text_reaches_the_terminal_without_escapes_or_bidi_controls() {
+        // Arrange: an escape sequence and a right-to-left override in a
+        // comment, a line of nothing but control characters, and a tab.
+        let dir = project_with(
+            "objective root {\n  ```\n  the root claim\n  ```\n  children: leaf\n}\n\n\
+             fiat leaf {\n  ```\n  taken\tas given\n  ```\n  \
+             // red \u{1b}[31malert\u{202E} reversed\n  // \u{1b}\u{7}\n  until: M0\n}\n",
+        );
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\ns\nq\n");
+
+        // Assert
+        assert!(!transcript.contains('\u{1b}'), "{transcript:?}");
+        assert!(!transcript.contains('\u{202E}'), "{transcript:?}");
+        assert!(
+            transcript.contains("  // red [31malert reversed\n  //\n  until: M0\n"),
+            "{transcript:?}"
+        );
+        assert!(transcript.contains("  taken\tas given\n"), "{transcript:?}");
+    }
+
+    #[test]
+    fn sanitize_drops_controls_and_bidi_controls_but_keeps_tabs_and_joiners() {
+        assert_eq!(sanitize("a\u{1b}b\tc"), "ab\tc");
+        assert_eq!(sanitize("\u{2066}x\u{2069}\u{202A}y\u{202E}"), "xy");
+        // A zero-width joiner builds emoji; it is not a bidi control.
+        assert_eq!(
+            sanitize("\u{1F469}\u{200D}\u{1F4BB}"),
+            "\u{1F469}\u{200D}\u{1F4BB}"
         );
     }
 

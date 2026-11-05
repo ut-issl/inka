@@ -46,6 +46,8 @@ export function HoverTooltip({ cy, view }: Props) {
     cy.on('mouseout', 'node, edge', leave)
     cy.on('mousemove', move)
     return () => {
+      // A new graph starts with nothing hovered.
+      setHovered(null)
       cy.off('mouseover', 'node', enterNode)
       cy.off('mouseover', 'edge', enterEdge)
       cy.off('mouseout', 'node, edge', leave)

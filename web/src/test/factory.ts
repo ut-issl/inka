@@ -1,6 +1,6 @@
 /** Builders for the small arguments the model tests reason about. */
 
-import type { ArgumentElement } from '../model/elements'
+import type { ArgumentElement, Comments } from '../model/elements'
 
 type NodeOverrides = Partial<{
   mode: 'objective' | 'structure' | 'bind' | 'fiat'
@@ -10,7 +10,7 @@ type NodeOverrides = Partial<{
   root: boolean
   evidence: { kind: 'veriq' | 'test'; target: string }
   deadline: { until: string; promote?: 'structure' | 'bind' }
-  comments: Partial<Record<'block' | 'children' | 'test' | 'veriq' | 'until' | 'promote', string>>
+  comments: Comments
 }>
 
 export function node(id: string, overrides: NodeOverrides = {}): ArgumentElement {

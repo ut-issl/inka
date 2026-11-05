@@ -31,7 +31,7 @@ const view = buildView(
       },
     }),
     node('c', { mode: 'fiat', namespace: 'mid' }),
-    edge('a', 'b'),
+    edge('a', 'b', 'why b is listed'),
     edge('a', 'c'),
   ]),
 )
@@ -53,19 +53,34 @@ describe('DetailPanel', () => {
   test('shows each comment with the element it is attached to', () => {
     renderPanel({ kind: 'node', id: 'b' })
 
-    expect(screen.getByText('shared with the thermal argument')).toHaveClass('detail__comment')
-    expect(screen.getByText('the shipped check').closest('p')).toHaveTextContent(/Verified by/)
-    expect(screen.getByText(/revisit at CDR/).closest('p')).toHaveTextContent(/Until/)
-    expect(screen.getByText(/revisit at CDR/).textContent).toBe('revisit at CDR\nonce the model lands')
-    expect(screen.getByText('once the rig exists').closest('p')).toHaveTextContent(/Until/)
+    const rowOf = (comment: RegExp) => screen.getByText(comment).closest('p, div')
+    expect(screen.getByText(/shared with the thermal argument/)).toHaveClass('detail__comment')
+    expect(rowOf(/the shipped check/)).toHaveTextContent(/Verified by/)
+    expect(rowOf(/revisit at CDR/)).toHaveTextContent(/^Until FM/)
+    // The line break survives: the text is rendered as written, not reflowed.
+    expect(screen.getByText(/revisit at CDR/).textContent).toBe(
+      'Comment: revisit at CDR\nonce the model lands',
+    )
+    expect(rowOf(/once the rig exists/)).toHaveTextContent(/^Promote to bind/)
   })
 
-  test('lists the children with the comment on the children property', () => {
+  test('labels every comment for assistive technology', () => {
+    renderPanel({ kind: 'node', id: 'b' })
+
+    for (const comment of document.querySelectorAll('.detail__comment')) {
+      expect(comment.querySelector('.visually-hidden')).toHaveTextContent('Comment:')
+    }
+  })
+
+  test('lists each child under the children property comment, with its entry comment', () => {
     renderPanel({ kind: 'node', id: 'a' })
 
-    const row = screen.getByText('one per branch').closest('p')
-    expect(row).toHaveTextContent(/Children/)
-    expect(row).toHaveTextContent(/b, c/)
+    const row = screen.getByText(/one per branch/).closest('div')
+    expect(row).toHaveTextContent(/^Children/)
+    const items = screen.getAllByRole('listitem')
+    expect(items.map((item) => item.firstChild?.textContent)).toEqual(['b', 'c'])
+    expect(items[0]).toHaveTextContent(/why b is listed/)
+    expect(items[1]?.querySelector('.detail__comment')).toBeNull()
   })
 
   test('omits evidence and deadline from a node that declares neither', () => {

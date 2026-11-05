@@ -386,6 +386,25 @@ mod tests {
     }
 
     #[test]
+    fn writes_node_comments_block_first_then_properties_in_name_order() {
+        let node = ViewNode {
+            comments: NodeComments {
+                block: Some("b".to_owned()),
+                properties: BTreeMap::from([
+                    (Property::Until, "u".to_owned()),
+                    (Property::Children, "c".to_owned()),
+                ]),
+                children: BTreeMap::new(),
+            },
+            ..view().nodes[0].clone()
+        };
+
+        let json = serde_json::to_string(&comments_data(&node)).expect("serializes");
+
+        assert_eq!(json, r#"{"block":"b","children":"c","until":"u"}"#);
+    }
+
+    #[test]
     fn carries_a_child_entry_comment_on_its_edge_only() {
         let elements = elements();
 

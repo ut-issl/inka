@@ -1,15 +1,16 @@
 /**
  * The detail panel: what the current focus is about.
  *
- * A focused node shows its contract, its evidence target, its children and its
- * deadline, each element with the comment attached to it; a
+ * A focused node shows its contract, its evidence target, its children (each
+ * with the comment on its entry) and its deadline, each element with the
+ * comment attached to it; a
  * focused namespace shows its size and its one-hop surroundings; the whole
  * view names the objective roots the argument hangs from. Nothing here links
  * to an action — the viewer only reads the argument.
  */
 
 import type { Focus, FocusSets } from '../model/focus'
-import { nodeOf, rootsOf, type ArgumentView } from '../model/view'
+import { nodeOf, rootsOf, type ArgumentNode, type ArgumentView } from '../model/view'
 
 interface Props {
   readonly view: ArgumentView
@@ -50,21 +51,8 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
         </p>
       ) : null}
 
-      {node.children.length > 0 ? (
-        <p className="detail__row">
-          <span className="detail__label">Children</span> {node.children.join(', ')}
-          <Comment text={node.comments.children} />
-        </p>
-      ) : null}
-
-      {node.deadline ? (
-        <p className="detail__row detail__row--deadline">
-          <span className="detail__label">Until</span> {node.deadline.until}
-          {node.deadline.promote ? ` · promote to ${node.deadline.promote}` : ''}
-          <Comment text={node.comments.until} />
-          <Comment text={node.comments.promote} />
-        </p>
-      ) : null}
+      <ChildrenRow view={view} node={node} />
+      <DeadlineRows node={node} />
 
       <p className="detail__label">Contract</p>
       <p className="detail__contract">{node.description}</p>
@@ -72,9 +60,63 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
   )
 }
 
-/** A comment attached to the element it follows, or nothing. */
+/**
+ * The children, each with the comment on its `children:` entry — the same
+ * comment hovering the edge reveals, readable here without a pointer.
+ */
+function ChildrenRow({ view, node }: { view: ArgumentView; node: ArgumentNode }) {
+  if (node.children.length === 0) return null
+  return (
+    <div className="detail__row">
+      <span className="detail__label">Children</span>
+      <Comment text={node.comments.children} />
+      <ul className="detail__children">
+        {node.children.map((child) => (
+          <li key={child}>
+            {child}
+            <Comment text={entryComment(view, node.id, child)} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** `until:` and `promote:` on rows of their own, each under its comment. */
+function DeadlineRows({ node }: { node: ArgumentNode }) {
+  if (!node.deadline) return null
+  return (
+    <>
+      <p className="detail__row detail__row--deadline">
+        <span className="detail__label">Until</span> {node.deadline.until}
+        <Comment text={node.comments.until} />
+      </p>
+      {node.deadline.promote ? (
+        <p className="detail__row detail__row--deadline">
+          <span className="detail__label">Promote to</span> {node.deadline.promote}
+          <Comment text={node.comments.promote} />
+        </p>
+      ) : null}
+    </>
+  )
+}
+
+function entryComment(view: ArgumentView, parent: string, child: string): string | undefined {
+  return view.edges.find((edge) => edge.source === parent && edge.target === child)?.comment
+}
+
+/**
+ * A comment attached to the element it follows, or nothing. Set apart from
+ * the row's own text for assistive technology as well as visually.
+ */
 function Comment({ text }: { text: string | undefined }) {
-  return text === undefined ? null : <span className="detail__comment">{text}</span>
+  if (text === undefined) return null
+  return (
+    <span className="detail__comment">
+      <span className="visually-hidden">Comment: </span>
+      {text}
+    </span>
+  )
 }
 
 function NamespaceDetail({ name, sets }: { name: string; sets: FocusSets }) {
