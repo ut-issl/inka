@@ -19,7 +19,9 @@ use crate::ast::{
     FiatDeadline, FiatPromoteTarget, ObjectiveBlock, ObjectiveDeadline, ObjectivePromoteTarget,
     Promotion, SourceRef, StructureBlock,
 };
-use crate::attach::{Anchor, AnchorRange, Position, anchor_of};
+use crate::attach::{
+    Anchor, AnchorRange, CommentQueue, CommentSlots, PendingComment, Position, distribute,
+};
 use crate::lexer::{Token, TokenKind};
 use crate::source::{Error, FileId, Span, Spanned};
 
@@ -81,49 +83,6 @@ struct RawBlock {
     anchors: Vec<AnchorRange>,
 }
 
-/// A comment not yet attached, with what attachment needs to know.
-struct PendingComment {
-    line: Spanned<String>,
-    position: Position,
-    blank_line_after: bool,
-}
-
-/// The comment lines gathered for each anchor of one block.
-#[derive(Default)]
-struct CommentSlots {
-    block: Vec<Spanned<String>>,
-    children: Vec<Spanned<String>>,
-    /// Indexed by child entry.
-    child: Vec<Vec<Spanned<String>>>,
-    source: Vec<Spanned<String>>,
-    until: Vec<Spanned<String>>,
-    promote: Vec<Spanned<String>>,
-}
-
-impl CommentSlots {
-    fn slot(&mut self, anchor: Anchor) -> &mut Vec<Spanned<String>> {
-        match anchor {
-            Anchor::Block => &mut self.block,
-            Anchor::Children => &mut self.children,
-            Anchor::Child(index) => {
-                if self.child.len() <= index {
-                    self.child.resize_with(index + 1, Vec::new);
-                }
-                &mut self.child[index]
-            }
-            Anchor::Source => &mut self.source,
-            Anchor::Until => &mut self.until,
-            Anchor::Promote => &mut self.promote,
-        }
-    }
-
-    fn take_child(&mut self, index: usize) -> Option<Comment> {
-        self.child
-            .get_mut(index)
-            .and_then(|lines| Comment::from_lines(std::mem::take(lines)))
-    }
-}
-
 /// The validated common pieces of a block, handed to a per-mode builder.
 ///
 /// `description` stays optional here so that a block missing its description
@@ -148,15 +107,12 @@ struct Parser<'a> {
     pos: usize,
     end_offset: usize,
     errors: Vec<Error>,
-    /// Every comment, in source order.
-    comments: Vec<PendingComment>,
-    /// Index of the first comment not yet attached.
-    next_comment: usize,
+    /// The comments not yet attached.
+    comments: CommentQueue,
 }
 
 impl<'a> Parser<'a> {
     fn new(file_id: FileId, tokens: &'a [Token]) -> Self {
-        let end_offset = tokens.last().map_or(0, |token| token.span.end);
         let mut significant = Vec::with_capacity(tokens.len());
         let mut comments = Vec::new();
         for token in tokens {
@@ -181,20 +137,22 @@ impl<'a> Parser<'a> {
                 significant.push(token);
             }
         }
+        // Diagnostics at the end of input point past the last real token, not
+        // past a comment that follows it.
+        let end_offset = significant.last().map_or(0, |token| token.span.end);
         Self {
             file_id,
             tokens: significant,
             pos: 0,
             end_offset,
             errors: Vec::new(),
-            comments,
-            next_comment: 0,
+            comments: CommentQueue::new(comments),
         }
     }
 
     fn parse_file(mut self) -> Parse {
         let mut blocks = Vec::new();
-        let mut file_lines = self.take_file_header();
+        let mut file_lines = self.comments.take_file_header();
 
         while !self.at_eof() {
             if self.at_mode_keyword() {
@@ -209,66 +167,20 @@ impl<'a> Parser<'a> {
                 );
                 self.recover_to_next_block();
             }
+            // Comments inside tokens no block could be read from belong to
+            // the file, so they never land on the next, unrelated block.
+            let skipped = self.comments.take_through(self.pos.saturating_sub(1));
+            file_lines.extend(skipped.into_iter().map(|comment| comment.line));
         }
 
-        // Whatever no block claimed — comments after the last block, or around
-        // tokens no block could be read from — belongs to the file.
-        file_lines.extend(
-            self.comments
-                .drain(self.next_comment..)
-                .map(|comment| comment.line),
-        );
+        // Comments after the last block belong to the file.
+        file_lines.extend(self.comments.take_rest());
 
         Parse {
             blocks,
             comment: Comment::from_lines(file_lines),
             errors: self.errors,
         }
-    }
-
-    // --- Comments --------------------------------------------------------
-
-    /// Takes the run of comment lines at the very top of the file when a
-    /// blank line follows it: that run is the file's own comment.
-    fn take_file_header(&mut self) -> Vec<Spanned<String>> {
-        let run_end = self
-            .comments
-            .iter()
-            .take_while(|comment| comment.position.next == 0)
-            .position(|comment| comment.blank_line_after);
-        let Some(run_end) = run_end else {
-            return Vec::new();
-        };
-        self.next_comment = run_end + 1;
-        self.comments[..=run_end]
-            .iter()
-            .map(|comment| comment.line.clone())
-            .collect()
-    }
-
-    /// Attaches every comment up to the end of the block whose tokens end at
-    /// index `last`, given the token ranges of the block's anchors.
-    ///
-    /// A comment no anchor surrounds lies before the block at the top level,
-    /// so it attaches to the block too: a top-level comment belongs to the
-    /// next block.
-    fn attach_comments(&mut self, last: usize, anchors: &[AnchorRange]) -> CommentSlots {
-        let mut slots = CommentSlots::default();
-        while let Some(comment) = self.comments.get(self.next_comment) {
-            let Position { next, trailing } = comment.position;
-            let within = if trailing {
-                next <= last + 1
-            } else {
-                next <= last
-            };
-            if !within {
-                break;
-            }
-            let anchor = anchor_of(comment.position, anchors).unwrap_or(Anchor::Block);
-            slots.slot(anchor).push(comment.line.clone());
-            self.next_comment += 1;
-        }
-        slots
     }
 
     // --- Block structure -------------------------------------------------
@@ -305,7 +217,19 @@ impl<'a> Parser<'a> {
             first,
             last,
         });
-        let comments = self.attach_comments(last, &anchors);
+        // A block left unclosed at the end of input still owns the comments
+        // after its last token: they are inside its braces.
+        let unclosed_at_eof = self.at_eof()
+            && !matches!(
+                self.tokens.get(last).map(|t| &t.value),
+                Some(TokenKind::RightBrace)
+            );
+        let through = if unclosed_at_eof {
+            self.tokens.len()
+        } else {
+            last
+        };
+        let comments = distribute(self.comments.take_through(through), &anchors);
 
         let span = Span {
             file_id: self.file_id,
@@ -1627,5 +1551,54 @@ structure s { // (3) block
 
         assert_eq!(parse.errors, []);
         assert_eq!(text(parse.comment.as_ref()).as_deref(), Some("one\ntwo"));
+    }
+
+    #[test]
+    fn comments_inside_a_block_that_fails_to_parse_do_not_move_to_the_next_block() {
+        let parse = parse_str(
+            "bind {\n```\nd\n```\n// inside broken\ntest: \"t\"\n}\ngarbage // after junk\nfiat ok {\n```\nd\n```\n}\n",
+        );
+
+        assert!(
+            has_message(&parse, "expected a block identifier"),
+            "{:?}",
+            messages(&parse)
+        );
+        let ok = parse.blocks.last().expect("ok survives");
+        assert_eq!(ok.common().comment, None);
+        assert_eq!(
+            text(parse.comment.as_ref()).as_deref(),
+            Some("inside broken\nafter junk")
+        );
+    }
+
+    #[test]
+    fn a_block_unclosed_at_the_end_of_input_keeps_its_dangling_comment() {
+        let parse = parse_str("fiat a {\n```\nd\n```\n// dangling\n");
+
+        assert!(
+            has_message(&parse, "unclosed block"),
+            "{:?}",
+            messages(&parse)
+        );
+        assert_eq!(
+            text(parse.blocks[0].common().comment.as_ref()).as_deref(),
+            Some("dangling")
+        );
+        assert_eq!(parse.comment, None);
+    }
+
+    #[test]
+    fn the_end_of_input_error_points_past_the_last_token_not_a_trailing_comment() {
+        let input = "fiat a {\n```\nd\n```\n// dangling\n";
+        let parse = parse_str(input);
+
+        let error = parse
+            .errors
+            .iter()
+            .find(|error| error.message.contains("unclosed block"))
+            .expect("an unclosed-block error");
+        let span = error.span.expect("anchored");
+        assert_eq!(span.start, input.find("// dangling").expect("present"));
     }
 }

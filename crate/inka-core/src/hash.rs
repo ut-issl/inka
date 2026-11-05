@@ -362,7 +362,7 @@ impl<'a> LocalView<'a> {
         preimage.field(domain_tag(self.mode).as_bytes());
         preimage.field(normalize::description(self.description).as_bytes());
         preimage.list(&annotations(self.deadline));
-        preimage.list(&comments(self.comments));
+        preimage.list(&canonical_comments(self.comments));
 
         match &self.discharge {
             Discharge::Decomposition(children) => {
@@ -439,7 +439,7 @@ fn annotations(deadline: Option<&Deadline>) -> Vec<String> {
 ///
 /// The text is taken as attached: it is already NFC, with each line's `//`,
 /// leading space, and trailing whitespace removed.
-fn comments(comments: Option<&NodeComments>) -> Vec<String> {
+fn canonical_comments(comments: Option<&NodeComments>) -> Vec<String> {
     let Some(comments) = comments else {
         return Vec::new();
     };
@@ -473,6 +473,8 @@ fn child_contracts<'a>(
                     parent: node.id.clone(),
                     child: child.clone(),
                 })?;
+            // Keyed by child id, which is sound because a graph never holds the
+            // same child twice under one parent: building it rejects that.
             let comment = node.comments.children.get(child).map_or("", String::as_str);
             Ok(ChildContract {
                 description,
@@ -701,7 +703,7 @@ mod tests {
         // Act & Assert: the spelling `spec.md` fixes; child-entry comments
         // travel with the children instead.
         assert_eq!(
-            super::comments(Some(&comments)),
+            canonical_comments(Some(&comments)),
             [
                 "block:shared with momentum_ok",
                 "children:grouped by axis",

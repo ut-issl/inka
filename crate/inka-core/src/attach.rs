@@ -15,6 +15,14 @@
 //!
 //! An own-line comment around which no anchor lies is the caller's to place:
 //! at the top level it goes to the next block or the file.
+//!
+//! [`CommentQueue`] hands the parser the comments of each region in source
+//! order, and [`distribute`] sorts one block's comments into [`CommentSlots`].
+
+use std::collections::VecDeque;
+
+use crate::ast::Comment;
+use crate::source::Spanned;
 
 /// One element a comment can attach to, inside a single block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +85,113 @@ fn innermost<'a>(ranges: impl Iterator<Item = &'a AnchorRange>) -> Option<Anchor
     ranges
         .min_by_key(|range| range.width())
         .map(|range| range.anchor)
+}
+
+/// A comment not yet attached, with what attachment needs to know.
+pub(crate) struct PendingComment {
+    pub line: Spanned<String>,
+    pub position: Position,
+    pub blank_line_after: bool,
+}
+
+/// The comments of a file not yet attached, in source order.
+pub(crate) struct CommentQueue {
+    pending: VecDeque<PendingComment>,
+}
+
+impl CommentQueue {
+    pub fn new(comments: Vec<PendingComment>) -> Self {
+        Self {
+            pending: comments.into(),
+        }
+    }
+
+    /// Takes the run of comment lines at the very top of the file when a
+    /// blank line follows it: that run is the file's own comment.
+    pub fn take_file_header(&mut self) -> Vec<Spanned<String>> {
+        let run_end = self
+            .pending
+            .iter()
+            .take_while(|comment| comment.position.next == 0)
+            .position(|comment| comment.blank_line_after);
+        let Some(run_end) = run_end else {
+            return Vec::new();
+        };
+        self.pending
+            .drain(..=run_end)
+            .map(|comment| comment.line)
+            .collect()
+    }
+
+    /// Takes every comment that lies before token `last + 1`: an own-line
+    /// comment whose next token is at most `last`, or a trailing comment
+    /// whose preceding token is.
+    pub fn take_through(&mut self, last: usize) -> Vec<PendingComment> {
+        let count = self
+            .pending
+            .iter()
+            .take_while(|comment| {
+                let Position { next, trailing } = comment.position;
+                next <= last + usize::from(trailing)
+            })
+            .count();
+        self.pending.drain(..count).collect()
+    }
+
+    /// Takes whatever is left.
+    pub fn take_rest(&mut self) -> Vec<Spanned<String>> {
+        self.pending.drain(..).map(|comment| comment.line).collect()
+    }
+}
+
+/// The comment lines gathered for each anchor of one block.
+#[derive(Default)]
+pub(crate) struct CommentSlots {
+    pub block: Vec<Spanned<String>>,
+    pub children: Vec<Spanned<String>>,
+    /// Indexed by child entry.
+    child: Vec<Vec<Spanned<String>>>,
+    pub source: Vec<Spanned<String>>,
+    pub until: Vec<Spanned<String>>,
+    pub promote: Vec<Spanned<String>>,
+}
+
+impl CommentSlots {
+    fn slot(&mut self, anchor: Anchor) -> &mut Vec<Spanned<String>> {
+        match anchor {
+            Anchor::Block => &mut self.block,
+            Anchor::Children => &mut self.children,
+            Anchor::Child(index) => {
+                if self.child.len() <= index {
+                    self.child.resize_with(index + 1, Vec::new);
+                }
+                &mut self.child[index]
+            }
+            Anchor::Source => &mut self.source,
+            Anchor::Until => &mut self.until,
+            Anchor::Promote => &mut self.promote,
+        }
+    }
+
+    /// The comment on the child entry at `index`, taken out of the slots.
+    pub fn take_child(&mut self, index: usize) -> Option<Comment> {
+        self.child
+            .get_mut(index)
+            .and_then(|lines| Comment::from_lines(std::mem::take(lines)))
+    }
+}
+
+/// Sorts one block's comments into the slots of its anchors.
+///
+/// A comment no anchor surrounds lies before the block at the top level, so
+/// it goes to the block: a top-level comment belongs to the next block.
+pub(crate) fn distribute(comments: Vec<PendingComment>, anchors: &[AnchorRange]) -> CommentSlots {
+    let mut slots = CommentSlots::default();
+    for comment in comments {
+        let anchor = anchor_of(comment.position, anchors).unwrap_or(Anchor::Block);
+        slots.slot(anchor).push(comment.line);
+    }
+    slots
 }
 
 #[cfg(test)]
