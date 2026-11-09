@@ -137,6 +137,7 @@ mod tests {
         Description {
             raw: raw.to_string(),
             info: None,
+            fence_length: 3,
             span: Span {
                 file_id,
                 start,

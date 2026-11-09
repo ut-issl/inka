@@ -310,6 +310,7 @@ impl<'a> Parser<'a> {
                 TokenKind::FenceBlock {
                     raw: text,
                     info,
+                    fence_length,
                     content_span,
                 },
             ..
@@ -320,6 +321,7 @@ impl<'a> Parser<'a> {
         let description = Description {
             raw: text.clone(),
             info: info.clone(),
+            fence_length: *fence_length,
             span: *content_span,
         };
         self.pos += 1;

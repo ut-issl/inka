@@ -141,6 +141,8 @@ pub struct Description {
     ///
     /// The value is preserved for future use but currently has no semantics.
     pub info: Option<String>,
+    /// Number of backticks in the opening fence, which the formatter keeps.
+    pub fence_length: usize,
     /// Span of the content inside the fence.
     ///
     /// Interpolation errors such as invalid `{$var}` references are located

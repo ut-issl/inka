@@ -21,6 +21,8 @@ pub enum TokenKind {
     FenceBlock {
         raw: String,
         info: Option<String>,
+        /// Number of backticks in the opening fence.
+        fence_length: usize,
         content_span: Span,
     },
     /// A `//` comment outside a fence, running to the end of its line.
@@ -187,6 +189,7 @@ impl<'a> Lexer<'a> {
                     value: TokenKind::FenceBlock {
                         raw,
                         info: opening.info,
+                        fence_length: opening.backtick_count,
                         content_span: self.span(content_start, closing_line_start),
                     },
                 };
@@ -557,6 +560,7 @@ objective root { // opening comment
                     raw,
                     info,
                     content_span,
+                    ..
                 } => Some((raw, info, content_span)),
                 _ => None,
             })
@@ -620,7 +624,7 @@ objective root { // opening comment
         assert!(matches!(
             tokens.as_slice(),
             [Spanned {
-                value: TokenKind::FenceBlock { raw, .. },
+                value: TokenKind::FenceBlock { raw, fence_length: 4, .. },
                 ..
             }] if raw == concat!(
                 "first line\n",
@@ -771,6 +775,7 @@ objective root { // opening comment
             raw,
             info,
             content_span,
+            ..
         } = &tokens[3].value
         else {
             panic!("expected a fence token");
@@ -808,6 +813,7 @@ objective root { // opening comment
             raw,
             info,
             content_span,
+            ..
         } = &tokens[3].value
         else {
             panic!("expected a fence token");
