@@ -1,60 +1,67 @@
 objective root {
-  ```
-  the mission succeeds
-  ```
-  children: branch, declined_leaf, expired_leaf, tested, failing, partial, modelled
+    ```
+    the mission succeeds
+    ```
+    children:
+        branch,
+        declined_leaf,
+        expired_leaf,
+        tested,
+        failing,
+        partial,
+        modelled
 }
 
 structure branch {
-  ```
-  the subsystem works
-  ```
-  children: leaf
+    ```
+    the subsystem works
+    ```
+    children: leaf
 }
 
 fiat leaf {
-  ```
-  taken as given
-  ```
+    ```
+    taken as given
+    ```
 }
 
 fiat expired_leaf {
-  ```
-  holds until the design freeze
-  ```
-  until: M2
+    ```
+    holds until the design freeze
+    ```
+    until: M2
 }
 
 bind tested {
-  ```
-  checked in CI
-  ```
-  test: "tests/hash_props.rs"
+    ```
+    checked in CI
+    ```
+    test: "tests/hash_props.rs"
 }
 
 bind failing {
-  ```
-  the regression stays fixed
-  ```
-  test: "tests/failing.rs::regression"
+    ```
+    the regression stays fixed
+    ```
+    test: "tests/failing.rs::regression"
 }
 
 bind partial {
-  ```
-  every platform is exercised
-  ```
-  test: "tests/partial.rs::matrix"
+    ```
+    every platform is exercised
+    ```
+    test: "tests/partial.rs::matrix"
 }
 
 bind modelled {
-  ```
-  the controller detumbles
-  ```
-  veriq: "aocs.verify_detumble"
+    ```
+    the controller detumbles
+    ```
+    veriq: "aocs.verify_detumble"
 }
 
 fiat declined_leaf {
-  ```
-  the margin is sufficient
-  ```
+    ```
+    the margin is sufficient
+    ```
 }

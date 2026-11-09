@@ -5,6 +5,7 @@ mod attach;
 pub mod deadline;
 pub mod eval;
 pub mod evidence;
+pub mod format;
 pub mod graph;
 pub mod hash;
 pub mod interpolate;

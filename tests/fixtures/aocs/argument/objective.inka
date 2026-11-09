@@ -1,8 +1,12 @@
 // Root. The wording is agreed and change-managed outside inka (mission definition).
 
 objective aocs_ok {
-  ```
-  Throughout the mission, the attitude control subsystem maintains the pointing performance required for observation operations and the safety of the vehicle, including under anomalies
-  ```
-  children: pointing_ok, detumble_ok, safe_mode_ok, momentum_ok
+    ```
+    Throughout the mission, the attitude control subsystem maintains the pointing performance required for observation operations and the safety of the vehicle, including under anomalies
+    ```
+    children:
+        pointing_ok,
+        detumble_ok,
+        safe_mode_ok,
+        momentum_ok
 }

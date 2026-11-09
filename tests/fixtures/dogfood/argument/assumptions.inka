@@ -8,13 +8,13 @@
 // argument-side syntax.
 
 fiat approvers_follow_norm {
-  ```
-  Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts
-  ```
+    ```
+    Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts
+    ```
 }
 
 fiat git_hosting_intact {
-  ```
-  The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker
-  ```
+    ```
+    The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker
+    ```
 }

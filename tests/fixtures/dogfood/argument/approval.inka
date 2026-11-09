@@ -1,53 +1,59 @@
 // Branch 2: approvals do not degenerate into ritual (concept §4, §5, §7, §12).
 
 structure approvals_meaningful {
-  ```
-  A recorded approve expresses a judgement the approver took on based solely on the local view, and does not degenerate into formal ritual
-  ```
-  children: description_is_contract, labels_cover_reality, policy_is_reviewable, queue_minimizes_friction
+    ```
+    A recorded approve expresses a judgement the approver took on based solely on the local view, and does not degenerate into formal ritual
+    ```
+    children:
+        description_is_contract,
+        labels_cover_reality,
+        policy_is_reviewable,
+        queue_minimizes_friction
 }
 
 structure description_is_contract {
-  ```
-  In a living argument, descriptions are maintained as contract sentences whose truth can be judged without reading the substructure
-  ```
-  children: lint_flags_leaky_contracts, approvers_follow_norm
+    ```
+    In a living argument, descriptions are maintained as contract sentences whose truth can be judged without reading the substructure
+    ```
+    children:
+        lint_flags_leaky_contracts,
+        approvers_follow_norm
 }
 
 fiat lint_flags_leaky_contracts {
-  ```
-  The LLM lint returns decline when the parent claim does not follow from the children's contracts, or when wording presupposes knowledge outside the local view
-  ```
-  until: M9
-  promote: bind
+    ```
+    The LLM lint returns decline when the parent claim does not follow from the children's contracts, or when wording presupposes knowledge outside the local view
+    ```
+    until: M9
+    promote: bind
 }
 
 // labels_cover_reality is the markdown-description example.
 // Fence content is hashed near-verbatim: newlines are part of the contract.
 fiat labels_cover_reality {
-  ```
-  The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:
+    ```
+    The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:
 
-  - **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)
-  - **decline**: refuse; a veto, with a reason comment required
-  - **cannot-take-responsibility**: cannot take this on personally; a delegate may be named
-  ```
+    - **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)
+    - **decline**: refuse; a veto, with a reason comment required
+    - **cannot-take-responsibility**: cannot take this on personally; a delegate may be named
+    ```
 }
 
+// Bind to policy parser + eval tests.
 fiat policy_is_reviewable {
-  ```
-  Which targets need how many approvals from whom is defined by policy text in the repository, and changes to approval criteria go through PR review
-  ```
-  until: M3
-  promote: bind
-  // Bind to policy parser + eval tests.
+    ```
+    Which targets need how many approvals from whom is defined by policy text in the repository, and changes to approval criteria go through PR review
+    ```
+    until: M3
+    promote: bind
 }
 
+// Bind once the approve session lands.
 fiat queue_minimizes_friction {
-  ```
-  An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved
-  ```
-  until: M4
-  promote: bind
-  // Bind once the approve session lands.
+    ```
+    An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved
+    ```
+    until: M4
+    promote: bind
 }

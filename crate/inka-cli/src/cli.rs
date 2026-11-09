@@ -70,6 +70,17 @@ pub enum Command {
         #[arg(long, requires = "target", value_parser = clap::builder::NonEmptyStringValueParser::new())]
         comment: Option<String>,
     },
+    /// Rewrite every argument file in the canonical layout.
+    Fmt {
+        /// Project directory holding `inka.toml`; defaults to the current
+        /// directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Write nothing; list every file that would change and fail if
+        /// there is one.
+        #[arg(long)]
+        check: bool,
+    },
     /// Write the argument to standard output as cytoscape `elements` JSON.
     Export {
         /// Project directory holding `inka.toml`; defaults to the current

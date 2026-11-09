@@ -1,33 +1,37 @@
 // Branch 1: steady-state pointing performance.
 
 structure pointing_ok #mission {
-  ```
-  In steady-state observation mode, the pointing control error is at most {$pointing_accuracy}
-  ```
-  children: attitude_knowledge_ok, control_law_ok, actuator_authority_ok, disturbance_model_valid,
-    // still a fiat until the mass-properties test measures the real vehicle
-    mass_properties_valid
+    ```
+    In steady-state observation mode, the pointing control error is at most {$pointing_accuracy}
+    ```
+    children:
+        attitude_knowledge_ok,
+        control_law_ok,
+        actuator_authority_ok,
+        disturbance_model_valid,
+        // still a fiat until the mass-properties test measures the real vehicle
+        mass_properties_valid
 }
 
 bind attitude_knowledge_ok {
-  ```
-  The attitude determination error in steady-state observation mode is at most {$attitude_knowledge}
-  ```
-  veriq: "aocs.verify_attitude_knowledge"
+    ```
+    The attitude determination error in steady-state observation mode is at most {$attitude_knowledge}
+    ```
+    veriq: "aocs.verify_attitude_knowledge"
 }
 
 bind control_law_ok {
-  ```
-  The observation-mode control law achieves a pointing control error of at most {$pointing_accuracy} in the presence of attitude determination error {$attitude_knowledge} and disturbance torques
-  ```
-  veriq: "aocs.verify_pointing_control"
+    ```
+    The observation-mode control law achieves a pointing control error of at most {$pointing_accuracy} in the presence of attitude determination error {$attitude_knowledge} and disturbance torques
+    ```
+    veriq: "aocs.verify_pointing_control"
 }
 
 // actuator_authority_ok is a shared node: also referenced from momentum_ok
 // (momentum.inka).
 bind actuator_authority_ok {
-  ```
-  Reaction-wheel torque and momentum capacity carry a margin of at least {$wheel_momentum_margin} against sustained worst-case disturbance torque
-  ```
-  veriq: "aocs.verify_momentum_budget"
+    ```
+    Reaction-wheel torque and momentum capacity carry a margin of at least {$wheel_momentum_margin} against sustained worst-case disturbance torque
+    ```
+    veriq: "aocs.verify_momentum_budget"
 }

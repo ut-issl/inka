@@ -4,6 +4,7 @@ mod check;
 mod cli;
 mod eval;
 mod export;
+mod fmt;
 mod load;
 mod render;
 mod review;
@@ -111,6 +112,15 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             let mut out = io::BufWriter::new(io::stdout().lock());
             let mut err = io::BufWriter::new(io::stderr().lock());
             let outcome = review::run(&path, &request, session, &mut out, &mut err, color)?;
+            err.flush()?;
+            out.flush()?;
+            Ok(outcome)
+        }
+        Command::Fmt { path, check } => {
+            let color = color_choice.resolve(no_color, io::stderr().is_terminal());
+            let mut out = io::BufWriter::new(io::stdout().lock());
+            let mut err = io::BufWriter::new(io::stderr().lock());
+            let outcome = fmt::run(&path, check, &mut out, &mut err, color)?;
             err.flush()?;
             out.flush()?;
             Ok(outcome)

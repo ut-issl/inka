@@ -2,16 +2,16 @@
 // through ordinary children references.
 
 fiat disturbance_model_valid {
-  ```
-  The disturbance torque model (gravity gradient, aerodynamic, solar radiation pressure, residual magnetic moment) envelopes the disturbances actually acting in the target orbit ({$orbit_altitude})
-  ```
+    ```
+    The disturbance torque model (gravity gradient, aerodynamic, solar radiation pressure, residual magnetic moment) envelopes the disturbances actually acting in the target orbit ({$orbit_altitude})
+    ```
 }
 
 fiat mass_properties_valid {
-  ```
-  The inertia tensor and mass properties used for control design deviate from the real vehicle within the control system's stability margins
-  ```
-  // promote to a veriq verification once the mass-properties test has measured the real vehicle
-  until: FM
-  promote: bind
+    ```
+    The inertia tensor and mass properties used for control design deviate from the real vehicle within the control system's stability margins
+    ```
+    // promote to a veriq verification once the mass-properties test has measured the real vehicle
+    until: FM
+    promote: bind
 }

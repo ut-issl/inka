@@ -3,56 +3,63 @@
 //  no more, no less."
 
 structure edit_cost_proportional {
-  ```
-  For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed
-  ```
-  children: invalidation_exact, surface_edits_free
+    ```
+    For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed
+    ```
+    children:
+        invalidation_exact,
+        surface_edits_free
 }
 
 structure invalidation_exact {
-  ```
-  Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents
-  ```
-  children: local_view_binding, local_view_hash_sound, hash_vectors_replay
+    ```
+    Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents
+    ```
+    children:
+        local_view_binding,
+        local_view_hash_sound,
+        hash_vectors_replay
 }
 
 fiat local_view_binding {
-  ```
-  Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below
-  ```
-  // bind to the scenario test: approve, edit a grandchild, stays fresh
-  until: M3
-  promote: bind
+    ```
+    Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below
+    ```
+    // bind to the scenario test: approve, edit a grandchild, stays fresh
+    until: M3
+    promote: bind
 }
 
 fiat local_view_hash_sound {
-  ```
-  The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes
-  ```
-  // bind to the hash v1 golden vectors and proptests (first CI bind target)
-  until: M2
-  promote: bind
+    ```
+    The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes
+    ```
+    // bind to the hash v1 golden vectors and proptests (first CI bind target)
+    until: M2
+    promote: bind
 }
 
 // The first real CI bind (#75): the broad soundness claim above stays a
 // fiat, while this narrow slice of it is established through evidence the
 // Rust adapter emitted from an actual test run and capsula delivered.
 bind hash_vectors_replay {
-  ```
-  The frozen hash v1 golden vectors replay byte-for-byte on the current implementation
-  ```
-  test: "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value"
+    ```
+    The frozen hash v1 golden vectors replay byte-for-byte on the current implementation
+    ```
+    test: "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value"
 }
 
 structure surface_edits_free {
-  ```
-  Renaming IDs and reordering child references never invalidate any approval
-  ```
-  children: local_view_hash_sound, id_not_in_contract
+    ```
+    Renaming IDs and reordering child references never invalidate any approval
+    ```
+    children:
+        local_view_hash_sound,
+        id_not_in_contract
 }
 
 fiat id_not_in_contract {
-  ```
-  IDs and tags are not part of the contract: what an approver judged is the content, not its name
-  ```
+    ```
+    IDs and tags are not part of the contract: what an approver judged is the content, not its name
+    ```
 }
