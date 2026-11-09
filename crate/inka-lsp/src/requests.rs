@@ -1,5 +1,6 @@
 //! Answering document requests: hover, goto definition, references, rename
-//! (with its prepare step), semantic tokens, inlay hints, and code lenses.
+//! (with its prepare step), semantic tokens, inlay hints, code lenses, and
+//! document formatting.
 //!
 //! Every request loads the project fresh through the overlay store, exactly
 //! like diagnostics do, so an answer always describes what is on screen. A
@@ -18,19 +19,20 @@ use std::collections::HashMap;
 
 use lsp_server::{ErrorCode, Request, Response};
 use lsp_types::request::{
-    CodeLensRequest, GotoDefinition, HoverRequest, InlayHintRequest, PrepareRenameRequest,
-    References, Rename, Request as _, SemanticTokensFullRequest,
+    CodeLensRequest, Formatting, GotoDefinition, HoverRequest, InlayHintRequest,
+    PrepareRenameRequest, References, Rename, Request as _, SemanticTokensFullRequest,
 };
 use lsp_types::{
-    CodeLens, CodeLensParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
-    HoverParams, InlayHint, InlayHintParams, Location, MarkupContent, MarkupKind, Position,
-    PrepareRenameResponse, ReferenceParams, RenameParams, SemanticTokens, SemanticTokensParams,
-    TextDocumentIdentifier, TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
+    CodeLens, CodeLensParams, DocumentFormattingParams, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint, InlayHintParams,
+    Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, ReferenceParams,
+    RenameParams, SemanticTokens, SemanticTokensParams, TextDocumentIdentifier,
+    TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use inka_core::project::{Project, load_project_with};
+use inka_core::project::{Project, format_project, load_project_with};
 use inka_core::source::{FileId, SourceMap, Span};
 
 use crate::state::Overlays;
@@ -47,6 +49,7 @@ pub fn answer(overlays: &Overlays, request: Request) -> Result<Response, Request
         SemanticTokensFullRequest::METHOD => Ok(dispatch(overlays, request, semantic_tokens)),
         InlayHintRequest::METHOD => Ok(dispatch(overlays, request, inlay_hints)),
         CodeLensRequest::METHOD => Ok(dispatch(overlays, request, code_lens)),
+        Formatting::METHOD => Ok(dispatch(overlays, request, formatting)),
         _ => Err(request),
     }
 }
@@ -269,6 +272,54 @@ fn code_lens(overlays: &Overlays, params: CodeLensParams) -> Result<Option<Vec<C
         return Ok(None);
     };
     Ok(lens::lenses(&root, &project, file))
+}
+
+/// Formats the document exactly as `inka fmt` would, as one edit replacing
+/// the whole text — an empty list when it is already formatted.
+///
+/// Like `inka fmt`, it formats nothing — answering `null` — when the
+/// document is outside a project, its manifest or values cannot be loaded
+/// (they decide whether a fence may be re-indented), or the document does
+/// not parse; diagnostics already say why.
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)] // see `hover`
+fn formatting(
+    overlays: &Overlays,
+    params: DocumentFormattingParams,
+) -> Result<Option<Vec<TextEdit>>, String> {
+    let Some(path) = uri::to_path(&params.text_document.uri) else {
+        return Ok(None);
+    };
+    let Some(root) = roots::project_root(&path) else {
+        return Ok(None);
+    };
+    let Ok(format) = format_project(&root, overlays) else {
+        return Ok(None);
+    };
+    let Some(document) = format.files.into_iter().find(|file| file.path == path) else {
+        return Ok(None);
+    };
+    let Ok(formatted) = document.result else {
+        return Ok(None);
+    };
+    let Some(formatted) = formatted else {
+        return Ok(Some(Vec::new()));
+    };
+    let Some((file_id, source)) = format
+        .source_map
+        .files()
+        .find(|(_, source)| source.path == path)
+    else {
+        return Ok(None);
+    };
+    let whole = Span {
+        file_id,
+        start: 0,
+        end: source.text.len(),
+    };
+    Ok(Some(vec![TextEdit {
+        range: position::range(source, whole),
+        new_text: formatted,
+    }]))
 }
 
 fn rename_to(overlays: &Overlays, params: RenameParams) -> Result<Option<WorkspaceEdit>, String> {

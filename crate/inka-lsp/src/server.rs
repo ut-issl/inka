@@ -137,6 +137,7 @@ fn capabilities() -> ServerCapabilities {
         code_lens_provider: Some(CodeLensOptions {
             resolve_provider: Some(false),
         }),
+        document_formatting_provider: Some(OneOf::Left(true)),
         ..ServerCapabilities::default()
     }
 }
@@ -379,5 +380,18 @@ fn cast<P: DeserializeOwned>(notification: Notification) -> Option<P> {
             );
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_formatting_is_advertised() {
+        assert_eq!(
+            capabilities().document_formatting_provider,
+            Some(OneOf::Left(true))
+        );
     }
 }
