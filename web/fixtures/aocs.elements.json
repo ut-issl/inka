@@ -10,6 +10,9 @@
       "evidence": {
         "kind": "veriq",
         "target": "aocs.verify_momentum_budget"
+      },
+      "comments": {
+        "block": "actuator_authority_ok is a shared node: also referenced from momentum_ok\n(momentum.inka)."
       }
     }
   },
@@ -112,6 +115,9 @@
       "deadline": {
         "until": "FM",
         "promote": "bind"
+      },
+      "comments": {
+        "until": "promote to a veriq verification once the mass-properties test has measured the real vehicle"
       }
     }
   },
@@ -180,7 +186,10 @@
       "namespace": "safety",
       "description": "In the safe-mode configuration (all mission equipment off, sun angle within 30 deg), generated power exceeds the configuration's consumption under all orbit conditions including eclipse",
       "tags": [],
-      "root": false
+      "root": false,
+      "comments": {
+        "block": "Ideally shared with a power-domain argument; kept local in this\nsingle-domain example (see README on namespaces)."
+      }
     }
   },
   {
@@ -313,7 +322,8 @@
     "data": {
       "id": "pointing_ok->mass_properties_valid",
       "source": "pointing_ok",
-      "target": "mass_properties_valid"
+      "target": "mass_properties_valid",
+      "comment": "still a fiat until the mass-properties test measures the real vehicle"
     }
   },
   {

@@ -9,7 +9,13 @@ import { DetailPanel } from './DetailPanel'
 
 const view = buildView(
   parseElements([
-    node('a', { mode: 'objective', namespace: 'top', root: true, description: 'the objective' }),
+    node('a', {
+      mode: 'objective',
+      namespace: 'top',
+      root: true,
+      description: 'the objective',
+      comments: { children: 'one per branch' },
+    }),
     node('b', {
       mode: 'bind',
       namespace: 'mid',
@@ -17,9 +23,15 @@ const view = buildView(
       tags: ['safety'],
       evidence: { kind: 'veriq', target: 'pkg.verify_thing' },
       deadline: { until: 'FM', promote: 'bind' },
+      comments: {
+        block: 'shared with the thermal argument',
+        veriq: 'the shipped check',
+        until: 'revisit at CDR\nonce the model lands',
+        promote: 'once the rig exists',
+      },
     }),
     node('c', { mode: 'fiat', namespace: 'mid' }),
-    edge('a', 'b'),
+    edge('a', 'b', 'why b is listed'),
     edge('a', 'c'),
   ]),
 )
@@ -38,11 +50,45 @@ describe('DetailPanel', () => {
     expect(screen.getByText(/FM/)).toBeInTheDocument()
   })
 
+  test('shows each comment with the element it is attached to', () => {
+    renderPanel({ kind: 'node', id: 'b' })
+
+    const rowOf = (comment: RegExp) => screen.getByText(comment).closest('p, div')
+    expect(screen.getByText(/shared with the thermal argument/)).toHaveClass('detail__comment')
+    expect(rowOf(/the shipped check/)).toHaveTextContent(/Verified by/)
+    expect(rowOf(/revisit at CDR/)).toHaveTextContent(/^Until FM/)
+    // The line break survives: the text is rendered as written, not reflowed.
+    expect(screen.getByText(/revisit at CDR/).textContent).toBe(
+      'Comment: revisit at CDR\nonce the model lands',
+    )
+    expect(rowOf(/once the rig exists/)).toHaveTextContent(/^Promote to bind/)
+  })
+
+  test('labels every comment for assistive technology', () => {
+    renderPanel({ kind: 'node', id: 'b' })
+
+    for (const comment of document.querySelectorAll('.detail__comment')) {
+      expect(comment.querySelector('.visually-hidden')).toHaveTextContent('Comment:')
+    }
+  })
+
+  test('lists each child under the children property comment, with its entry comment', () => {
+    renderPanel({ kind: 'node', id: 'a' })
+
+    const row = screen.getByText(/one per branch/).closest('div')
+    expect(row).toHaveTextContent(/^Children/)
+    const items = screen.getAllByRole('listitem')
+    expect(items.map((item) => item.firstChild?.textContent)).toEqual(['b', 'c'])
+    expect(items[0]).toHaveTextContent(/why b is listed/)
+    expect(items[1]?.querySelector('.detail__comment')).toBeNull()
+  })
+
   test('omits evidence and deadline from a node that declares neither', () => {
     renderPanel({ kind: 'node', id: 'c' })
 
     expect(screen.queryByText(/Verified by/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Until/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Children/)).not.toBeInTheDocument()
   })
 
   test('summarises a focused namespace and its one-hop surroundings', () => {

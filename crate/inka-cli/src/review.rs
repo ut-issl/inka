@@ -23,7 +23,7 @@ use inka_core::hash::{LocalView, ViewHash};
 use inka_core::record::{Record, RecordFields, Target, Timestamp};
 use inka_core::review::{BlockedReason, QueueItem, QueueState, ReviewQueue, derive_queue};
 use inka_core::source::{Diagnostics, Error, SourceMap};
-use inka_core::view::{ArgumentView, EvidenceKind, Mode, ViewNode};
+use inka_core::view::{ArgumentView, EvidenceKind, Mode, NodeComments, Property, ViewNode};
 
 use crate::check::Outcome;
 use crate::load::{ProjectView, load_project_view};
@@ -453,9 +453,11 @@ fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
 }
 
 /// One queued target, rendered as the local view the decision would judge:
-/// the expanded description and, where the local view includes them, the
-/// direct children's descriptions. Nothing deeper is shown — the local view
-/// is all an approval binds to.
+/// the expanded description, the evidence reference, where the local view
+/// includes them the direct children's descriptions, and the deadline, each
+/// with the comment attached to it written above it as `//` lines, the way
+/// the formatter places comments in a source file. Nothing deeper is shown —
+/// the local view is all an approval binds to.
 fn write_target(
     node: &ViewNode,
     item: &QueueItem,
@@ -471,18 +473,73 @@ fn write_target(
         node.id,
         state_line(&item.state)
     )?;
+    let comments = &node.comments;
+    write_comment(comments.block.as_deref(), 2, out)?;
     write_indented(&node.description, 2, out)?;
     if let Some(reference) = &node.evidence {
-        writeln!(out, "  test: {}", reference.target)?;
+        let property = match reference.kind {
+            EvidenceKind::Test => Property::Test,
+            EvidenceKind::Veriq => Property::Veriq,
+        };
+        let quoted = format!("\"{}\"", reference.target);
+        write_property(comments, property, &quoted, out)?;
     }
-    if !node.children.is_empty() {
-        writeln!(out, "  children:")?;
-        for child in &node.children {
-            let description = view.node(child).map_or("(not defined)", |child_node| {
-                child_node.description.as_str()
-            });
-            writeln!(out, "    {child}:")?;
-            write_indented(description, 6, out)?;
+    write_children(node, view, out)?;
+    if let Some(deadline) = &node.deadline {
+        write_property(comments, Property::Until, &deadline.until, out)?;
+        if let Some(promote) = deadline.promote {
+            write_property(comments, Property::Promote, promote.name(), out)?;
+        }
+    }
+    Ok(())
+}
+
+/// The `children:` property: each direct child's id and description, under
+/// the comment on its entry.
+fn write_children(node: &ViewNode, view: &ArgumentView, out: &mut impl Write) -> io::Result<()> {
+    if node.children.is_empty() {
+        return Ok(());
+    }
+    let comments = &node.comments;
+    write_comment(property_comment(comments, Property::Children), 2, out)?;
+    writeln!(out, "  children:")?;
+    for child in &node.children {
+        let description = view.node(child).map_or("(not defined)", |child_node| {
+            child_node.description.as_str()
+        });
+        write_comment(comments.children.get(child).map(String::as_str), 4, out)?;
+        write_indented(&format!("{child}:"), 4, out)?;
+        write_indented(description, 6, out)?;
+    }
+    Ok(())
+}
+
+/// One `key: value` property line under the comment attached to it.
+fn write_property(
+    comments: &NodeComments,
+    property: Property,
+    value: &str,
+    out: &mut impl Write,
+) -> io::Result<()> {
+    write_comment(property_comment(comments, property), 2, out)?;
+    write_indented(&format!("{}: {value}", property.name()), 2, out)
+}
+
+fn property_comment(comments: &NodeComments, property: Property) -> Option<&str> {
+    comments.properties.get(&property).map(String::as_str)
+}
+
+/// A comment as `//` lines, `//` alone for an empty line.
+fn write_comment(text: Option<&str>, indent: usize, out: &mut impl Write) -> io::Result<()> {
+    let Some(text) = text else {
+        return Ok(());
+    };
+    for line in text.lines() {
+        let line = sanitize(line);
+        if line.is_empty() {
+            writeln!(out, "{:indent$}//", "")?;
+        } else {
+            writeln!(out, "{:indent$}// {line}", "")?;
         }
     }
     Ok(())
@@ -490,16 +547,26 @@ fn write_target(
 
 fn write_indented(text: &str, indent: usize, out: &mut impl Write) -> io::Result<()> {
     for line in text.lines() {
-        // Control characters out of a source file must not reach the
-        // terminal, where an escape sequence could spoof the prompt the
-        // reviewer answers. Tabs are ordinary description content.
-        let sanitized: String = line
-            .chars()
-            .filter(|&c| !c.is_control() || c == '\t')
-            .collect();
-        writeln!(out, "{:indent$}{sanitized}", "")?;
+        writeln!(out, "{:indent$}{}", "", sanitize(line))?;
     }
     Ok(())
+}
+
+/// Text out of a source file or a record, made safe for the terminal.
+///
+/// Control characters must not reach it, where an escape sequence could spoof
+/// the prompt the reviewer answers; tabs are ordinary content. Bidirectional
+/// embedding, override, and isolate controls go too, so text cannot be shown
+/// in an order other than the one that was hashed. Other format characters,
+/// such as the joiners emoji are built from, stay.
+fn sanitize(line: &str) -> String {
+    line.chars()
+        .filter(|&c| (!c.is_control() || c == '\t') && !is_bidi_control(c))
+        .collect()
+}
+
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 fn state_line(state: &QueueState) -> String {
@@ -507,20 +574,23 @@ fn state_line(state: &QueueState) -> String {
         QueueState::Missing => "no approval covers the current content".to_owned(),
         QueueState::Stale { approvers } => format!(
             "approvals are stale: {} approved an earlier version",
-            approvers.join(", ")
+            sanitize(&approvers.join(", "))
         ),
-        QueueState::Declined { by } => format!("declined by {}", by.join(", ")),
+        QueueState::Declined { by } => format!("declined by {}", sanitize(&by.join(", "))),
     }
 }
 
 fn blocked_line(reason: &BlockedReason) -> String {
     match reason {
         BlockedReason::MissingEvidence { target } => {
-            format!("no imported test evidence provides `{target}`")
+            format!("no imported test evidence provides `{}`", sanitize(target))
         }
         BlockedReason::VeriqNotEvaluated => "veriq evidence is not evaluated yet".to_owned(),
         BlockedReason::UntilExpired { until } => {
-            format!("approvals no longer count: the current phase is past until:{until}")
+            format!(
+                "approvals no longer count: the current phase is past until:{}",
+                sanitize(until)
+            )
         }
     }
 }
@@ -555,11 +625,23 @@ pub fn now() -> Timestamp {
 mod tests {
     use super::*;
 
+    use std::collections::BTreeMap;
     use std::fs;
     use std::io::Cursor;
 
+    use inka_core::view::Evidence;
+
     /// Writes the three-node scenario project and returns its directory.
     fn scenario_project() -> tempfile::TempDir {
+        project_with(
+            "objective root {\n  ```\n  the root claim\n  ```\n  children: branch\n}\n\n\
+             structure branch {\n  ```\n  the branch claim\n  ```\n  children: leaf\n}\n\n\
+             fiat leaf {\n  ```\n  taken as given\n  ```\n}\n",
+        )
+    }
+
+    /// Writes a one-file project holding `argument` and returns its directory.
+    fn project_with(argument: &str) -> tempfile::TempDir {
         let dir = tempfile::tempdir().expect("a temp dir creates");
         fs::write(
             dir.path().join("inka.toml"),
@@ -567,13 +649,7 @@ mod tests {
         )
         .expect("the manifest writes");
         fs::create_dir(dir.path().join("argument")).expect("the argument directory creates");
-        fs::write(
-            dir.path().join("argument/arg.inka"),
-            "objective root {\n  ```\n  the root claim\n  ```\n  children: branch\n}\n\n\
-             structure branch {\n  ```\n  the branch claim\n  ```\n  children: leaf\n}\n\n\
-             fiat leaf {\n  ```\n  taken as given\n  ```\n}\n",
-        )
-        .expect("the argument writes");
+        fs::write(dir.path().join("argument/arg.inka"), argument).expect("the argument writes");
         dir
     }
 
@@ -653,6 +729,155 @@ mod tests {
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains("\"label\":\"decline\""));
         assert!(lines[0].contains("the branch claim is wrong"));
+    }
+
+    #[test]
+    fn a_target_shows_each_comment_above_its_anchor_and_the_deadline() {
+        // Arrange: a comment on every anchor a structure and a bind carry.
+        let dir = project_with(
+            "\
+// a file comment, shown nowhere
+
+objective root {
+  ```
+  the root claim
+  ```
+  children: branch
+}
+
+// shared with the thermal argument
+structure branch {
+  ```
+  the branch claim
+  ```
+  // one entry per hazard
+  children:
+    // the only hazard so far
+    leaf
+  // revisit at CDR
+  //
+  // once the model lands
+  until: M0
+}
+
+fiat leaf {
+  ```
+  checked in CI
+  ```
+  until: M0
+  promote: bind // once the rig exists
+}
+",
+        );
+
+        // Act: walk past every target.
+        let transcript = run_interactive(dir.path(), "s\ns\ns\nq\n");
+
+        // Assert
+        assert!(
+            transcript.contains(
+                "\
+  // shared with the thermal argument
+  the branch claim
+  // one entry per hazard
+  children:
+    // the only hazard so far
+    leaf:
+      checked in CI
+  // revisit at CDR
+  //
+  // once the model lands
+  until: M0
+"
+            ),
+            "{transcript}"
+        );
+        assert!(
+            transcript.contains("  until: M0\n  // once the rig exists\n  promote: bind\n"),
+            "{transcript}"
+        );
+        assert!(!transcript.contains("file comment"), "{transcript}");
+    }
+
+    #[test]
+    fn an_evidence_reference_is_spelled_with_its_own_scheme_under_its_comment() {
+        // Arrange: a veriq bind is never queued, so the target is rendered
+        // directly.
+        let node = ViewNode {
+            id: "checked".to_owned(),
+            mode: Mode::Bind,
+            namespace: "arg".to_owned(),
+            description: "checked by a solver".to_owned(),
+            tags: Vec::new(),
+            evidence: Some(Evidence {
+                kind: EvidenceKind::Veriq,
+                target: "aocs.check".to_owned(),
+            }),
+            deadline: None,
+            children: Vec::new(),
+            comments: NodeComments {
+                properties: BTreeMap::from([(Property::Veriq, "the shipped check".to_owned())]),
+                ..NodeComments::default()
+            },
+        };
+        let item = QueueItem {
+            id: node.id.clone(),
+            mode: node.mode,
+            current_hash: LocalView::fiat("unused", None).view_hash(),
+            state: QueueState::Missing,
+        };
+        let view = ArgumentView {
+            nodes: vec![node.clone()],
+            edges: Vec::new(),
+            roots: Vec::new(),
+        };
+        let mut out = Vec::new();
+
+        // Act
+        write_target(&node, &item, 1, 1, &view, &mut out).expect("writing to a vec succeeds");
+
+        // Assert
+        let text = String::from_utf8(out).expect("UTF-8");
+        assert!(
+            text.ends_with(
+                "  checked by a solver\n  // the shipped check\n  veriq: \"aocs.check\"\n"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn source_text_reaches_the_terminal_without_escapes_or_bidi_controls() {
+        // Arrange: an escape sequence and a right-to-left override in a
+        // comment, a line of nothing but control characters, and a tab.
+        let dir = project_with(
+            "objective root {\n  ```\n  the root claim\n  ```\n  children: leaf\n}\n\n\
+             fiat leaf {\n  ```\n  taken\tas given\n  ```\n  \
+             // red \u{1b}[31malert\u{202E} reversed\n  // \u{1b}\u{7}\n  until: M0\n}\n",
+        );
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\ns\nq\n");
+
+        // Assert
+        assert!(!transcript.contains('\u{1b}'), "{transcript:?}");
+        assert!(!transcript.contains('\u{202E}'), "{transcript:?}");
+        assert!(
+            transcript.contains("  // red [31malert reversed\n  //\n  until: M0\n"),
+            "{transcript:?}"
+        );
+        assert!(transcript.contains("  taken\tas given\n"), "{transcript:?}");
+    }
+
+    #[test]
+    fn sanitize_drops_controls_and_bidi_controls_but_keeps_tabs_and_joiners() {
+        assert_eq!(sanitize("a\u{1b}b\tc"), "ab\tc");
+        assert_eq!(sanitize("\u{2066}x\u{2069}\u{202A}y\u{202E}"), "xy");
+        // A zero-width joiner builds emoji; it is not a bidi control.
+        assert_eq!(
+            sanitize("\u{1F469}\u{200D}\u{1F4BB}"),
+            "\u{1F469}\u{200D}\u{1F4BB}"
+        );
     }
 
     #[test]

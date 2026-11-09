@@ -24,6 +24,9 @@ expression: "export(\"dogfood\")"
       "deadline": {
         "until": "M7",
         "promote": "bind"
+      },
+      "comments": {
+        "block": "approver_unforgeable is the value-interpolation example; sig_scheme is defined\nin values.toml. Contracts are hashed after interpolation, so changing the value\nprecisely invalidates this approval and the parent's structure approval."
       }
     }
   },
@@ -116,6 +119,9 @@ expression: "export(\"dogfood\")"
       "evidence": {
         "kind": "test",
         "target": "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value"
+      },
+      "comments": {
+        "block": "The first real CI bind (#75): the broad soundness claim above stays a\nfiat, while this narrow slice of it is established through evidence the\nRust adapter emitted from an actual test run and capsula delivered."
       }
     }
   },
@@ -156,7 +162,10 @@ expression: "export(\"dogfood\")"
       "namespace": "approval",
       "description": "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n- **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n- **decline**: refuse; a veto, with a reason comment required\n- **cannot-take-responsibility**: cannot take this on personally; a delegate may be named",
       "tags": [],
-      "root": false
+      "root": false,
+      "comments": {
+        "block": "labels_cover_reality is the markdown-description example.\nFence content is hashed near-verbatim: newlines are part of the contract."
+      }
     }
   },
   {
@@ -184,6 +193,9 @@ expression: "export(\"dogfood\")"
       "deadline": {
         "until": "M3",
         "promote": "bind"
+      },
+      "comments": {
+        "until": "bind to the scenario test: approve, edit a grandchild, stays fresh"
       }
     }
   },
@@ -198,6 +210,9 @@ expression: "export(\"dogfood\")"
       "deadline": {
         "until": "M2",
         "promote": "bind"
+      },
+      "comments": {
+        "until": "bind to the hash v1 golden vectors and proptests (first CI bind target)"
       }
     }
   },
@@ -226,6 +241,9 @@ expression: "export(\"dogfood\")"
       "deadline": {
         "until": "M3",
         "promote": "bind"
+      },
+      "comments": {
+        "block": "Bind to policy parser + eval tests."
       }
     }
   },
@@ -240,6 +258,9 @@ expression: "export(\"dogfood\")"
       "deadline": {
         "until": "M4",
         "promote": "bind"
+      },
+      "comments": {
+        "block": "Bind once the approve session lands."
       }
     }
   },

@@ -251,6 +251,27 @@ body {
   margin: 10px 0 4px;
 }
 
+.detail__comment {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.detail__children {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .detail__contract {
   margin: 0;
   line-height: 1.6;

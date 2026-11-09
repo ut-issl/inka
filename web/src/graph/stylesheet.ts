@@ -72,6 +72,12 @@ export function stylesheet(): StylesheetJson {
       },
     },
     {
+      // A `children:` entry with a comment: dashed, so it reads as "hover me"
+      // without taking on any weight.
+      selector: 'edge[?commented]',
+      style: { 'line-style': 'dashed' },
+    },
+    {
       // Emphasis only: a thicker dark rim, so shape and fill keep saying
       // "mode" and nothing else.
       selector: 'node.focused',

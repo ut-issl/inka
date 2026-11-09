@@ -9,7 +9,9 @@ const view = buildView(
   parseElements([
     node('a', { mode: 'objective', namespace: 'top', description: 'secret contract' }),
     node('b', { mode: 'fiat', namespace: 'low' }),
+    node('c', { mode: 'fiat', namespace: 'low' }),
     edge('a', 'b'),
+    edge('a', 'c', 'secret entry comment'),
   ]),
 )
 
@@ -36,7 +38,14 @@ describe('cytoscapeElements', () => {
     const edges = cytoscapeElements(view).filter((element) => element.group === 'edges')
 
     expect(edges.map((element) => element.data)).toEqual([
-      { id: 'a->b', source: 'a', target: 'b' },
+      { id: 'a->b', source: 'a', target: 'b', commented: false },
+      { id: 'a->c', source: 'a', target: 'c', commented: true },
     ])
+  })
+
+  test('flags a commented entry without handing its text to the graph', () => {
+    const serialized = JSON.stringify(cytoscapeElements(view))
+
+    expect(serialized).not.toContain('secret entry comment')
   })
 })

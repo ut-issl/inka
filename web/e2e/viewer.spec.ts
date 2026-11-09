@@ -14,16 +14,26 @@ async function ready(page: Page): Promise<void> {
   await page.waitForTimeout(1200)
 }
 
-/** Model-space centre of a node, as the graph currently has it laid out. */
+/**
+ * Where a graph element currently is, in rendered coordinates: a node's
+ * centre or an edge's midpoint, as the graph has it laid out right now.
+ */
 async function centre(page: Page, id: string) {
   return page.evaluate(
-    (nodeId) => {
+    (elementId) => {
+      type Point = { x: number; y: number }
       const cy = (document.querySelector('.graph__canvas') as HTMLElement & { _cyreg?: { cy: unknown } })
         ._cyreg?.cy as {
-        getElementById: (id: string) => { renderedPosition: () => { x: number; y: number }; visible: () => boolean }
+        getElementById: (id: string) => {
+          isEdge: () => boolean
+          renderedPosition: () => Point
+          renderedMidpoint: () => Point
+          visible: () => boolean
+        }
       }
-      const node = cy.getElementById(nodeId)
-      return { ...node.renderedPosition(), visible: node.visible() }
+      const element = cy.getElementById(elementId)
+      const at = element.isEdge() ? element.renderedMidpoint() : element.renderedPosition()
+      return { ...at, visible: element.visible() }
     },
     id,
   )
@@ -83,7 +93,11 @@ test('the detail panel shows the contract, the evidence target and the deadline'
 
   await expect(page.locator('.detail')).toContainText('Contract')
   await expect(page.locator('.detail')).toContainText('Until FM')
-  await expect(page.locator('.detail')).toContainText('promote to bind')
+  await expect(page.locator('.detail')).toContainText('Promote to bind')
+  // The comment on `until:` sits with the deadline it explains.
+  await expect(page.locator('.detail__row--deadline .detail__comment')).toContainText(
+    'once the mass-properties test has measured the real vehicle',
+  )
 
   await page.click('.node-list__item:has-text("detumble_convergence_ok")')
   await expect(page.locator('.detail')).toContainText('aocs.verify_detumble')
@@ -128,6 +142,28 @@ test('hovering a node reveals its full description', async ({ page }) => {
   const tooltip = page.locator('.tooltip')
   await expect(tooltip).toBeVisible()
   await expect(tooltip).toContainText('detumbling')
+})
+
+test('hovering a commented children entry reveals its comment', async ({ page }) => {
+  await ready(page)
+
+  await page.click('.node-list__item:has-text("pointing_ok")')
+  const box = (await page.locator('.graph__canvas').boundingBox()) as { x: number; y: number }
+  const tooltip = page.locator('.tooltip')
+
+  // Re-aim until the focus animation has settled and the pointer is on the
+  // edge, rather than trusting one sleep to be long enough.
+  await expect(async () => {
+    const midpoint = await centre(page, 'pointing_ok->mass_properties_valid')
+    await page.mouse.move(box.x + midpoint.x, box.y + midpoint.y)
+    await expect(tooltip).toContainText('pointing_ok → mass_properties_valid', { timeout: 500 })
+  }).toPass()
+  await expect(tooltip).toContainText('still a fiat until the mass-properties test')
+
+  // The same comment is readable without a pointer, under the child.
+  await expect(page.locator('.detail__children li:has-text("mass_properties_valid")')).toContainText(
+    'still a fiat until the mass-properties test',
+  )
 })
 
 test('Esc and a background tap both restore the whole view', async ({ page }) => {
