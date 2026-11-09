@@ -41,6 +41,39 @@ pub fn position(file: &SourceFile, offset: usize) -> Position {
     }
 }
 
+/// The position just past the last character of `text`, counted the way the
+/// protocol counts: `\n`, `\r\n`, and a lone `\r` each end a line.
+///
+/// An edit that replaces a whole document must end exactly there. Unlike
+/// [`position`], which inherits core's `\n`-only line count, this never
+/// lands on the wrong line in a file with old-Mac line endings — where a
+/// client would clamp a too-low end to its first line and splice the new
+/// text into the old.
+pub fn end_of(text: &str) -> Position {
+    let bytes = text.as_bytes();
+    let mut line = 0usize;
+    let mut last_line_start = 0usize;
+    let mut index = 0;
+    while index < bytes.len() {
+        let width = match bytes[index] {
+            b'\r' if bytes.get(index + 1) == Some(&b'\n') => 2,
+            b'\r' | b'\n' => 1,
+            _ => {
+                index += 1;
+                continue;
+            }
+        };
+        index += width;
+        line += 1;
+        last_line_start = index;
+    }
+    let character = text[last_line_start..].encode_utf16().count();
+    Position {
+        line: u32::try_from(line).unwrap_or(u32::MAX),
+        character: u32::try_from(character).unwrap_or(u32::MAX),
+    }
+}
+
 /// Converts an LSP position back to a byte offset, the inverse of
 /// [`position`].
 ///
@@ -131,6 +164,17 @@ mod tests {
         assert_eq!(offset_of(file, Position::new(9, 0)), 11); // end of file
         // Inside the 𝄞 surrogate pair resolves to the next boundary.
         assert_eq!(offset_of(file, Position::new(0, 2)), 7);
+    }
+
+    #[test]
+    fn end_of_counts_every_protocol_line_break() {
+        assert_eq!(end_of(""), Position::new(0, 0));
+        assert_eq!(end_of("ab"), Position::new(0, 2));
+        assert_eq!(end_of("a\nb\n"), Position::new(2, 0));
+        assert_eq!(end_of("a\r\nb"), Position::new(1, 1));
+        assert_eq!(end_of("a\rb\r"), Position::new(2, 0));
+        assert_eq!(end_of("a\r\rb"), Position::new(2, 1));
+        assert_eq!(end_of("x\n日本𝄞"), Position::new(1, 4));
     }
 
     #[test]

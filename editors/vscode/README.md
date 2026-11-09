@@ -16,7 +16,11 @@ language server. The server provides:
   extension sets `editor.inlayHints.maximumLength` to `0` (no cap) for inka
   files only — override it under `"[inka]"` in your settings if you prefer;
 - read-only code lenses with every block's approval state (established, or
-  the reason it is not), refreshed when approval records change on disk.
+  the reason it is not), refreshed when approval records change on disk;
+- document formatting (Format Document) with exactly the output of
+  `inka fmt`; a document that does not parse, or whose project's manifest or
+  values cannot be loaded, is left as it is. Formatting on save is not turned
+  on for you — enable `editor.formatOnSave` under `"[inka]"` if you want it.
 
 The grammar stays flat on purpose — rich highlighting inside fenced
 descriptions is the server's job via semantic tokens, which supersede these
