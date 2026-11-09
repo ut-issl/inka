@@ -62,11 +62,13 @@ structure single {
 - **Block body.** The description, then `children:` / `test:` / `veriq:`, then
   `until:`, then `promote:`. One property per line, written `key: value`. No
   blank lines inside a block.
-- **Description.** The fences sit at level 1 and keep their length and info
-  string. The content loses its common leading-space indent and every
+- **Description.** The fences sit at level 1. The opening fence keeps its
+  length and info string, and the closing fence takes the opening fence's
+  length. The content loses its common leading-space indent and every
   non-blank line is re-indented to level 1; blank lines are empty. When this
   would change the view hash — a multi-line value interpolated into the fence
-  can make it do so — the content is left byte-for-byte as written.
+  can make it do so — or the content names an undefined value, so the view
+  hash cannot be computed, the content is left byte-for-byte as written.
 - **Children.** A single child without a comment stays on the property line:
   `children: only_child`. Otherwise `children:` stands alone and each entry
   follows on its own line at level 2, separated by a `,` at the end of the line,
@@ -85,5 +87,10 @@ structure single {
   (default: the current directory) in place.
 - `inka fmt --check [PATH]` writes nothing; it lists every file that would
   change and exits non-zero if there is one.
+- Both read the project's manifest and values, which decide whether a fence
+  may be re-indented; when they cannot be loaded, nothing is formatted. A file
+  with a parse error is reported as `inka check` reports it and left
+  untouched, the other files are still formatted or listed, and the command
+  exits non-zero.
 - The language server answers `textDocument/formatting` with the same output
   for the open document.

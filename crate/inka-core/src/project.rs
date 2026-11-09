@@ -1,5 +1,6 @@
 //! Project loading: `inka.toml`, the `argument/` convention, and `{$var}`
-//! expansion, combined into one loaded project.
+//! expansion, combined into one loaded project — and, over the same files and
+//! values, formatting every argument file.
 //!
 //! The argument is read by convention — every `*.inka` directly under
 //! `argument/` — so splitting or renaming files never needs a manifest edit.
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ast::Block;
 use crate::evidence::{EvidenceError, EvidenceSet, load_files};
+use crate::format::format_source;
 use crate::interpolate::{RenderedDescription, interpolate};
 use crate::lexer::Lexer;
 use crate::manifest::{Manifest, ManifestError, parse_manifest};
@@ -165,6 +167,62 @@ fn load(project_dir: &Path, reader: &dyn ReadText) -> Result<Project, LoadError>
         blocks,
         evidence,
     })
+}
+
+/// The canonical layout of every argument file of a project.
+#[derive(Debug)]
+pub struct ProjectFormat {
+    /// Every argument file as read, which the errors' spans point into.
+    pub source_map: SourceMap,
+    /// One entry per argument file, in sorted path order.
+    pub files: Vec<FormattedFile>,
+}
+
+/// One argument file's formatting.
+#[derive(Debug)]
+pub struct FormattedFile {
+    pub path: PathBuf,
+    /// The canonical text when it differs from the file, `None` when the
+    /// file is already formatted, or the errors that keep it from being
+    /// formatted at all.
+    pub result: Result<Option<String>, Vec<Error>>,
+}
+
+/// Formats every `*.inka` file of the project rooted at `project_dir`
+/// without writing anything.
+///
+/// The manifest and values are loaded because whether a fence may be
+/// re-indented depends on the values interpolated into it. A file that does
+/// not parse is reported, never formatted, and does not stop the others.
+///
+/// # Errors
+///
+/// Returns a [`LoadError`] when `inka.toml` or a values file is missing or
+/// invalid, or when `argument/` or one of its files cannot be read; nothing
+/// is formatted then.
+pub fn format_project(
+    project_dir: &Path,
+    reader: &dyn ReadText,
+) -> Result<ProjectFormat, LoadError> {
+    let manifest_path = project_dir.join("inka.toml");
+    let manifest_text = read_file(&manifest_path, reader)?;
+    let manifest = parse_manifest(&manifest_text).map_err(|source| LoadError::Manifest {
+        path: manifest_path,
+        source,
+    })?;
+    let values = load_values(project_dir, &manifest.values.files, reader)?;
+
+    let mut source_map = SourceMap::new();
+    let mut files = Vec::new();
+    for path in argument_files(&project_dir.join("argument"))? {
+        let text = read_file(&path, reader)?;
+        // The map keeps its own copy so errors can be rendered against it.
+        let file_id = source_map.add_file(path.clone(), text.clone());
+        let result = format_source(file_id, &text, &values)
+            .map(|formatted| (formatted != text).then_some(formatted));
+        files.push(FormattedFile { path, result });
+    }
+    Ok(ProjectFormat { source_map, files })
 }
 
 /// Every `*.inka` directly under `argument/`, sorted by path.
