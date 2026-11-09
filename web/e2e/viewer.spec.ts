@@ -100,7 +100,7 @@ test('the detail panel shows the contract, the evidence target and the deadline'
   )
 
   await page.click('.node-list__item:has-text("detumble_convergence_ok")')
-  await expect(page.locator('.detail')).toContainText('aocs.verify_detumble')
+  await expect(page.locator('.detail')).toContainText('AOCS::?verify_detumble')
 })
 
 test('namespace badges appear once zoomed in and focus their namespace', async ({ page }) => {
