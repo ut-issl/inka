@@ -242,8 +242,8 @@ review 時には、現在の仮定集合を、同じターゲットの直近に�
 アダプターを使う。
 
 ```console
-$ capsula run -- inka-evidence-veriq path/to/project.py --output calc-evidence.json \
-    --provenance source_revision=$(git rev-parse HEAD)
+$ capsula run -- inka-evidence-veriq path/to/project.py --input project.in.toml \
+    --output calc-evidence.json --provenance source_revision=$(git rev-parse HEAD)
 $ capsula push <RUN_NAME>
 ```
 

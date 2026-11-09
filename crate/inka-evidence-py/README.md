@@ -56,8 +56,9 @@ $ inka-evidence-veriq path/to/project.py --input project.in.toml \
     --provenance source_revision=$(git rev-parse HEAD)
 ```
 
-`--input` defaults to `[tool.veriq].input` of the nearest `pyproject.toml`;
-`--target Scope::?name` (repeatable) restricts the emitted verifications.
+The project argument and `--input` default to `[tool.veriq].project` and
+`.input` of the nearest `pyproject.toml`; `--target Scope::?name`
+(repeatable) restricts the emitted verifications.
 Inside `capsula run`, `capsula_run_id` is filled from the environment.
 
 ## pytest adapter

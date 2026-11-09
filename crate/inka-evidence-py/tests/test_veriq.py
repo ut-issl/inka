@@ -22,9 +22,7 @@ SCHEMA = json.loads(
 
 @pytest.fixture(scope="module")
 def evidence() -> dict:
-    from veriq._cli.discover import load_project_from_script
-
-    project = load_project_from_script(FIXTURE / "power.py")
+    project = vq.load_project(FIXTURE / "power.py")
     model_data = vq.load_model_data_from_toml(project, FIXTURE / "power.in.toml")
     builder = adapter.collect(project, model_data)
     return json.loads(builder.finish())
@@ -115,18 +113,16 @@ def test_an_expected_failure_is_marked_xfail(evidence):
 def test_a_failed_assumed_verification_makes_the_target_invalid(evidence):
     assuming = target(evidence, "Power::?verify_assuming")
 
-    # veriq overrides the value of an invalid verification to False itself;
-    # the adapter reports both the overridden result and the validity.
-    assert assuming["leaves"] == [{"id": "Power::?verify_assuming", "result": False}]
+    # The result is what the verification returned (veriq's own value is
+    # overridden to False); the failed assumption shows as `valid: false`.
+    assert assuming["leaves"] == [{"id": "Power::?verify_assuming", "result": True}]
     assert assuming["valid"] is False
     # The assumed verification is part of the upstream subgraph.
     assert "Power::?verify_reserve" in [d["path"] for d in assuming["definitions"]]
 
 
 def test_targets_can_be_restricted_and_unknown_ones_are_rejected():
-    from veriq._cli.discover import load_project_from_script
-
-    project = load_project_from_script(FIXTURE / "power.py")
+    project = vq.load_project(FIXTURE / "power.py")
     model_data = vq.load_model_data_from_toml(project, FIXTURE / "power.in.toml")
 
     only = json.loads(adapter.collect(project, model_data, targets=["Power::?verify_reserve"]).finish())
@@ -188,8 +184,29 @@ def test_the_cli_writes_schema_valid_evidence_with_provenance(tmp_path, monkeypa
     assert [t["path"] for t in written["targets"]] == ["Power::?verify_margin"]
 
 
-def test_the_cli_requires_an_input(tmp_path, monkeypatch):
+def test_the_cli_requires_an_input_when_none_is_configured(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # no pyproject.toml with [tool.veriq] in reach
 
     with pytest.raises(SystemExit, match="input TOML is required"):
         adapter.main([str(FIXTURE / "power.py"), "--output", "-"])
+
+
+def test_the_cli_falls_back_to_the_veriq_configuration(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.veriq]\n"
+        f'project = {{ script = "{(FIXTURE / "power.py").as_posix()}" }}\n'
+        f'input = "{(FIXTURE / "power.in.toml").as_posix()}"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "out.json"
+
+    adapter.main(["--output", str(output), "--target", "Power::?verify_reserve"])
+
+    written = json.loads(output.read_text())
+    jsonschema.validate(written, SCHEMA)
+    assert [t["path"] for t in written["targets"]] == ["Power::?verify_reserve"]
+
+
+def test_the_cli_reports_an_unloadable_project(tmp_path):
+    with pytest.raises(SystemExit, match="cannot load the project"):
+        adapter.main([str(tmp_path / "missing.py"), "--input", str(FIXTURE / "power.in.toml")])

@@ -4,7 +4,8 @@ Runnable as ``python -m inka_evidence.veriq`` or through the
 ``inka-evidence-veriq`` script. For every verification of the project (or
 the ``--target`` selection) it emits one calc evidence target: the
 reviewable source of the verification's definition-level upstream subgraph,
-the inka nodes that subgraph assumes, and the verification's leaf results.
+the inka nodes that subgraph assumes, and the verification's leaf results (as returned by the verification; a
+failed assumption is reported through ``valid``).
 The wire format and its validation live in the shared Rust crate; veriq is
 only imported here, as an optional dependency (``inka-evidence[veriq]``).
 
@@ -161,27 +162,12 @@ def assumptions_of(subgraph: vq.UpstreamSubgraph) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _leaves(outputs: Iterable[vq.ProjectPath]) -> list[vq.ProjectPath]:
-    """The leaf outputs of a definition: veriq's graph also carries a node for
-    a table-valued output as a whole, which has no result of its own."""
-    outputs = list(outputs)
-
-    def is_prefix_of_another(candidate: vq.ProjectPath) -> bool:
-        parts = candidate.path.parts
-        return any(
-            other is not candidate
-            and other.path.root == candidate.path.root
-            and len(other.path.parts) > len(parts)
-            and other.path.parts[: len(parts)] == parts
-            for other in outputs
-        )
-
-    return [output for output in outputs if not is_prefix_of_another(output)]
-
-
 def _leaf(result: vq.EvaluationResult, path: vq.ProjectPath) -> Leaf:
+    # The raw value: what the verification returned. veriq overrides the
+    # value of a verification whose assumption failed to False; that fact is
+    # reported through `valid`, not by rewriting the result.
     try:
-        value = result.get_value(path)
+        value = result.get_value(path, raw=True)
     except KeyError:
         return Leaf(str(path))
     if value is None:
@@ -228,7 +214,7 @@ def collect(
             raise AdapterError(msg)
         scope = project.scopes[subgraph.target.scope]
         verification = scope.verifications[subgraph.target.root.removeprefix("?")]
-        outputs = _leaves(subgraph.nodes[subgraph.target].outputs)
+        outputs = subgraph.nodes[subgraph.target].outputs
         try:
             builder.add_target(
                 str(subgraph.target),
@@ -256,26 +242,6 @@ def _split_provenance(raw: str) -> tuple[str, str]:
     return key, value
 
 
-def _load_project(path: str, project_var: str | None) -> vq.Project:
-    from veriq._cli.discover import (  # noqa: PLC0415
-        load_project_from_module_path,
-        load_project_from_script,
-    )
-
-    if ":" in path and not Path(path).exists():
-        return load_project_from_module_path(path)
-    return load_project_from_script(Path(path), project_var)
-
-
-def _configured_input() -> Path | None:
-    from veriq._cli.config import ConfigError, get_config  # noqa: PLC0415
-
-    try:
-        return get_config().input
-    except ConfigError as error:
-        raise SystemExit(f"error: {error}") from error
-
-
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="inka-evidence-veriq",
@@ -283,8 +249,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "project",
+        nargs="?",
         metavar="SCRIPT|MODULE:VAR",
-        help="the Python file defining the veriq project, or `module.path:variable`",
+        help="the Python file defining the veriq project, or `module.path:variable`; "
+        "defaults to [tool.veriq].project of the nearest pyproject.toml",
     )
     parser.add_argument(
         "--project-var",
@@ -294,7 +262,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--input",
         metavar="PATH",
-        help="the input TOML; defaults to [tool.veriq].input of the nearest pyproject.toml",
+        help="the input TOML the project is evaluated with; "
+        "defaults to [tool.veriq].input of the nearest pyproject.toml",
     )
     parser.add_argument(
         "--output",
@@ -326,11 +295,12 @@ def main(argv: list[str] | None = None) -> None:
         ) from error
 
     try:
-        project = _load_project(arguments.project, arguments.project_var)
-    except (ImportError, ValueError, TypeError) as error:
+        config = vq.get_config()
+        project = vq.load_project(arguments.project, project_var=arguments.project_var, config=config)
+    except (vq.ConfigError, ImportError, ValueError, TypeError, FileNotFoundError) as error:
         raise SystemExit(f"error: cannot load the project: {error}") from error
 
-    input_path = Path(arguments.input) if arguments.input else _configured_input()
+    input_path = Path(arguments.input) if arguments.input else config.input
     if input_path is None:
         raise SystemExit("error: an input TOML is required; pass --input or configure [tool.veriq].input")
 

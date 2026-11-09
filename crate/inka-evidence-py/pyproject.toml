@@ -30,7 +30,7 @@ veriq = [
 dev = [
   "jsonschema>=4",
   "pytest>=8",
-  # The node-metadata stack (ut-issl/veriq#362–#370) the adapter builds on,
+  # The node-metadata stack (ut-issl/veriq#362–#373) the adapter builds on,
   # pinned to its head until veriq releases it; then switch to PyPI.
   "veriq; python_version >= '3.14'",
 ]
@@ -47,4 +47,4 @@ module-name = "inka_evidence._native"
 python-source = "python"
 
 [tool.uv.sources]
-veriq = { git = "https://github.com/ut-issl/veriq", rev = "089fe92c5c8c9b7afc381c2fd521ef65e09210aa" }
+veriq = { git = "https://github.com/ut-issl/veriq", rev = "dc98bd9c87e14d74a8f3a1e8aaf84706de2ec285" }

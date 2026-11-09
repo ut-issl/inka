@@ -304,8 +304,8 @@ Delivery follows the [test evidence](test-evidence.md#delivery-through-capsula)
 procedure with the veriq adapter in place of a test adapter:
 
 ```console
-$ capsula run -- inka-evidence-veriq path/to/project.py --output calc-evidence.json \
-    --provenance source_revision=$(git rev-parse HEAD)
+$ capsula run -- inka-evidence-veriq path/to/project.py --input project.in.toml \
+    --output calc-evidence.json --provenance source_revision=$(git rev-parse HEAD)
 $ capsula push <RUN_NAME>
 ```
 

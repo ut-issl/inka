@@ -100,7 +100,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pytest", marker = "extra == 'pytest'", specifier = ">=8" },
-    { name = "veriq", marker = "python_full_version >= '3.14' and extra == 'veriq'", git = "https://github.com/ut-issl/veriq?rev=089fe92c5c8c9b7afc381c2fd521ef65e09210aa" },
+    { name = "veriq", marker = "python_full_version >= '3.14' and extra == 'veriq'", git = "https://github.com/ut-issl/veriq?rev=dc98bd9c87e14d74a8f3a1e8aaf84706de2ec285" },
 ]
 provides-extras = ["pytest", "veriq"]
 
@@ -108,7 +108,7 @@ provides-extras = ["pytest", "veriq"]
 dev = [
     { name = "jsonschema", specifier = ">=4" },
     { name = "pytest", specifier = ">=8" },
-    { name = "veriq", marker = "python_full_version >= '3.14'", git = "https://github.com/ut-issl/veriq?rev=089fe92c5c8c9b7afc381c2fd521ef65e09210aa" },
+    { name = "veriq", marker = "python_full_version >= '3.14'", git = "https://github.com/ut-issl/veriq?rev=dc98bd9c87e14d74a8f3a1e8aaf84706de2ec285" },
 ]
 
 [[package]]
@@ -870,7 +870,7 @@ wheels = [
 [[package]]
 name = "veriq"
 version = "0.4.3"
-source = { git = "https://github.com/ut-issl/veriq?rev=089fe92c5c8c9b7afc381c2fd521ef65e09210aa#089fe92c5c8c9b7afc381c2fd521ef65e09210aa" }
+source = { git = "https://github.com/ut-issl/veriq?rev=dc98bd9c87e14d74a8f3a1e8aaf84706de2ec285#dc98bd9c87e14d74a8f3a1e8aaf84706de2ec285" }
 dependencies = [
     { name = "bounded-models" },
     { name = "pydantic" },
