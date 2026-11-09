@@ -183,3 +183,40 @@ fn the_edit_range_ends_at_the_buffer_end_in_utf16_units() {
     );
     client.shutdown();
 }
+
+#[test]
+fn the_edit_range_counts_lone_cr_and_crlf_as_line_breaks() {
+    // A client counts `\r` as a line break; an end that did not would make
+    // it clamp to the first line and splice the new text into the old.
+    for (text, end) in [
+        ("fiat leaf {\r  ```\r  x\r  ```\r}\r", Position::new(5, 0)),
+        ("fiat leaf {\r  ```\r  x\r  ```\r}", Position::new(4, 1)),
+        (
+            "fiat leaf {\r\n  ```\r\n  x\r\n  ```\r\n}\r\n",
+            Position::new(5, 0),
+        ),
+    ] {
+        // Arrange
+        let (_temp, argument) = scenario_project();
+        let uri = uri_of(&argument);
+        let client = Client::start();
+        client.open(&uri, text);
+
+        // Act
+        let result = format_request(&client, 2, &uri);
+
+        // Assert
+        let edits = edits(result);
+        assert_eq!(edits.len(), 1, "{text:?}");
+        assert_eq!(
+            edits[0].range,
+            Range::new(Position::new(0, 0), end),
+            "{text:?}"
+        );
+        assert_eq!(
+            edits[0].new_text,
+            "fiat leaf {\n    ```\n    x\n    ```\n}\n"
+        );
+        client.shutdown();
+    }
+}

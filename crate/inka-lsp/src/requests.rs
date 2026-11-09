@@ -25,7 +25,7 @@ use lsp_types::request::{
 use lsp_types::{
     CodeLens, CodeLensParams, DocumentFormattingParams, GotoDefinitionParams,
     GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint, InlayHintParams,
-    Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, ReferenceParams,
+    Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range, ReferenceParams,
     RenameParams, SemanticTokens, SemanticTokensParams, TextDocumentIdentifier,
     TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
 };
@@ -304,20 +304,15 @@ fn formatting(
     let Some(formatted) = formatted else {
         return Ok(Some(Vec::new()));
     };
-    let Some((file_id, source)) = format
+    let Some((_, source)) = format
         .source_map
         .files()
         .find(|(_, source)| source.path == path)
     else {
         return Ok(None);
     };
-    let whole = Span {
-        file_id,
-        start: 0,
-        end: source.text.len(),
-    };
     Ok(Some(vec![TextEdit {
-        range: position::range(source, whole),
+        range: Range::new(Position::new(0, 0), position::end_of(&source.text)),
         new_text: formatted,
     }]))
 }
