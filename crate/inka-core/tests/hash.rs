@@ -275,7 +275,7 @@ bind checked {
 ";
     let renamed = source.replace(
         "test: \"tests/detumble.rs\"",
-        "veriq: \"aocs.verify_detumble\"",
+        "calc: \"AOCS::?verify_detumble\"",
     );
 
     // Act & Assert: where the evidence lives is not what was approved — the

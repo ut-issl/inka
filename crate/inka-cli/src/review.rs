@@ -376,9 +376,9 @@ fn current_hash(
 ) -> Result<ViewHash, String> {
     let interface = match (node.mode, node.evidence.as_ref()) {
         (Mode::Bind, Some(reference)) => match reference.kind {
-            EvidenceKind::Veriq => {
+            EvidenceKind::Calc => {
                 return Err(format!(
-                    "`{}` is a veriq bind; veriq evidence is not evaluated yet",
+                    "`{}` is a calc bind; calc evidence is not evaluated yet",
                     node.id
                 ));
             }
@@ -479,7 +479,7 @@ fn write_target(
     if let Some(reference) = &node.evidence {
         let property = match reference.kind {
             EvidenceKind::Test => Property::Test,
-            EvidenceKind::Veriq => Property::Veriq,
+            EvidenceKind::Calc => Property::Calc,
         };
         let quoted = format!("\"{}\"", reference.target);
         write_property(comments, property, &quoted, out)?;
@@ -585,7 +585,7 @@ fn blocked_line(reason: &BlockedReason) -> String {
         BlockedReason::MissingEvidence { target } => {
             format!("no imported test evidence provides `{}`", sanitize(target))
         }
-        BlockedReason::VeriqNotEvaluated => "veriq evidence is not evaluated yet".to_owned(),
+        BlockedReason::CalcNotEvaluated => "calc evidence is not evaluated yet".to_owned(),
         BlockedReason::UntilExpired { until } => {
             format!(
                 "approvals no longer count: the current phase is past until:{}",
@@ -801,7 +801,7 @@ fiat leaf {
 
     #[test]
     fn an_evidence_reference_is_spelled_with_its_own_scheme_under_its_comment() {
-        // Arrange: a veriq bind is never queued, so the target is rendered
+        // Arrange: a calc bind is never queued, so the target is rendered
         // directly.
         let node = ViewNode {
             id: "checked".to_owned(),
@@ -810,13 +810,13 @@ fiat leaf {
             description: "checked by a solver".to_owned(),
             tags: Vec::new(),
             evidence: Some(Evidence {
-                kind: EvidenceKind::Veriq,
-                target: "aocs.check".to_owned(),
+                kind: EvidenceKind::Calc,
+                target: "AOCS::?check".to_owned(),
             }),
             deadline: None,
             children: Vec::new(),
             comments: NodeComments {
-                properties: BTreeMap::from([(Property::Veriq, "the shipped check".to_owned())]),
+                properties: BTreeMap::from([(Property::Calc, "the shipped check".to_owned())]),
                 ..NodeComments::default()
             },
         };
@@ -840,7 +840,7 @@ fiat leaf {
         let text = String::from_utf8(out).expect("UTF-8");
         assert!(
             text.ends_with(
-                "  checked by a solver\n  // the shipped check\n  veriq: \"aocs.check\"\n"
+                "  checked by a solver\n  // the shipped check\n  calc: \"AOCS::?check\"\n"
             ),
             "{text}"
         );

@@ -19,7 +19,7 @@ describe('parseElements', () => {
     const payload = [
       node('a', {
         mode: 'bind',
-        evidence: { kind: 'veriq', target: 'pkg.verify' },
+        evidence: { kind: 'calc', target: 'Pkg::?verify' },
         deadline: { until: 'FM', promote: 'bind' },
       }),
     ]
@@ -27,7 +27,7 @@ describe('parseElements', () => {
     const [element] = parseElements(payload)
 
     expect(element?.data).toMatchObject({
-      evidence: { kind: 'veriq', target: 'pkg.verify' },
+      evidence: { kind: 'calc', target: 'Pkg::?verify' },
       deadline: { until: 'FM', promote: 'bind' },
     })
   })

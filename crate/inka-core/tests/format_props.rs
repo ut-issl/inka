@@ -74,7 +74,7 @@ const INFO_STRINGS: &[&str] = &["md", "rust ignore", "`x"];
 enum Kind {
     Objective { promote: bool },
     Structure,
-    Bind { veriq: bool },
+    Bind { calc: bool },
     Fiat { promote: Option<&'static str> },
 }
 
@@ -93,7 +93,7 @@ fn kind() -> impl Strategy<Value = Kind> {
     prop_oneof![
         any::<bool>().prop_map(|promote| Kind::Objective { promote }),
         Just(Kind::Structure),
-        any::<bool>().prop_map(|veriq| Kind::Bind { veriq }),
+        any::<bool>().prop_map(|calc| Kind::Bind { calc }),
         prop::option::of(prop::sample::select(vec!["structure", "bind"]))
             .prop_map(|promote| Kind::Fiat { promote }),
     ]
@@ -292,8 +292,8 @@ fn properties(block: &GenBlock) -> Vec<Property> {
             }
             properties.push(tokens(&parts));
         }
-        Kind::Bind { veriq } => {
-            let key = if veriq { "veriq" } else { "test" };
+        Kind::Bind { calc } => {
+            let key = if calc { "calc" } else { "test" };
             properties.push(tokens(&[key, ":", "\"tests/x.rs::y\""]));
         }
         Kind::Fiat { .. } => {}
