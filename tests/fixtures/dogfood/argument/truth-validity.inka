@@ -1,30 +1,33 @@
 // Branch 4: truth/validity separation (concept §6).
 
 structure truth_validity_separated {
-  ```
-  Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity — whether the verification is appropriate evidence for the proposition
-  ```
-  children: verification_truth_by_machine, bind_validity_by_human, assumptions_surfaced
+    ```
+    Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity — whether the verification is appropriate evidence for the proposition
+    ```
+    children:
+        verification_truth_by_machine,
+        bind_validity_by_human,
+        assumptions_surfaced
 }
 
 fiat verification_truth_by_machine {
-  ```
-  Verification outcomes are decided mechanically by veriq and CI; eval only reconciles the results and demands no human approval
-  ```
-  until: M8
-  promote: bind
+    ```
+    Verification outcomes are decided mechanically by veriq and CI; eval only reconciles the results and demands no human approval
+    ```
+    until: M8
+    promote: bind
 }
 
 fiat bind_validity_by_human {
-  ```
-  The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval
-  ```
+    ```
+    The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval
+    ```
 }
 
 fiat assumptions_surfaced {
-  ```
-  Every assumption a verification result relies on is aggregated mechanically through the interfaces and presented to the boundary bind approver as the total assumption set
-  ```
-  until: M8
-  promote: bind
+    ```
+    Every assumption a verification result relies on is aggregated mechanically through the interfaces and presented to the boundary bind approver as the total assumption set
+    ```
+    until: M8
+    promote: bind
 }

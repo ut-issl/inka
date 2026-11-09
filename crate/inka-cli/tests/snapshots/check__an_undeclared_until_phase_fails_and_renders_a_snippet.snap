@@ -3,9 +3,9 @@ source: crate/inka-cli/tests/check.rs
 expression: stderr
 ---
 Error: unknown phase `P9` in `until:`; phases.order lists `P0`, `P1`
-    ╭─[ ./argument/main.inka:12:10 ]
+    ╭─[ ./argument/main.inka:12:12 ]
     │
- 12 │   until: P9
-    │          ─┬  
-    │           ╰── unknown phase `P9` in `until:`; phases.order lists `P0`, `P1`
+ 12 │     until: P9
+    │            ─┬  
+    │             ╰── unknown phase `P9` in `until:`; phases.order lists `P0`, `P1`
 ────╯

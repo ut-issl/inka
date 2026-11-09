@@ -1,16 +1,19 @@
 // Branch 4: momentum management.
 
 structure momentum_ok {
-  ```
-  Throughout the mission, accumulated reaction-wheel momentum never reaches saturation, and interruptions to observation operations stay within the planned unloading schedule
-  ```
-  children: actuator_authority_ok, unloading_plan_ok, disturbance_model_valid
+    ```
+    Throughout the mission, accumulated reaction-wheel momentum never reaches saturation, and interruptions to observation operations stay within the planned unloading schedule
+    ```
+    children:
+        actuator_authority_ok,
+        unloading_plan_ok,
+        disturbance_model_valid
 }
 
 fiat unloading_plan_ok {
-  ```
-  Periodic magnetorquer unloading has an unloading capacity exceeding the disturbance momentum accumulation rate, and is compatible with the observation schedule
-  ```
-  until: FM
-  promote: bind
+    ```
+    Periodic magnetorquer unloading has an unloading capacity exceeding the disturbance momentum accumulation rate, and is compatible with the observation schedule
+    ```
+    until: FM
+    promote: bind
 }

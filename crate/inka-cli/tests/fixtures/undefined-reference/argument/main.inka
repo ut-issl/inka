@@ -1,6 +1,6 @@
 objective root {
-  ```
-  the root claim
-  ```
-  children: missing
+    ```
+    the root claim
+    ```
+    children: missing
 }

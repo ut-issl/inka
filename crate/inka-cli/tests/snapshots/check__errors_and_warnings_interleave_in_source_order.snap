@@ -10,16 +10,16 @@ Warning: `orphan` is unreachable from any objective
    │         ╰──── `orphan` is unreachable from any objective
 ───╯
 Error: dependency cycle: a → b → a
-    ╭─[ ./argument/main.inka:12:11 ]
+    ╭─[ ./argument/main.inka:14:11 ]
     │
- 12 │ structure a {
+ 14 │ structure a {
     │           ┬  
     │           ╰── dependency cycle: a → b → a
 ────╯
 Error: undefined reference `missing`
-    ╭─[ ./argument/main.inka:16:16 ]
+    ╭─[ ./argument/main.inka:20:9 ]
     │
- 16 │   children: b, missing
-    │                ───┬───  
-    │                   ╰───── undefined reference `missing`
+ 20 │         missing
+    │         ───┬───  
+    │            ╰───── undefined reference `missing`
 ────╯
