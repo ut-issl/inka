@@ -43,6 +43,8 @@ jobs:
               - '**/Cargo.lock'
               - rust-toolchain.toml
               - 'tests/golden/**'
+              - '**/*.inka'
+              - '**/inka.toml'
               - .github/workflows/rust.yaml
 
   check:
@@ -129,9 +131,39 @@ jobs:
       - name: Run cargo test
         run: cargo test --workspace --locked
 
+  inka-format:
+    name: Check inka format
+    needs: determine-changes
+    if: ${{ needs.determine-changes.outputs.rust == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+
+      - name: Build inka
+        run: cargo build -p inka-cli --locked
+
+      - name: Run inka fmt --check on every project
+        # Every directory holding an inka.toml is a project, fixtures
+        # included; each is checked even after one fails, so a single run
+        # lists every unformatted file.
+        run: |
+          status=0
+          while IFS= read -r manifest; do
+            ./target/debug/inka fmt --check "$(dirname "${manifest}")" || status=1
+          done < <(git ls-files -- 'inka.toml' '*/inka.toml')
+          exit "${status}"
+
   collect:
     name: Collect Rust CI results
-    needs: [determine-changes, check, format, clippy, test]
+    needs: [determine-changes, check, format, clippy, test, inka-format]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
