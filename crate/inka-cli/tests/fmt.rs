@@ -98,6 +98,30 @@ fn fmt_rewrites_unformatted_files_and_then_check_passes() {
         .success();
 }
 
+#[cfg(unix)]
+#[test]
+fn a_rewritten_file_keeps_its_permissions_and_leaves_no_temporary_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Arrange
+    let dir = project(&[("leaf.inka", UNFORMATTED)]);
+    let path = dir.path().join("argument/leaf.inka");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).expect("set permissions");
+
+    // Act
+    inka().arg("fmt").arg(dir.path()).assert().success();
+
+    // Assert
+    assert_eq!(read(&dir, "leaf.inka"), FORMATTED);
+    let mode = fs::metadata(&path).expect("stat").permissions().mode();
+    assert_eq!(mode & 0o777, 0o640);
+    let names: Vec<_> = fs::read_dir(dir.path().join("argument"))
+        .expect("list argument/")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert_eq!(names, ["leaf.inka"]);
+}
+
 #[test]
 fn a_file_that_does_not_parse_is_reported_untouched_while_the_others_are_formatted() {
     // Arrange

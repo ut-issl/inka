@@ -35,18 +35,32 @@ const INDENT: &str = "    ";
 /// # Errors
 ///
 /// Returns the lexer or parser errors of a text that does not parse; such a
-/// text is never formatted.
+/// text is never formatted. As a last line of defence, the output is parsed
+/// again too, and a text whose output would not parse is refused with an
+/// error rather than handed back to be written over the original.
 pub fn format_source<S: BuildHasher>(
     file_id: FileId,
     text: &str,
     values: &HashMap<String, String, S>,
 ) -> Result<String, Vec<Error>> {
+    let parsed = lex_and_parse(file_id, text)?;
+    let formatted = print(&parsed, values);
+    if lex_and_parse(file_id, &formatted).is_err() {
+        return Err(vec![Error::unanchored(
+            "formatting this file would produce text that does not parse, so it is left \
+             as written; this is a bug in the formatter",
+        )]);
+    }
+    Ok(formatted)
+}
+
+fn lex_and_parse(file_id: FileId, text: &str) -> Result<Parse, Vec<Error>> {
     let tokens = Lexer::new(file_id, text)
         .lex()
         .map_err(|error| vec![error])?;
     let parsed = parse(file_id, &tokens);
     if parsed.errors.is_empty() {
-        Ok(print(&parsed, values))
+        Ok(parsed)
     } else {
         Err(parsed.errors)
     }
@@ -222,7 +236,14 @@ impl Printer {
     ) {
         let description = &common.description;
         let fence = "`".repeat(description.fence_length);
-        let info = description.info.as_deref().unwrap_or("");
+        // The info string follows the fence directly, except that one which
+        // itself starts with a backtick would otherwise read as part of a
+        // longer fence.
+        let info = match description.info.as_deref() {
+            Some(info) if info.starts_with('`') => format!(" {info}"),
+            Some(info) => info.to_owned(),
+            None => String::new(),
+        };
         self.line(1, &format!("{fence}{info}"));
         self.text
             .push_str(&fence::content(description, INDENT, values));

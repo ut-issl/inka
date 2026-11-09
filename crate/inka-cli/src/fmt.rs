@@ -6,9 +6,9 @@
 //! snippets as `inka check` and left untouched, while the others are still
 //! formatted, so one broken file never holds the rest back.
 
-use std::fs;
+use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use inka_core::project::{FormattedFile, ProjectFormat, format_project};
 use inka_core::read::DiskText;
@@ -59,7 +59,7 @@ pub fn run(
                 unformatted = true;
             }
             Ok(Some(formatted)) => {
-                if let Err(error) = fs::write(&path, formatted) {
+                if let Err(error) = replace(&path, &formatted) {
                     errors.push(Error::unanchored(format!(
                         "failed to write {}: {error}",
                         path.display()
@@ -80,4 +80,33 @@ pub fn run(
     } else {
         Ok(Outcome::Ok)
     }
+}
+
+/// Replaces the content of `path` with `text` without ever leaving the file
+/// half written: the text goes to a sibling temporary file, which is synced
+/// and then renamed over the original with the original's permissions.
+///
+/// The temporary file does not end in `.inka`, so one left behind by a crash
+/// is never read as part of the argument.
+fn replace(path: &Path, text: &str) -> io::Result<()> {
+    let permissions = fs::metadata(path)?.permissions();
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(".inka-fmt.tmp");
+    let temporary = PathBuf::from(temporary);
+
+    let result = write_synced(&temporary, text)
+        .and_then(|()| fs::set_permissions(&temporary, permissions))
+        .and_then(|()| fs::rename(&temporary, path));
+    if result.is_err() {
+        // Best effort: the original is untouched either way, and the error
+        // that matters is the one being returned.
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn write_synced(path: &Path, text: &str) -> io::Result<()> {
+    let mut file = File::create(path)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()
 }

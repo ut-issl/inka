@@ -321,6 +321,24 @@ fn fences_keep_their_length_and_info_string() {
 }
 
 #[test]
+fn an_info_string_starting_with_a_backtick_stays_apart_from_the_fence() {
+    // Written directly after the fence, "`x" would lengthen it to four
+    // backticks and the three-backtick closing fence would no longer close.
+    let input = "fiat f {\n``` `x\nhello\n```\n}\n";
+    let expected = "fiat f {\n    ``` `x\n    hello\n    ```\n}\n";
+
+    assert_formats(input, expected);
+}
+
+#[test]
+fn a_multi_word_info_string_is_kept_verbatim() {
+    let input = "fiat f {\n```  rust ignore \nhello\n```\n}\n";
+    let expected = "fiat f {\n    ```rust ignore\n    hello\n    ```\n}\n";
+
+    assert_formats(input, expected);
+}
+
+#[test]
 fn crlf_input_is_written_with_lf() {
     let input = "fiat f {\r\n```\r\nf\r\n```\r\n}\r\n";
     let expected = "fiat f {\n    ```\n    f\n    ```\n}\n";

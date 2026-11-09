@@ -20,17 +20,25 @@ use inka_core::source::SourceMap;
 use proptest::prelude::*;
 
 /// The values of every generated project. `multi` spans lines, so a fence
-/// interpolating it may not be safe to re-indent.
+/// interpolating it may not be safe to re-indent; `padded` and `blank` carry
+/// whitespace of their own, and `accent` is not ASCII.
 fn values() -> HashMap<String, String> {
-    [("v", "5 m"), ("multi", "- one\n  - two\n- three")]
-        .into_iter()
-        .map(|(key, value)| (key.to_owned(), value.to_owned()))
-        .collect()
+    [
+        ("v", "5 m"),
+        ("multi", "- one\n  - two\n- three"),
+        ("padded", "  padded"),
+        ("blank", "   "),
+        ("accent", "café"),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+    .collect()
 }
 
 /// Lines a description is built from: plain text, nested text, single- and
-/// multi-line interpolation, an undefined value, blank lines, and text that
-/// would be syntax outside a fence.
+/// multi-line interpolation, values with whitespace of their own, an
+/// undefined value, blank lines, tabs, non-ASCII and non-NFC text, and text
+/// that would be syntax outside a fence.
 const DESCRIPTION_LINES: &[&str] = &[
     "the claim holds",
     "  - a nested item",
@@ -41,9 +49,26 @@ const DESCRIPTION_LINES: &[&str] = &[
     "",
     "text // not a comment",
     "{ braces } and `code`",
+    "\tafter a tab",
+    "café résumé — 日本語",
+    "cafe\u{301} written decomposed",
+    "{$padded} first",
+    "{$blank}",
+    "  {$accent}",
 ];
 
-const COMMENT_TEXTS: &[&str] = &["note", "  indented note", "", "why: {$v} // inner"];
+const COMMENT_TEXTS: &[&str] = &[
+    "note",
+    "  indented note",
+    "",
+    "why: {$v} // inner",
+    "\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30b3}\u{30e1}\u{30f3}\u{30c8}",
+    "cafe\u{301}",
+];
+
+/// Info strings, including one that starts with a backtick and so needs the
+/// space that separates it from the fence.
+const INFO_STRINGS: &[&str] = &["md", "rust ignore", "`x"];
 
 #[derive(Debug, Clone)]
 enum Kind {
@@ -59,7 +84,7 @@ struct GenBlock {
     tags: Vec<&'static str>,
     description: Vec<usize>,
     fence_length: usize,
-    info: bool,
+    info: Option<&'static str>,
     children: Vec<&'static str>,
     until: bool,
 }
@@ -80,7 +105,7 @@ fn block() -> impl Strategy<Value = GenBlock> {
         prop::sample::subsequence(vec!["mission", "aocs", "power"], 0..=2),
         prop::collection::vec(0..DESCRIPTION_LINES.len(), 1..4),
         3usize..=4,
-        any::<bool>(),
+        prop::option::of(prop::sample::select(INFO_STRINGS)),
         prop::collection::vec(prop::sample::select(vec!["a", "b", "ns::c", "d"]), 1..4),
         any::<bool>(),
     )
@@ -194,8 +219,9 @@ impl Writer<'_> {
         let base = " ".repeat(usize::from(self.die() % 7));
         self.indent();
         self.out.push_str(&fence);
-        if block.info {
-            self.out.push_str("md");
+        if let Some(info) = block.info {
+            self.out.push(' ');
+            self.out.push_str(info);
         }
         self.out.push_str(self.newline);
         for &line in &block.description {
@@ -286,7 +312,16 @@ fn properties(block: &GenBlock) -> Vec<Property> {
     properties
 }
 
-fn source(blocks: &[GenBlock], dice: &[u8], newline: &'static str, header: bool) -> String {
+/// The comments a generated file has outside its blocks.
+#[derive(Debug, Clone, Copy)]
+struct Edges {
+    /// A file comment at the top, followed by a blank line.
+    header: bool,
+    /// A comment after the last block, which joins the file comment.
+    footer: bool,
+}
+
+fn source(blocks: &[GenBlock], dice: &[u8], newline: &'static str, edges: Edges) -> String {
     let mut writer = Writer {
         out: String::new(),
         newline,
@@ -295,13 +330,17 @@ fn source(blocks: &[GenBlock], dice: &[u8], newline: &'static str, header: bool)
         at_line_start: true,
         comments: 0,
     };
-    if header {
+    if edges.header {
         writer.out.push_str("// file header");
         writer.out.push_str(newline);
         writer.out.push_str(newline);
     }
     for block in blocks {
         writer.block(block);
+    }
+    if edges.footer {
+        writer.out.push_str("// file footer");
+        writer.out.push_str(newline);
     }
     writer.out
 }
@@ -416,8 +455,9 @@ proptest! {
         dice in prop::collection::vec(any::<u8>(), 1..64),
         newline in prop::sample::select(vec!["\n", "\r\n", "\r"]),
         header in any::<bool>(),
+        footer in any::<bool>(),
     ) {
-        let original = source(&blocks, &dice, newline, header);
+        let original = source(&blocks, &dice, newline, Edges { header, footer });
         let before = parse_text(&original);
         prop_assert!(before.errors.is_empty(), "{:?}\n{original}", before.errors);
 

@@ -181,6 +181,8 @@ pub struct ProjectFormat {
 /// One argument file's formatting.
 #[derive(Debug)]
 pub struct FormattedFile {
+    /// The file's path: the project directory joined with `argument/` and
+    /// the file name.
     pub path: PathBuf,
     /// The canonical text when it differs from the file, `None` when the
     /// file is already formatted, or the errors that keep it from being
