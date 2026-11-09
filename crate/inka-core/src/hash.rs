@@ -58,9 +58,9 @@
 //! comment, the anchor being `block` or a property name. A child entry is the
 //! child's contract text and the comment on the entry (empty when there is
 //! none); entries are sorted by text, then comment, bytewise, so reordering a
-//! `children:` list is not an edit. The bind assumption list is empty until
-//! assumption aggregation lands; the slot is framed now so filling it later is
-//! not a layout change.
+//! `children:` list is not an edit. The bind assumption list holds the
+//! normalized contract text of every node the evidence assumes, sorted
+//! bytewise; a bind whose evidence assumes nothing frames an empty list.
 //!
 //! This layout is frozen by the golden vectors under `tests/golden/hash/v1/`.
 //! An incompatible change ships as a parallel v2 with its own domain tags, so
@@ -237,7 +237,12 @@ impl<'a> From<&'a str> for ChildContract<'a> {
 enum Discharge<'a> {
     /// The direct children's entries, in any order: hashing sorts them.
     Decomposition(Vec<ChildContract<'a>>),
-    Evidence(InterfaceHash),
+    /// The evidence interface and the contract text of every node the
+    /// evidence assumes, in any order: hashing sorts them.
+    Evidence {
+        interface: InterfaceHash,
+        assumptions: Vec<&'a str>,
+    },
     Assertion,
 }
 
@@ -275,18 +280,28 @@ impl<'a> LocalView<'a> {
     }
 
     /// The local view of a bind, which is discharged against evidence.
+    ///
+    /// `assumptions` are the rendered descriptions of the nodes the evidence
+    /// assumes, deduplicated by node upstream; test evidence assumes nothing
+    /// and passes an empty iterator. The approver judges the evidence against
+    /// what it takes for granted, so that text is contract content — the
+    /// assumed nodes' IDs are not.
     #[must_use]
     pub fn bind(
         description: &'a str,
         deadline: Option<&'a Deadline>,
         interface: InterfaceHash,
+        assumptions: impl IntoIterator<Item = &'a str>,
     ) -> Self {
         Self {
             mode: Mode::Bind,
             description,
             deadline,
             comments: None,
-            discharge: Discharge::Evidence(interface),
+            discharge: Discharge::Evidence {
+                interface,
+                assumptions: assumptions.into_iter().collect(),
+            },
         }
     }
 
@@ -317,7 +332,9 @@ impl<'a> LocalView<'a> {
     /// Assembles the local view of one projected node.
     ///
     /// `interface` is the evidence interface hash and is consulted for bind
-    /// nodes only; every other mode ignores it.
+    /// nodes only; every other mode ignores it. The assumption slot of a bind
+    /// assembled here is empty: the evidence that fills it is not part of the
+    /// projected view.
     ///
     /// # Errors
     ///
@@ -344,7 +361,7 @@ impl<'a> LocalView<'a> {
                 let interface = interface.ok_or_else(|| LocalViewError::MissingInterfaceHash {
                     id: node.id.clone(),
                 })?;
-                Self::bind(&node.description, deadline, interface)
+                Self::bind(&node.description, deadline, interface, [])
             }
         };
         Ok(local.with_comments(&node.comments))
@@ -376,12 +393,20 @@ impl<'a> LocalView<'a> {
                 entries.sort_unstable();
                 preimage.entries(&entries);
             }
-            Discharge::Evidence(interface) => {
+            Discharge::Evidence {
+                interface,
+                assumptions,
+            } => {
                 preimage.field(interface.as_bytes());
-                // The assumption slot, empty until assumption aggregation
-                // lands. Framing it now keeps filling it from being a layout
-                // change that would invalidate every recorded bind approval.
-                preimage.list::<String>(&[]);
+                // Bytewise on the normalized text: which node an assumption
+                // came from, and in what order the producer listed it, is
+                // filing, not contract.
+                let mut assumed: Vec<String> = assumptions
+                    .iter()
+                    .map(|assumption| normalize::description(assumption))
+                    .collect();
+                assumed.sort_unstable();
+                preimage.list(&assumed);
             }
             Discharge::Assertion => {}
         }
@@ -578,7 +603,7 @@ mod tests {
         let objective = LocalView::objective("the claim", None, NO_CHILDREN).view_hash();
         let structure = LocalView::structure("the claim", None, NO_CHILDREN).view_hash();
         let fiat = LocalView::fiat("the claim", None).view_hash();
-        let bind = LocalView::bind("the claim", None, INTERFACE).view_hash();
+        let bind = LocalView::bind("the claim", None, INTERFACE, []).view_hash();
 
         // Assert: the domain tag separates them.
         let distinct = [objective, structure, fiat, bind];
@@ -792,15 +817,66 @@ mod tests {
     #[test]
     fn the_evidence_interface_hash_is_part_of_a_bind_hash() {
         // Arrange & Act: same contract, a different test behind it.
-        let one = LocalView::bind("checked in CI", None, INTERFACE).view_hash();
+        let one = LocalView::bind("checked in CI", None, INTERFACE, []).view_hash();
         let other = LocalView::bind(
             "checked in CI",
             None,
             InterfaceHash::from_bytes([0x22; DIGEST_LEN]),
+            [],
         )
         .view_hash();
 
         assert_ne!(one, other);
+    }
+
+    #[test]
+    fn an_assumption_is_part_of_a_bind_hash() {
+        // Arrange & Act: same contract and evidence, assuming more.
+        let bare = LocalView::bind("checked in CI", None, INTERFACE, []).view_hash();
+        let assuming =
+            LocalView::bind("checked in CI", None, INTERFACE, ["the model holds"]).view_hash();
+
+        // Assert
+        assert_ne!(bare, assuming);
+    }
+
+    #[test]
+    fn assumption_order_and_formatting_are_not_contract() {
+        // Arrange & Act: the same two assumptions, listed differently.
+        let declared = LocalView::bind(
+            "checked in CI",
+            None,
+            INTERFACE,
+            ["the model holds", "  the mass is known  "],
+        )
+        .view_hash();
+        let reordered = LocalView::bind(
+            "checked in CI",
+            None,
+            INTERFACE,
+            ["the mass is known", "the model holds"],
+        )
+        .view_hash();
+
+        // Assert: normalized, then sorted bytewise.
+        assert_eq!(declared, reordered);
+    }
+
+    #[test]
+    fn rewording_an_assumption_changes_a_bind_hash() {
+        // Arrange & Act
+        let before =
+            LocalView::bind("checked in CI", None, INTERFACE, ["the model holds"]).view_hash();
+        let after = LocalView::bind(
+            "checked in CI",
+            None,
+            INTERFACE,
+            ["the model holds in orbit"],
+        )
+        .view_hash();
+
+        // Assert
+        assert_ne!(before, after);
     }
 
     #[test]

@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.space.t.u-tokyo.ac.jp/inka/schemas/calc-evidence-v1.schema.json",
+  "title": "Inka calc evidence v1",
+  "description": "Evidence JSON emitted by a calculation-graph producer (veriq is the first) and read by an inka project. Each target is one verification a `calc:` bind can reference, carried with the reviewable source of its whole definition-level upstream subgraph, the inka nodes that subgraph assumes, and the leaf results the target must satisfy. Target paths are opaque to inka and must be unique within a loaded evidence set; the loader rejects duplicates.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "provenance": {
+      "description": "Descriptive metadata such as the evaluated source revision or the capsula run ID. Never used for evaluation; unknown keys are permitted and ignored.",
+      "type": "object",
+      "properties": {
+        "source_revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "capsula_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "The target verification's path in the producer's graph, referenced by `calc:` in a bind. For veriq it is `Scope::?name`.",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S+$"
+          },
+          "definitions": {
+            "description": "The target's definition-level upstream subgraph, the target itself included: every root model, calculation and verification it depends on, each once. Paths are unique within a target.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "description": "The definition's path in the producer's graph, e.g. `Power::$Config`, `Power::@budget`, `Power::?verify_margin`.",
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\S+$"
+                },
+                "kind": {
+                  "description": "What the definition is. Presentation metadata; it does not enter the interface hash.",
+                  "enum": [
+                    "model",
+                    "calculation",
+                    "verification"
+                  ]
+                },
+                "source": {
+                  "description": "Human-reviewable source string of the definition, CRLF/LF as produced (the consumer normalizes CRLF to LF before hashing). Nothing else is normalized: comments and formatting are content.",
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "path",
+                "kind",
+                "source"
+              ]
+            }
+          },
+          "assumes": {
+            "description": "The inka nodes this target's upstream subgraph assumes: the set-style union over the definitions' declared assumptions, deduplicated. Each entry is a fully-qualified inka node ID (`namespace::id`, or a bare `id` for a root-level node). The IDs are resolved by inka against the argument; the referenced nodes' contract text fills the bind hash's assumption slot.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_-]*(::[A-Za-z_][A-Za-z0-9_-]*)*$"
+            }
+          },
+          "leaves": {
+            "description": "The required leaf results of the target verification: one entry per leaf of its output (a scalar verification has one leaf, identified by the target path). Every leaf is required for the target to pass; omitting `result` declares a leaf whose result is missing. Leaf IDs are unique within a target.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\S+$"
+                },
+                "result": {
+                  "description": "The verification outcome at this leaf.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "valid": {
+            "description": "Whether the producer's own validity conditions hold for the target (for veriq: every verification the subgraph marks with `@vq.assume` passed). A target with `valid: false` does not pass, whatever its leaf results.",
+            "type": "boolean"
+          },
+          "xfail": {
+            "description": "Whether the producer marks the target as an expected failure. An expected failure never passes; it is reported as such. Defaults to false.",
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "path",
+          "definitions",
+          "assumes",
+          "leaves",
+          "valid"
+        ]
+      }
+    }
+  },
+  "required": [
+    "v",
+    "targets"
+  ]
+}

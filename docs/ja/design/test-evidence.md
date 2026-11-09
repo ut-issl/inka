@@ -145,7 +145,7 @@ pull` を持つcapsula(リリース0.14.0より新しいもの)が必要。
 
    ```toml
    [evidence]
-   files = ["evidence/test-evidence.json"]
+   tests = ["evidence/test-evidence.json"]
    ```
 
 2. 届いたファイルがpullしたrunのものであることを確認する:

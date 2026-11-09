@@ -1,0 +1,12 @@
+# A source delivered with CRLF line endings and trailing spaces. CRLF becomes
+# LF; the trailing spaces and the indentation stay content. Written as TOML
+# escapes so a checkout cannot rewrite what is being frozen.
+comment = "CRLF→LF is the only normalization; trailing whitespace and indentation are content"
+target = "Power::?verify_margin"
+leaves = ["Power::?verify_margin"]
+interface_hash = "sha256:501c0bd36ad48f60ca662047c2dc978f2011cc58d74fd71e451926ad29970911"
+
+[[definitions]]
+path = "Power::?verify_margin"
+source = "@power.verification()\r\ndef verify_margin(budget: PowerBudget) -> bool:  \r\n    return budget.margin_w > 0\r\n"
+normalized_source = "@power.verification()\ndef verify_margin(budget: PowerBudget) -> bool:  \n    return budget.margin_w > 0\n"

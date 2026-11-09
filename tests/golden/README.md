@@ -18,7 +18,9 @@ or removed.
 ## Layout
 
 ```text
-hash/v1/    // view-hash vectors for the v1 layout (`spec.md` → Hashing (v1))
+hash/v1/                 // view-hash vectors for the v1 layout (`spec.md` → Hashing (v1))
+hash/test-evidence-v1/   // test-evidence interface hashes (`test-evidence.md`)
+hash/calc-evidence-v1/   // calc-evidence interface hashes (`calc-evidence.md`)
 ```
 
 Each file is one vector: the inputs a local view is built from, the normal form

@@ -190,7 +190,7 @@ Requires a capsula with `capsula pull` (newer than release 0.14.0).
 
    ```toml
    [evidence]
-   files = ["evidence/test-evidence.json"]
+   tests = ["evidence/test-evidence.json"]
    ```
 
 2. Check that the delivered file belongs to the pulled run:

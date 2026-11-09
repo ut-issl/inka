@@ -1,0 +1,23 @@
+# Definitions and leaves are deliberately listed out of order: both are sorted
+# bytewise before framing, so this freezes the sorting step and the fact that
+# every upstream definition — root model, calculation, verification — enters
+# the hash with its path.
+comment = "definitions sort by path and leaves by id; producer order is not content"
+target = "Power::?verify_margin"
+leaves = ["Power::?verify_margin.eclipse", "Power::?verify_margin.daylight"]
+interface_hash = "sha256:8354aaed8760d5837ce5e9f21063e00936bd2f972cb9e5ffbae715e02f5862c9"
+
+[[definitions]]
+path = "Power::?verify_margin"
+source = "@power.verification()\ndef verify_margin(budget: PowerBudget) -> Table[Phase, bool]:\n    return budget.margin_w.map(lambda m: m > 0)\n"
+normalized_source = "@power.verification()\ndef verify_margin(budget: PowerBudget) -> Table[Phase, bool]:\n    return budget.margin_w.map(lambda m: m > 0)\n"
+
+[[definitions]]
+path = "Power::$Config"
+source = "@power.root_model()\nclass Config(BaseModel):\n    generation_w: Table[Phase, float]\n    consumption_w: Table[Phase, float]\n"
+normalized_source = "@power.root_model()\nclass Config(BaseModel):\n    generation_w: Table[Phase, float]\n    consumption_w: Table[Phase, float]\n"
+
+[[definitions]]
+path = "Power::@budget"
+source = "@power.calculation(metadata={\"inka\": {\"assumes\": [\"power::eclipse_model_valid\"]}})\ndef budget(config: Config) -> PowerBudget:\n    return PowerBudget(margin_w=config.generation_w - config.consumption_w)\n"
+normalized_source = "@power.calculation(metadata={\"inka\": {\"assumes\": [\"power::eclipse_model_valid\"]}})\ndef budget(config: Config) -> PowerBudget:\n    return PowerBudget(margin_w=config.generation_w - config.consumption_w)\n"
