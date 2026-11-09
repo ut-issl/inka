@@ -40,6 +40,26 @@ builder.add_target(
 text = builder.finish()
 ```
 
+## veriq adapter
+
+With the `veriq` extra (`inka-evidence[veriq]`, Python 3.14), the
+`inka-evidence-veriq` script evaluates a veriq project and emits one calc
+evidence target per verification: the sources of its definition-level
+upstream subgraph (root model with nested model and enum classes,
+calculations with their output models, verifications), the inka node IDs
+the subgraph declares under `metadata={"inka": {"assumes": [...]}}`, and
+its leaf results, validity and `xfail`.
+
+```console
+$ inka-evidence-veriq path/to/project.py --input project.in.toml \
+    --output calc-evidence.json \
+    --provenance source_revision=$(git rev-parse HEAD)
+```
+
+`--input` defaults to `[tool.veriq].input` of the nearest `pyproject.toml`;
+`--target Scope::?name` (repeatable) restricts the emitted verifications.
+Inside `capsula run`, `capsula_run_id` is filled from the environment.
+
 ## pytest adapter
 
 Installing the package registers a pytest plugin (entry point
