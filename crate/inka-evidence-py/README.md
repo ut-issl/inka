@@ -55,7 +55,14 @@ it reaches — through the root model's fields or a function's return
 annotation, type arguments, PEP 695 aliases and base classes — each once,
 in name order. Classes of veriq, pydantic and the standard library are left
 out, so upgrading those leaves approvals alone; a class of any other
-package counts as project code and is part of the source.
+package counts as project code and is part of the source. An enum that
+`@vq.with_range` generated has no text of its own and is emitted as the
+list of its members.
+
+Helper functions and module constants that a definition merely calls or
+reads are in no source. Editing one can change a result without changing
+what was approved, so logic that must be approved again when it changes
+belongs in a veriq calculation.
 
 ```console
 $ inka-evidence-veriq path/to/project.py --input project.in.toml \
