@@ -42,6 +42,7 @@ jobs:
               - '**/Cargo.toml'
               - '**/Cargo.lock'
               - rust-toolchain.toml
+              - deny.toml
               - 'tests/golden/**'
               - '**/*.inka'
               - '**/inka.toml'
@@ -161,9 +162,36 @@ jobs:
           done < <(git ls-files -- 'inka.toml' '*/inka.toml')
           exit "${status}"
 
+  licenses:
+    name: Check dependency licenses
+    needs: determine-changes
+    if: ${{ needs.determine-changes.outputs.rust == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+        with:
+          cache: false
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: cargo-deny
+
+      - name: Run cargo deny
+        # Every dependency's license must be on the allow list in deny.toml.
+        run: cargo deny --locked check licenses
+
   collect:
     name: Collect Rust CI results
-    needs: [determine-changes, check, format, clippy, test, inka-format]
+    needs: [determine-changes, check, format, clippy, test, inka-format, licenses]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

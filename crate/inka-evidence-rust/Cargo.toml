@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Rust test adapter emitting inka test evidence from cargo-nextest runs"
+license.workspace = true
 publish.workspace = true
 
 [[bin]]

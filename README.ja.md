@@ -82,7 +82,7 @@ inka serve tests/fixtures/aocs
 - [`web/README.md`](web/README.md) — ビューアと `inka export` の契約，および開発方法
 - `inka <command> --help` — 各コマンドの全オプション
 
-## pre-commit の予定トアップ
+## pre-commit のセットアップ
 
 このリポジトリでは，[pre-commit](https://pre-commit.com) と互換性のある [prek](https://prek.j178.dev) を推奨しています。
 
@@ -91,3 +91,12 @@ prek install --hook-type pre-commit --hook-type pre-push
 ```
 
 `pre-commit` を使う場合は，上のコマンドの `prek` を `pre-commit` に置き換えてください。
+
+## ライセンス
+
+次のいずれかのライセンスで提供します。どちらを適用するかは利用者が選べます。
+
+- Apache License, Version 2.0([LICENSE-APACHE](LICENSE-APACHE) または <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license([LICENSE-MIT](LICENSE-MIT) または <https://opensource.org/licenses/MIT>)
+
+明示的に別段の意思表示をしない限り，Apache-2.0 ライセンスの定義に従って本プロジェクトに取り込まれることを意図して提出されたあらゆる貢献は，追加の条件なしに上記のデュアルライセンスで提供されるものとします。
