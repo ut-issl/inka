@@ -39,7 +39,7 @@
 //! is a different test. The layout is frozen by the vectors under
 //! `tests/golden/hash/calc-evidence-v1/`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -247,6 +247,19 @@ pub enum CalcEvidenceError {
         #[source]
         reason: InvalidCalcEvidence,
     },
+    /// Two entries of `[evidence] calcs` — two files, or one file listed
+    /// twice — deliver the same target. Neither file is defective alone.
+    #[error(
+        "calc evidence file `{}` delivers target `{target}`, which `{}` already delivered; \
+         a target path must be unique across `[evidence] calcs`",
+        path.display(),
+        first.display()
+    )]
+    DuplicateTarget {
+        path: PathBuf,
+        first: PathBuf,
+        target: String,
+    },
 }
 
 impl CalcEvidenceError {
@@ -271,14 +284,16 @@ impl CalcEvidenceError {
 ///
 /// Returns a [`CalcEvidenceError`] when a file cannot be read, is not valid
 /// v1 JSON, declares a version other than 1, or fails a semantic check of the
-/// shared crate ([`InvalidCalcEvidence`]) — including a target path delivered
-/// twice, within one file or across files.
+/// shared crate ([`InvalidCalcEvidence`]) — including a target path repeated
+/// within one file — or when a later entry of `files` delivers a target an
+/// earlier one already did ([`CalcEvidenceError::DuplicateTarget`]).
 pub fn load_files(
     base_dir: &Path,
     files: &[PathBuf],
     reader: &dyn ReadText,
 ) -> Result<CalcEvidenceSet, CalcEvidenceError> {
     let mut set = CalcEvidenceSet::default();
+    let mut delivered_by: HashMap<String, PathBuf> = HashMap::new();
     for relative in files {
         let path = base_dir.join(relative);
         let text = reader
@@ -290,6 +305,16 @@ pub fn load_files(
         let targets = inka_evidence::calc::parse(&text)
             .map_err(|error| CalcEvidenceError::of_file(error, path.clone()))?;
         for target in targets {
+            // `parse` already refused a repeat within the file, so a target
+            // seen before came from an earlier entry of the list.
+            if let Some(first) = delivered_by.get(&target.path) {
+                return Err(CalcEvidenceError::DuplicateTarget {
+                    path,
+                    first: first.clone(),
+                    target: target.path,
+                });
+            }
+            delivered_by.insert(target.path.clone(), path.clone());
             set.insert(target)
                 .map_err(|reason| CalcEvidenceError::Invalid {
                     path: path.clone(),

@@ -330,10 +330,40 @@ fn duplicate_target_paths_are_rejected_across_files() {
         .load(&[first, second])
         .expect_err("a duplicate across files");
 
-    // Assert: the second file is the one reported.
+    // Assert: neither file is defective on its own, so the error names the
+    // pair and the target, anchored on the file that came second.
+    let CalcEvidenceError::DuplicateTarget {
+        path,
+        first,
+        target,
+    } = &error
+    else {
+        panic!("got: {error}");
+    };
+    assert!(path.ends_with("second.json"), "got: {error}");
+    assert!(first.ends_with("first.json"), "got: {error}");
+    assert_eq!(target, "P::?v");
+    let message = error.to_string();
+    assert!(message.contains("second.json"), "got: {message}");
+    assert!(message.contains("first.json"), "got: {message}");
+    assert!(message.contains("[evidence] calcs"), "got: {message}");
+}
+
+#[test]
+fn a_file_listed_twice_is_reported_as_delivering_its_targets_twice() {
+    // Arrange
+    let scratch = Scratch::new("listed-twice");
+    let file = scratch.write("calcs.json", VALID);
+
+    // Act
+    let error = scratch
+        .load(&[file.clone(), file])
+        .expect_err("the same file twice");
+
+    // Assert: the file is valid, so it must not be called invalid.
     assert!(
-        matches!(error, CalcEvidenceError::Invalid { .. }),
+        matches!(error, CalcEvidenceError::DuplicateTarget { .. }),
         "got: {error}"
     );
-    assert!(error.to_string().contains("second.json"), "got: {error}");
+    assert!(!error.to_string().contains("invalid"), "got: {error}");
 }

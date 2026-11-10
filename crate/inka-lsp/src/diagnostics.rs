@@ -126,7 +126,9 @@ fn anchor_of(error: &LoadError) -> Option<PathBuf> {
             CalcEvidenceError::Unreadable { path, .. }
             | CalcEvidenceError::Malformed { path, .. }
             | CalcEvidenceError::UnsupportedVersion { path, .. }
-            | CalcEvidenceError::Invalid { path, .. } => path.clone(),
+            | CalcEvidenceError::Invalid { path, .. }
+            // The later file is the surprising one; the first stands.
+            | CalcEvidenceError::DuplicateTarget { path, .. } => path.clone(),
         }),
         // Directory-shape problems have no file an editor could open; the
         // manifest that implies the layout is the anchor.

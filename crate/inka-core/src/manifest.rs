@@ -98,6 +98,11 @@ pub enum ManifestError {
     DuplicatePhase { name: String },
     #[error("phases.current `{name}` is not listed in phases.order")]
     CurrentPhaseNotInOrder { name: String },
+    #[error(
+        "`[evidence] files` is now `[evidence] tests`; rename the key \
+         (calc evidence files go under `[evidence] calcs`)"
+    )]
+    RetiredEvidenceFiles,
 }
 
 /// Parses and validates the text of an `inka.toml` file.
@@ -107,11 +112,30 @@ pub enum ManifestError {
 /// Returns a [`ManifestError`] when the TOML is malformed, contains unknown
 /// keys, has an empty or blank `project.name`, has an empty `phases.order` or
 /// a blank phase name in it, repeats a phase in `phases.order`, or names a
-/// `phases.current` that `phases.order` does not contain.
+/// `phases.current` that `phases.order` does not contain. A manifest still
+/// using `[evidence] files` is told the key's new name instead of "unknown".
 pub fn parse_manifest(text: &str) -> Result<Manifest, ManifestError> {
-    let manifest: Manifest = toml::from_str(text)?;
+    let manifest: Manifest = toml::from_str(text).map_err(|error| {
+        if names_retired_evidence_files(text) {
+            ManifestError::RetiredEvidenceFiles
+        } else {
+            ManifestError::Toml(error)
+        }
+    })?;
     validate(&manifest)?;
     Ok(manifest)
+}
+
+/// Whether `text` has an `[evidence] files` key: what `[evidence] tests` was
+/// called while test evidence was the only kind. Asked only after the strict
+/// read has failed, to say what to rename rather than "unknown field".
+fn names_retired_evidence_files(text: &str) -> bool {
+    toml::from_str::<toml::Table>(text).is_ok_and(|manifest| {
+        manifest
+            .get("evidence")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|evidence| evidence.contains_key("files"))
+    })
 }
 
 fn validate(manifest: &Manifest) -> Result<(), ManifestError> {

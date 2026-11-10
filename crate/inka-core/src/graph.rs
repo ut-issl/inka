@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
 use petgraph::Direction;
 use petgraph::algo::{tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::{Dfs, EdgeRef};
+use petgraph::visit::{Dfs, EdgeFiltered, EdgeRef};
 
 use crate::ast::{Block, SourceRef};
 use crate::calc_evidence::CalcEvidenceSet;
@@ -352,13 +352,34 @@ impl<'p> Graph<'p> {
     /// One representative cycle per strongly connected component, so an
     /// empty result proves the graph is a DAG.
     ///
-    /// Each cycle lists its nodes in edge order starting from the component's
-    /// smallest node; the closing edge back to the start is implied.
+    /// A component that holds a cycle of `children:` references alone is
+    /// represented by one (its smallest): that cycle is in the argument as
+    /// written and stands whatever the evidence says, so it is not to be
+    /// reported as the doing of an assumption that merely shares its nodes.
+    ///
+    /// Each cycle lists its nodes in edge order starting from its smallest
+    /// node; the closing edge back to the start is implied.
     #[must_use]
     pub fn cycles(&self) -> Vec<Vec<NodeId>> {
+        let declared =
+            EdgeFiltered::from_fn(&self.graph, |edge| *edge.weight() == Dependency::Child);
+        let mut declared_cycles: Vec<Vec<NodeId>> = tarjan_scc(&declared)
+            .into_iter()
+            .filter_map(|component| self.cycle_within(&component, Some(Dependency::Child)))
+            .collect();
+        declared_cycles.sort_unstable();
+
         let mut cycles: Vec<Vec<NodeId>> = tarjan_scc(&self.graph)
             .into_iter()
-            .filter_map(|component| self.cycle_within(&component))
+            .filter_map(|component| {
+                // A cycle lies inside one component, so its first node
+                // decides which component it belongs to.
+                declared_cycles
+                    .iter()
+                    .find(|cycle| component.contains(&cycle[0].index()))
+                    .cloned()
+                    .or_else(|| self.cycle_within(&component, None))
+            })
             .collect();
         cycles.sort_unstable();
         cycles
@@ -384,9 +405,11 @@ impl<'p> Graph<'p> {
     ///
     /// - no objective block, including an empty graph → error, unanchored
     ///   because it concerns the project as a whole
-    /// - a dependency cycle → error naming the full path, with each
-    ///   assumption edge drawn as `⇢` and the error anchored on the `calc:`
-    ///   reference that brought the first such edge in
+    /// - a dependency cycle → error naming the full path, one per group of
+    ///   mutually dependent nodes, with each assumption edge drawn as `⇢` and
+    ///   the error anchored on the `calc:` reference that brought the first
+    ///   such edge in; a cycle of `children:` alone is the one named when the
+    ///   group has both kinds
     /// - a node no objective reaches → warning, in the warnings lane so it
     ///   never fails the check
     ///
@@ -467,12 +490,21 @@ impl<'p> Graph<'p> {
 
     /// Finds a cycle inside one strongly connected component, or `None` when
     /// the component is a single node without a self-loop.
-    fn cycle_within(&self, component: &[NodeIndex]) -> Option<Vec<NodeId>> {
+    ///
+    /// `only` narrows the edges walked to one kind; the component must then
+    /// be strongly connected by edges of that kind alone.
+    fn cycle_within(
+        &self,
+        component: &[NodeIndex],
+        only: Option<Dependency>,
+    ) -> Option<Vec<NodeId>> {
         let start = *component.iter().min()?;
         if component.len() == 1 {
+            // At most one edge joins two nodes, so this is the self-loop.
             return self
                 .graph
                 .find_edge(start, start)
+                .filter(|&edge| only.is_none_or(|kind| self.graph[edge] == kind))
                 .map(|_| vec![NodeId::from_index(start)]);
         }
 
@@ -482,7 +514,7 @@ impl<'p> Graph<'p> {
         // is examined while that node is still on the stack, so the search
         // always closes the cycle before the stack empties.
         let mut visited = HashSet::from([start]);
-        let mut stack = vec![(start, self.component_neighbors(start, &members))];
+        let mut stack = vec![(start, self.component_neighbors(start, &members, only))];
         loop {
             let Some((_, neighbors)) = stack.last_mut() else {
                 unreachable!("a multi-node strongly connected component contains a cycle");
@@ -501,7 +533,7 @@ impl<'p> Graph<'p> {
                 }
                 Some(next) => {
                     if visited.insert(next) {
-                        let next_neighbors = self.component_neighbors(next, &members);
+                        let next_neighbors = self.component_neighbors(next, &members, only);
                         stack.push((next, next_neighbors));
                     }
                 }
@@ -509,12 +541,20 @@ impl<'p> Graph<'p> {
         }
     }
 
-    /// Out-neighbors of `node` inside the component, sorted descending so
-    /// that popping from the back visits the smallest node first.
-    fn component_neighbors(&self, node: NodeIndex, members: &HashSet<NodeIndex>) -> Vec<NodeIndex> {
+    /// Out-neighbors of `node` inside the component, along edges of kind
+    /// `only` when one is given, sorted descending so that popping from the
+    /// back visits the smallest node first.
+    fn component_neighbors(
+        &self,
+        node: NodeIndex,
+        members: &HashSet<NodeIndex>,
+        only: Option<Dependency>,
+    ) -> Vec<NodeIndex> {
         let mut neighbors: Vec<NodeIndex> = self
             .graph
-            .neighbors_directed(node, Direction::Outgoing)
+            .edges_directed(node, Direction::Outgoing)
+            .filter(|edge| only.is_none_or(|kind| *edge.weight() == kind))
+            .map(|edge| edge.target())
             .filter(|neighbor| members.contains(neighbor))
             .collect();
         neighbors.sort_unstable_by(|a, b| b.cmp(a));
@@ -1274,6 +1314,94 @@ bind modelled {
             messages,
             ["dependency cycle through an assumption: branch → modelled ⇢ root → branch"]
         );
+    }
+
+    #[test]
+    fn a_cycle_of_children_alone_is_named_even_when_an_assumption_closes_another() {
+        // Arrange: `x ↔ y` is a cycle of the argument as written. The
+        // evidence adds a second way round (`m ⇢ a`) through the same nodes,
+        // and a search from the smallest node meets that one first.
+        let blocks = blocks(
+            "\
+objective a {
+  ```
+  a
+  ```
+  children: x
+}
+structure x {
+  ```
+  x
+  ```
+  children: y
+}
+structure y {
+  ```
+  y
+  ```
+  children: x, m
+}
+bind m {
+  ```
+  m
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+",
+        );
+        let evidence = calc_evidence(TARGET, &["a"]);
+
+        // Act
+        let diagnostics = check_structure(&blocks, &evidence);
+
+        // Assert: one error for the component, and it is the cycle no
+        // evidence can take away, anchored in the argument and not on `calc:`.
+        let messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(messages, ["dependency cycle: x → y → x"]);
+        assert_eq!(diagnostics.errors[0].span, Some(blocks[1].common().id.span));
+    }
+
+    #[test]
+    fn a_self_referencing_child_is_named_before_a_cycle_through_an_assumption() {
+        // Arrange: `s` lists itself, and sits on a cycle the evidence closes.
+        let blocks = blocks(
+            "\
+objective a {
+  ```
+  a
+  ```
+  children: s
+}
+structure s {
+  ```
+  s
+  ```
+  children: s, m
+}
+bind m {
+  ```
+  m
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+",
+        );
+        let evidence = calc_evidence(TARGET, &["a"]);
+
+        // Act
+        let diagnostics = check_structure(&blocks, &evidence);
+
+        // Assert
+        let messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(messages, ["dependency cycle: s → s"]);
     }
 
     #[test]
