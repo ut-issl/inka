@@ -19,7 +19,14 @@
 //! results, and the assumed nodes — diffed against the snapshot of the bind's
 //! most recently approved view when one exists. Approving a calc bind writes
 //! that snapshot (`approvals/snapshots/<hex>.json`), content-addressed by the
-//! approved hash, so the next reviewer sees what changed.
+//! approved hash, so the next reviewer sees what changed. The snapshot goes
+//! first and the record second, so a record never names a view whose
+//! snapshot could not be written. A baseline that cannot be read is a
+//! warning, never a refusal: the bind is shown in full, as on a first
+//! approval, and every decision stays available.
+//!
+//! Everything a file can put into a message — a path, a parser's quotation
+//! of what it found — passes [`sanitize`] on its way to the terminal.
 
 use std::io::{self, BufRead, Write};
 use std::path::Path;
@@ -137,7 +144,10 @@ pub fn run(
         Action::Single { target, decision } => {
             let answer = single(&context, &view, target, decision, &mut session);
             match answer {
-                Ok(line) => {
+                Ok(Confirmation { line, warning }) => {
+                    if let Some(warning) = warning {
+                        warn(&warning, err)?;
+                    }
                     writeln!(out, "{line}")?;
                     Ok(Outcome::Ok)
                 }
@@ -198,6 +208,9 @@ struct CalcPresentation<'a> {
     target: &'a CalcTarget,
     assumed: Vec<&'a ViewNode>,
     baseline: Option<Baseline<'a>>,
+    /// Why there is no baseline although an approval's snapshot file exists:
+    /// the file could not be read as a snapshot. To be reported, not acted on.
+    baseline_warning: Option<String>,
 }
 
 impl CalcPresentation<'_> {
@@ -209,6 +222,12 @@ impl CalcPresentation<'_> {
 /// Resolves what a calc bind is presented with, or `None` for every other
 /// node and for a calc bind whose evidence is not loaded (which the queue
 /// reports as blocked and the single form refuses before getting here).
+///
+/// A baseline snapshot that exists but cannot be read is no baseline: the
+/// presentation says why in `baseline_warning` and is otherwise that of a
+/// first approval. A snapshot is a presentation aid, and a damaged aid must
+/// not stand between a reviewer and a decision. An older, readable snapshot
+/// is not used instead — it is not what was last approved.
 fn calc_presentation<'a>(
     context: &ReviewContext<'a>,
     view: &'a ArgumentView,
@@ -227,26 +246,38 @@ fn calc_presentation<'a>(
         .as_ref()
         .expect("a resolved bind carries its reference")
         .target;
-    let baseline = snapshot::baseline(&context.snapshots_dir(), context.records, node)
-        .map_err(|error| error.to_string())?;
+    let (baseline, baseline_warning) =
+        match snapshot::baseline(&context.snapshots_dir(), context.records, node) {
+            Ok(baseline) => (baseline, None),
+            Err(error) => (None, Some(format!("{error}; reviewing without a baseline"))),
+        };
     Ok(Some(CalcPresentation {
         path,
         target,
         assumed,
         baseline,
+        baseline_warning,
     }))
+}
+
+/// What the single-target form reports on success.
+struct Confirmation {
+    /// The line naming what was recorded and where.
+    line: String,
+    /// A finding that did not stop the decision.
+    warning: Option<String>,
 }
 
 /// Records one decision on one named target, whatever its queue state: an
 /// extra approval or a veto is a judgement too, and counting is eval's job.
-/// Returns the confirmation line, or the failure to report.
+/// Returns the confirmation, or the failure to report.
 fn single(
     context: &ReviewContext<'_>,
     view: &ArgumentView,
     target: &str,
     decision: &Decision,
     session: &mut Session<'_>,
-) -> Result<String, String> {
+) -> Result<Confirmation, String> {
     let Some(node) = view.node(target) else {
         return Err(format!("no block named `{target}` in the argument"));
     };
@@ -255,7 +286,12 @@ fn single(
         Decision::Approve { comment } => (ReviewLabel::Approve, comment.clone()),
         Decision::Decline { comment } => (ReviewLabel::Decline, Some(comment.clone())),
     };
-    let calc = calc_presentation(context, view, node)?;
+    // Only an approval snapshots what it covers; a decline needs neither
+    // the snapshot nor the baseline, so it never reads either.
+    let calc = match label {
+        ReviewLabel::Approve => calc_presentation(context, view, node)?,
+        ReviewLabel::Decline => None,
+    };
     let decision = Recorded {
         node,
         current_hash,
@@ -274,7 +310,10 @@ fn single(
     if let Some(path) = snapshot {
         line = format!("{line}; snapshot {}", path.display());
     }
-    Ok(line)
+    Ok(Confirmation {
+        line,
+        warning: calc.and_then(|calc| calc.baseline_warning),
+    })
 }
 
 /// Walks the actionable queue one target at a time, reading `a`/`d`/`s`/`q`.
@@ -314,12 +353,20 @@ fn interactive(
         let node = view
             .node(&item.id)
             .expect("the queue names nodes of the same view");
-        // A snapshot that exists but cannot be read is a repository problem,
-        // not something to review around: stop before any decision.
         let calc = match calc_presentation(context, view, node) {
             Ok(calc) => calc,
             Err(message) => return fail(&message, err, color),
         };
+        if let Some(warning) = calc
+            .as_ref()
+            .and_then(|calc| calc.baseline_warning.as_deref())
+        {
+            // Before the target it is about and after everything already
+            // said, as a failed write is reported next to its prompt.
+            out.flush()?;
+            warn(warning, err)?;
+            err.flush()?;
+        }
         write_target(node, item, index + 1, total, view, calc.as_ref(), out)?;
         let decision = match prompt_decision(session, out)? {
             Answer::Approve => Some((ReviewLabel::Approve, None)),
@@ -461,10 +508,16 @@ struct Recorded<'a> {
 }
 
 /// Builds and appends one record — the only write path the command has —
-/// and, on the approval of a calc bind, writes the snapshot of the approved
-/// view. Returns the snapshot's path, relative to the project, when one
-/// belongs to the decision (whether this approval wrote it or an earlier
+/// after writing, on the approval of a calc bind, the snapshot of the
+/// approved view. Returns the snapshot's path, relative to the project, when
+/// one belongs to the decision (whether this approval wrote it or an earlier
 /// approval of the same view already had).
+///
+/// The snapshot goes first: if it cannot be written nothing is recorded, and
+/// running the command again is the whole remedy. The other order would
+/// leave a record whose retry appends a duplicate. A snapshot whose record
+/// then fails to append is harmless — it is addressed by the hash of exactly
+/// that view, and read only through a record that names it.
 fn write_record(
     context: &ReviewContext<'_>,
     decision: &Recorded<'_>,
@@ -493,19 +546,22 @@ fn write_record(
         ),
     }
     .map_err(|error| error.to_string())?;
+
+    let snapshot = match (decision.label, &decision.snapshot) {
+        (ReviewLabel::Approve, Some(snapshot)) => {
+            snapshot::write(&context.snapshots_dir(), decision.current_hash, snapshot)
+                .map_err(|error| format!("{error}; the approval was not recorded"))?;
+            Some(
+                Path::new(APPROVALS_DIR)
+                    .join(snapshot::SNAPSHOTS_DIR)
+                    .join(Snapshot::file_name(decision.current_hash)),
+            )
+        }
+        (ReviewLabel::Approve, None) | (ReviewLabel::Decline, _) => None,
+    };
     approvals::append(&context.project_dir.join(APPROVALS_DIR), &record)
         .map_err(|error| error.to_string())?;
-
-    let (ReviewLabel::Approve, Some(snapshot)) = (decision.label, &decision.snapshot) else {
-        return Ok(None);
-    };
-    snapshot::write(&context.snapshots_dir(), decision.current_hash, snapshot)
-        .map_err(|error| format!("the approval was recorded, but {error}"))?;
-    Ok(Some(
-        Path::new(APPROVALS_DIR)
-            .join(snapshot::SNAPSHOTS_DIR)
-            .join(Snapshot::file_name(decision.current_hash)),
-    ))
+    Ok(snapshot)
 }
 
 /// The view hash a decision recorded now would name, or why none exists.
@@ -646,8 +702,16 @@ fn write_target(
 /// nodes with their descriptions. The assumed set is shown against the
 /// baseline snapshot when one exists — `=` unchanged, `+` added, `-`
 /// removed, `~` reworded with the earlier text as `(was)` — and in full,
-/// saying so, when none does.
+/// saying so, when none does. A baseline approved against another target
+/// path says so first, as a `~ target:` entry: the bind was re-pointed, and
+/// the diff below it compares across that change.
 fn write_calc_evidence(calc: &CalcPresentation<'_>, out: &mut impl Write) -> io::Result<()> {
+    if let Some(baseline) = &calc.baseline
+        && baseline.snapshot.target != calc.path
+    {
+        write_indented(&format!("~ target: {}", calc.path), 2, out)?;
+        write_indented(&format!("(was) {}", baseline.snapshot.target), 6, out)?;
+    }
     writeln!(out, "  sources:")?;
     for definition in &calc.target.definitions {
         write_indented(
@@ -678,7 +742,7 @@ fn write_calc_evidence(calc: &CalcPresentation<'_>, out: &mut impl Write) -> io:
         .collect();
     let Some(baseline) = &calc.baseline else {
         if current.is_empty() {
-            return writeln!(out, "  assumes: (none)");
+            return writeln!(out, "  assumes: ({})", count(0));
         }
         writeln!(
             out,
@@ -739,12 +803,13 @@ fn write_calc_evidence(calc: &CalcPresentation<'_>, out: &mut impl Write) -> io:
     Ok(())
 }
 
-/// `1 node` / `n nodes`.
+/// `none` / `1 node` / `n nodes`: the one spelling of a set's size, with or
+/// without a baseline beside it.
 fn count(nodes: usize) -> String {
-    if nodes == 1 {
-        "1 node".to_owned()
-    } else {
-        format!("{nodes} nodes")
+    match nodes {
+        0 => "none".to_owned(),
+        1 => "1 node".to_owned(),
+        _ => format!("{nodes} nodes"),
     }
 }
 
@@ -806,21 +871,35 @@ fn write_indented(text: &str, indent: usize, out: &mut impl Write) -> io::Result
     Ok(())
 }
 
-/// Text out of a source file or a record, made safe for the terminal.
+/// Text out of a source file, a record, a snapshot or an error quoting one,
+/// made safe for the terminal.
 ///
 /// Control characters must not reach it, where an escape sequence could spoof
-/// the prompt the reviewer answers; tabs are ordinary content. Bidirectional
-/// embedding, override, and isolate controls go too, so text cannot be shown
-/// in an order other than the one that was hashed. Other format characters,
-/// such as the joiners emoji are built from, stay.
+/// the prompt the reviewer answers; tabs are ordinary content. The line and
+/// paragraph separators go for the same reason: a terminal may break the line
+/// at one, and what follows would read as a line of its own. Bidirectional
+/// marks, embedding, override, and isolate controls go too, so text cannot be
+/// shown in an order other than the one that was hashed. Other format
+/// characters, such as the joiners emoji are built from, stay.
 fn sanitize(line: &str) -> String {
     line.chars()
-        .filter(|&c| (!c.is_control() || c == '\t') && !is_bidi_control(c))
+        .filter(|&c| (!c.is_control() || c == '\t') && !is_line_separator(c) && !is_bidi_control(c))
         .collect()
 }
 
+/// U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR: line breaks that are
+/// not control characters.
+fn is_line_separator(c: char) -> bool {
+    matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// The Arabic letter mark, the left-to-right and right-to-left marks, and the
+/// embedding, override and isolate controls.
 fn is_bidi_control(c: char) -> bool {
-    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+    matches!(
+        c,
+        '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
 }
 
 fn state_line(state: &QueueState) -> String {
@@ -853,13 +932,23 @@ fn blocked_line(reason: &BlockedReason) -> String {
 }
 
 /// Reports one unanchored error through the shared rendering path.
+///
+/// The message is sanitized here, once, for every caller: an error may quote
+/// what a file holds — a parser naming an unknown field, a path — and none of
+/// that may reach the terminal raw.
 fn fail(message: &str, err: &mut impl Write, color: bool) -> io::Result<Outcome> {
     let diagnostics = Diagnostics {
-        errors: vec![Error::unanchored(message.to_owned())],
+        errors: vec![Error::unanchored(sanitize(message))],
         warnings: Vec::new(),
     };
     render(&SourceMap::new(), &diagnostics, err, color)?;
     Ok(Outcome::Failed)
+}
+
+/// Reports one finding that does not fail the command, on one sanitized line
+/// spelled as the shared rendering spells an unanchored warning.
+fn warn(message: &str, err: &mut impl Write) -> io::Result<()> {
+    writeln!(err, "warning: {}", sanitize(message))
 }
 
 /// The current instant in the record spelling, truncated to whole seconds.
@@ -914,6 +1003,12 @@ mod tests {
     /// Runs the interactive form against `dir` with `answers` as scripted
     /// terminal input, returning the outcome and the captured stdout.
     fn run_interactive_bytes(dir: &Path, answers: &[u8]) -> (Outcome, String) {
+        let (outcome, transcript, _) = run_session(dir, answers);
+        (outcome, transcript)
+    }
+
+    /// [`run_interactive_bytes`], with the captured stderr as well.
+    fn run_session(dir: &Path, answers: &[u8]) -> (Outcome, String, String) {
         let request = Request {
             approver: "alice".to_owned(),
             key_id: None,
@@ -937,6 +1032,7 @@ mod tests {
         (
             outcome,
             String::from_utf8(out).expect("the transcript is UTF-8"),
+            String::from_utf8(err).expect("the findings are UTF-8"),
         )
     }
 
@@ -1290,8 +1386,276 @@ fiat table_complete {
         );
         assert_eq!(snapshot.definitions.len(), 2);
         assert_eq!(snapshot.definitions[1].path, "Power::@budget");
-        // A decline writes no snapshot; the test bind path is unaffected.
         assert_eq!(record_lines(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn declining_a_calc_bind_in_a_session_writes_no_snapshot() {
+        // Arrange
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+
+        // Act
+        let transcript = run_interactive(dir.path(), "d\nthe margin is too thin\nq\n");
+
+        // Assert: the decline is recorded and named without a snapshot.
+        assert!(
+            transcript.contains("recorded decline of bind:margin_ok\n"),
+            "{transcript}"
+        );
+        assert_eq!(record_lines(dir.path()).len(), 1);
+        assert_eq!(snapshot_files(dir.path()), Vec::<PathBuf>::new());
+        assert!(!dir.path().join("approvals/snapshots").exists());
+    }
+
+    /// Approves the calc bind as alice and returns its one snapshot file.
+    fn approved_snapshot(dir: &Path) -> PathBuf {
+        run_interactive(dir, "a\nq\n");
+        let files = snapshot_files(dir);
+        assert_eq!(files.len(), 1, "{files:?}");
+        files[0].clone()
+    }
+
+    /// Makes the approved bind stale by assuming one more node.
+    fn assume_the_table_too(dir: &Path) {
+        fs::write(
+            dir.join("calc-evidence.json"),
+            calc_evidence(&["model_valid", "table_complete"]),
+        )
+        .expect("the evidence rewrites");
+    }
+
+    #[test]
+    fn an_unreadable_baseline_snapshot_warns_and_the_session_shows_the_full_set() {
+        // Arrange: an approval whose snapshot was cut short, then a change
+        // that brings the bind back.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        let baseline = approved_snapshot(dir.path());
+        let text = fs::read_to_string(&baseline).expect("reads");
+        fs::write(&baseline, &text[..text.len() / 2]).expect("truncates");
+        assume_the_table_too(dir.path());
+
+        // Act: the session reaches the bind, and the reviewer approves it.
+        let (outcome, transcript, findings) = run_session(dir.path(), b"a\nq\n");
+
+        // Assert: a warning naming the file, the full set as for a first
+        // approval, and a session that went on to record the decision.
+        assert!(matches!(outcome, Outcome::Ok), "{findings}");
+        let name = baseline.file_name().expect("a name").to_string_lossy();
+        assert!(
+            findings.starts_with("warning: snapshot ") && findings.contains(&*name),
+            "{findings}"
+        );
+        assert_eq!(findings.lines().count(), 1, "{findings}");
+        assert!(
+            transcript.contains(
+                "\
+  assumes: (2 nodes; no snapshot of an earlier approval, full set)
+    model_valid
+      the eclipse model envelopes reality
+    table_complete
+      the load table covers every mode
+"
+            ),
+            "{transcript}"
+        );
+        assert!(
+            transcript
+                .contains("recorded approve of bind:margin_ok; snapshot approvals/snapshots/"),
+            "{transcript}"
+        );
+        assert!(transcript.contains("decisions recorded: 1"), "{transcript}");
+        assert_eq!(snapshot_files(dir.path()).len(), 2);
+    }
+
+    #[test]
+    fn a_snapshot_of_another_version_warns_and_the_session_goes_on() {
+        // Arrange: the baseline was written by a build with another format.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        let baseline = approved_snapshot(dir.path());
+        fs::write(&baseline, r#"{"v": 2, "target": "t", "sources": {}}"#).expect("rewrites");
+        assume_the_table_too(dir.path());
+
+        // Act
+        let (outcome, transcript, findings) = run_session(dir.path(), b"s\nq\n");
+
+        // Assert
+        assert!(matches!(outcome, Outcome::Ok), "{findings}");
+        assert!(findings.contains("has version 2"), "{findings}");
+        assert!(
+            transcript.contains("no snapshot of an earlier approval, full set"),
+            "{transcript}"
+        );
+    }
+
+    #[test]
+    fn hostile_text_in_a_snapshot_never_reaches_the_terminal_raw() {
+        // Arrange: a well-formed baseline whose strings carry an erase
+        // sequence, a title change, a bell and a right-to-left override.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        let baseline = approved_snapshot(dir.path());
+        let hostile = r"\u001b[2J\u001b]0;pwn\u0007\u202e";
+        fs::write(
+            &baseline,
+            format!(
+                r#"{{"v": 1, "target": "{hostile}t",
+                    "assumptions": [{{"id": "{hostile}gone", "description": "{hostile}was\nhere"}},
+                                    {{"id": "model_valid", "description": "{hostile}earlier"}}],
+                    "definitions": [{{"path": "{hostile}p", "kind": "model", "source": "{hostile}s"}}]}}"#
+            ),
+        )
+        .expect("rewrites");
+        assume_the_table_too(dir.path());
+
+        // Act
+        let (outcome, transcript, findings) = run_session(dir.path(), b"s\nq\n");
+
+        // Assert: the baseline was used — its strings are on screen — and
+        // none of the controls came with them.
+        assert!(matches!(outcome, Outcome::Ok), "{findings}");
+        assert!(
+            transcript.contains("    - [2J]0;pwngone\n"),
+            "{transcript:?}"
+        );
+        assert!(
+            transcript.contains("(was) [2J]0;pwnearlier\n"),
+            "{transcript:?}"
+        );
+        for stream in [&transcript, &findings] {
+            assert!(
+                !stream.contains(['\u{1b}', '\u{7}', '\u{202e}']),
+                "{stream:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hostile_field_name_in_a_snapshot_is_reported_without_its_controls() {
+        // Arrange: the parser's error quotes the unknown field's name.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        let baseline = approved_snapshot(dir.path());
+        fs::write(
+            &baseline,
+            r#"{"v": 1, "\u001b[2J\u001b]0;pwn\u0007\u2028\u202e": 1}"#,
+        )
+        .expect("rewrites");
+        assume_the_table_too(dir.path());
+
+        // Act
+        let (outcome, transcript, findings) = run_session(dir.path(), b"s\nq\n");
+
+        // Assert: the name is there, defused.
+        assert!(matches!(outcome, Outcome::Ok), "{findings}");
+        assert!(
+            findings.contains("unknown field `[2J]0;pwn`"),
+            "{findings:?}"
+        );
+        for stream in [&transcript, &findings] {
+            assert!(
+                !stream.contains(['\u{1b}', '\u{7}', '\u{2028}', '\u{202e}']),
+                "{stream:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_repointed_calc_reference_is_shown_against_the_approved_target() {
+        // Arrange: approve, then point the bind at another target of the
+        // same evidence file.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        approved_snapshot(dir.path());
+        fs::write(
+            dir.path().join("argument/arg.inka"),
+            CALC_ARGUMENT.replace("Power::?verify_margin", "Power::?verify_margin_eol"),
+        )
+        .expect("the argument rewrites");
+        fs::write(
+            dir.path().join("calc-evidence.json"),
+            calc_evidence(&["model_valid"])
+                .replace("Power::?verify_margin", "Power::?verify_margin_eol"),
+        )
+        .expect("the evidence rewrites");
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\nq\n");
+
+        // Assert: the change of target is said, not silently diffed across.
+        assert!(
+            transcript.contains(
+                "\
+  calc: \"Power::?verify_margin_eol\"
+  ~ target: Power::?verify_margin_eol
+      (was) Power::?verify_margin
+  sources:
+"
+            ),
+            "{transcript}"
+        );
+    }
+
+    #[test]
+    fn an_unchanged_target_gets_no_target_line() {
+        // Arrange
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        approved_snapshot(dir.path());
+        assume_the_table_too(dir.path());
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\nq\n");
+
+        // Assert
+        assert!(!transcript.contains("target:"), "{transcript}");
+    }
+
+    #[test]
+    fn an_empty_assumption_set_reads_none_with_or_without_a_baseline() {
+        // Arrange: a target assuming nothing.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&[]));
+
+        // Act: look at it before any approval; approve it; make it stale
+        // through a source edit and look again; then against a baseline
+        // that assumed something.
+        let first = run_interactive(dir.path(), "a\nq\n");
+        fs::write(
+            dir.path().join("calc-evidence.json"),
+            calc_evidence(&[]).replace("-> Budget: ...", "-> Budget:\\n    return Budget()"),
+        )
+        .expect("the evidence rewrites");
+        let second = run_interactive(dir.path(), "s\nq\n");
+
+        // Assert: one spelling of the empty set.
+        assert!(first.contains("  assumes: (none)\n"), "{first}");
+        assert!(
+            second.contains(
+                "  assumes: (none; unchanged since the approval by alice at 2026-11-01T00:00:00Z)\n"
+            ),
+            "{second}"
+        );
+        assert!(!second.contains("0 nodes"), "{second}");
+    }
+
+    #[test]
+    fn a_snapshot_that_cannot_be_written_records_nothing_and_counts_nothing() {
+        // Arrange: the snapshots directory's name is taken by a file.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        fs::create_dir(dir.path().join("approvals")).expect("the approvals directory creates");
+        fs::write(dir.path().join("approvals/snapshots"), "").expect("the file writes");
+
+        // Act: the reviewer approves the bind.
+        let (outcome, transcript, findings) = run_session(dir.path(), b"a\nq\n");
+
+        // Assert: no record without its snapshot, said plainly, and a count
+        // that does not claim the decision.
+        assert!(matches!(outcome, Outcome::Failed), "{transcript}");
+        assert!(
+            findings.starts_with("error: failed to write snapshot ")
+                && findings.contains("the approval was not recorded"),
+            "{findings}"
+        );
+        assert!(
+            transcript.contains("decisions recorded: 0; targets remaining: 4"),
+            "{transcript}"
+        );
+        assert_eq!(record_lines(dir.path()), Vec::<String>::new());
     }
 
     #[test]
@@ -1402,6 +1766,10 @@ fiat table_complete {
     fn sanitize_drops_controls_and_bidi_controls_but_keeps_tabs_and_joiners() {
         assert_eq!(sanitize("a\u{1b}b\tc"), "ab\tc");
         assert_eq!(sanitize("\u{2066}x\u{2069}\u{202A}y\u{202E}"), "xy");
+        // The implicit marks reorder text too, and the line and paragraph
+        // separators break a line where no newline was written.
+        assert_eq!(sanitize("a\u{061C}b\u{200E}c\u{200F}d"), "abcd");
+        assert_eq!(sanitize("one\u{2028}two\u{2029}three"), "onetwothree");
         // A zero-width joiner builds emoji; it is not a bidi control.
         assert_eq!(
             sanitize("\u{1F469}\u{200D}\u{1F4BB}"),
