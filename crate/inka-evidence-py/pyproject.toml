@@ -3,6 +3,7 @@ name = "inka-evidence"
 version = "0.1.0"
 description = "Emit inka test evidence v1 JSON from Python test adapters"
 requires-python = ">=3.10"
+license = "MIT OR Apache-2.0"
 
 [project.scripts]
 inka-evidence-merge = "inka_evidence.merge_cli:main"

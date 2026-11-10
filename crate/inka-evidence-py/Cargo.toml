@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Python binding over the inka-evidence emission layer"
+license.workspace = true
 publish.workspace = true
 
 [lib]

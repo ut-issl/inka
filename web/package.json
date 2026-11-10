@@ -1,6 +1,7 @@
 {
   "name": "inka-web",
   "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
   "private": true,
   "type": "module",
   "description": "Read-only viewer for an inka argument graph, served by `inka serve`.",
