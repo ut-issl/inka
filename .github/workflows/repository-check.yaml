@@ -383,6 +383,26 @@ jobs:
           fi
           echo 'tests/golden only gained entries.'
 
+  check-versions:
+    name: Check package versions agree
+    # Always run: a version can drift through any manifest or lockfile.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the release script
+        run: python3 -m unittest discover -s scripts -v
+
+      - name: Check every package carries the workspace version
+        run: python3 scripts/release.py check
+
   check-prek:
     name: Check prek
     runs-on: ubuntu-latest
@@ -439,6 +459,7 @@ jobs:
       - lint-toml
       - lint-yaml
       - check-golden-vectors
+      - check-versions
       - check-prek
       - check-typos
     if: ${{ !cancelled() }}
