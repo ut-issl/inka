@@ -148,7 +148,9 @@ fn invalid_targets_are_rejected_at_add_time_and_leave_the_builder_unchanged() {
     spaced.path = "Power:: ?verify_margin".to_owned();
     assert_eq!(
         builder.add_target(spaced),
-        Err(InvalidCalcEvidence::InvalidTargetPath)
+        Err(InvalidCalcEvidence::InvalidTargetPath {
+            path: "Power:: ?verify_margin".to_owned()
+        })
     );
 
     let mut undefined = minimal(TARGET);
@@ -162,7 +164,10 @@ fn invalid_targets_are_rejected_at_add_time_and_leave_the_builder_unchanged() {
     blank_path.definitions[0].path = String::new();
     assert_eq!(
         builder.add_target(blank_path),
-        Err(InvalidCalcEvidence::InvalidDefinitionPath { target: target() })
+        Err(InvalidCalcEvidence::InvalidDefinitionPath {
+            target: target(),
+            path: String::new()
+        })
     );
 
     let mut twice = minimal(TARGET);
@@ -223,7 +228,10 @@ fn invalid_targets_are_rejected_at_add_time_and_leave_the_builder_unchanged() {
     blank_leaf.leaves[0].id = " ".to_owned();
     assert_eq!(
         builder.add_target(blank_leaf),
-        Err(InvalidCalcEvidence::InvalidLeafId { target: target() })
+        Err(InvalidCalcEvidence::InvalidLeafId {
+            target: target(),
+            id: " ".to_owned()
+        })
     );
 
     let mut leaf_twice = minimal(TARGET);
@@ -305,10 +313,67 @@ fn capsula_run_id_fills_only_when_absent() {
     assert!(!blank.finish().contains("capsula_run_id"));
 }
 
+/// Every character with the Unicode `White_Space` property: what
+/// "whitespace" means for a path or a leaf ID.
+fn white_space() -> Vec<char> {
+    let mut chars = vec!['\t', '\n', '\u{b}', '\u{c}', '\r', ' ', '\u{85}', '\u{a0}'];
+    chars.push('\u{1680}');
+    chars.extend('\u{2000}'..='\u{200a}');
+    chars.extend(['\u{2028}', '\u{2029}', '\u{202f}', '\u{205f}', '\u{3000}']);
+    chars
+}
+
+/// One minimal file whose target path, definition path and leaf ID are `path`.
+fn file_with_path(path: &str) -> String {
+    let target = serde_json::to_value(minimal(path)).expect("serializable");
+    serde_json::json!({"v": 1, "targets": [target]}).to_string()
+}
+
+#[test]
+fn whitespace_means_unicode_white_space_to_the_parser_and_the_schema_alike() {
+    // The list the schema's patterns spell out is exactly Rust's notion.
+    let listed = white_space();
+    let unicode: Vec<char> = ('\0'..=char::MAX).filter(|c| c.is_whitespace()).collect();
+    assert_eq!(listed, unicode);
+
+    for c in listed {
+        let text = file_with_path(&format!("P{c}::?v"));
+        let value: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+
+        assert!(
+            matches!(
+                parse(&text),
+                Err(CalcParseError::Invalid(
+                    InvalidCalcEvidence::InvalidTargetPath { .. }
+                ))
+            ),
+            "the parser admitted U+{:04X}",
+            u32::from(c)
+        );
+        assert!(
+            !SCHEMA.is_valid(&value),
+            "the schema admitted U+{:04X}",
+            u32::from(c)
+        );
+    }
+}
+
+#[test]
+fn invisible_characters_outside_white_space_are_path_content() {
+    // `\s` matches some of these in some regex dialects; the contract does
+    // not, and neither side may be stricter than the other.
+    for c in ['\u{feff}', '\u{200b}', '\u{180e}', '\u{1c}'] {
+        let text = file_with_path(&format!("P{c}::?v"));
+
+        assert!(parse(&text).is_ok(), "U+{:04X}", u32::from(c));
+        assert_conforms(&text);
+    }
+}
+
 /// A stable name for one validation defect, for cross-direction comparison.
 fn defect(reason: &InvalidCalcEvidence) -> &'static str {
     match reason {
-        InvalidCalcEvidence::InvalidTargetPath => "invalid-target-path",
+        InvalidCalcEvidence::InvalidTargetPath { .. } => "invalid-target-path",
         InvalidCalcEvidence::NoDefinitions { .. } => "no-definitions",
         InvalidCalcEvidence::InvalidDefinitionPath { .. } => "invalid-definition-path",
         InvalidCalcEvidence::DuplicateDefinition { .. } => "duplicate-definition",

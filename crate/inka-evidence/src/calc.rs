@@ -23,18 +23,36 @@ use crate::provenance::{self, Provenance};
 /// The calc evidence format version this crate reads and writes.
 pub const VERSION: u64 = 1;
 
+/// Just the version stamp. Read on its own before the v1 shape is imposed,
+/// so a newer file is refused for its version and not for the keys v1 lacks.
+#[derive(Debug, Deserialize)]
+struct Versioned {
+    v: u64,
+}
+
 /// The file envelope: the version stamp, open provenance, and the targets.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireFile {
+    #[expect(dead_code, reason = "admits the key; `Versioned` already read it")]
     v: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     #[expect(
         dead_code,
         reason = "enforces the object shape; evaluation never reads it"
     )]
     provenance: Option<Provenance>,
     targets: Vec<Target>,
+}
+
+/// Reads an optional key that must hold a value when it is written: the
+/// schema spells "missing" as an absent key, so `null` is an error.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 /// One target as the wire carries it.
@@ -93,12 +111,16 @@ pub enum DefinitionKind {
 /// One required leaf of a target and its observed result.
 ///
 /// `result` is `None` when the leaf was declared but no result was reported.
-/// Emission writes a missing result as an absent key, never as `null`.
+/// A missing result is an absent key in both directions, never `null`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Leaf {
     pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present"
+    )]
     pub result: Option<bool>,
 }
 
@@ -117,12 +139,14 @@ impl Leaf {
 /// or that this crate enforces on both directions for the schema's sake.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InvalidCalcEvidence {
-    #[error("a target path is blank or contains whitespace")]
-    InvalidTargetPath,
+    #[error("target path {path:?} is blank or contains whitespace")]
+    InvalidTargetPath { path: String },
     #[error("target `{target}` declares no definitions")]
     NoDefinitions { target: String },
-    #[error("target `{target}` has a definition whose path is blank or contains whitespace")]
-    InvalidDefinitionPath { target: String },
+    #[error(
+        "target `{target}` has a definition whose path {path:?} is blank or contains whitespace"
+    )]
+    InvalidDefinitionPath { target: String, path: String },
     #[error("target `{target}` declares definition `{path}` more than once")]
     DuplicateDefinition { target: String, path: String },
     #[error("target `{target}` has an empty source for definition `{path}`")]
@@ -135,8 +159,8 @@ pub enum InvalidCalcEvidence {
     DuplicateAssumption { target: String, id: String },
     #[error("target `{target}` declares no leaves")]
     NoLeaves { target: String },
-    #[error("target `{target}` has a leaf whose id is blank or contains whitespace")]
-    InvalidLeafId { target: String },
+    #[error("target `{target}` has a leaf whose id {id:?} is blank or contains whitespace")]
+    InvalidLeafId { target: String, id: String },
     #[error("target `{target}` declares leaf `{id}` more than once")]
     DuplicateLeaf { target: String, id: String },
     #[error("target path `{target}` appears more than once in the loaded evidence")]
@@ -166,10 +190,11 @@ pub enum CalcParseError {
 /// a version other than [`VERSION`], or fails a semantic check: see
 /// [`InvalidCalcEvidence`] for the rules.
 pub fn parse(text: &str) -> Result<Vec<Target>, CalcParseError> {
-    let wire: WireFile = serde_json::from_str(text)?;
-    if wire.v != VERSION {
-        return Err(CalcParseError::UnsupportedVersion { found: wire.v });
+    let Versioned { v } = serde_json::from_str(text)?;
+    if v != VERSION {
+        return Err(CalcParseError::UnsupportedVersion { found: v });
     }
+    let wire: WireFile = serde_json::from_str(text)?;
 
     let mut seen = BTreeSet::new();
     for target in &wire.targets {
@@ -184,7 +209,8 @@ pub fn parse(text: &str) -> Result<Vec<Target>, CalcParseError> {
     Ok(wire.targets)
 }
 
-/// Whether `text` is a path the schema accepts: nonempty, no whitespace.
+/// Whether `text` is a path the schema accepts: nonempty, with no character
+/// of the Unicode `White_Space` property (the set the schema's patterns list).
 fn is_path(text: &str) -> bool {
     !text.is_empty() && !text.chars().any(char::is_whitespace)
 }
@@ -207,7 +233,9 @@ fn is_node_id(text: &str) -> bool {
 /// Checks one target against the rules both directions share.
 pub(crate) fn check(target: &Target) -> Result<(), InvalidCalcEvidence> {
     if !is_path(&target.path) {
-        return Err(InvalidCalcEvidence::InvalidTargetPath);
+        return Err(InvalidCalcEvidence::InvalidTargetPath {
+            path: target.path.clone(),
+        });
     }
     let name = || target.path.clone();
 
@@ -217,7 +245,10 @@ pub(crate) fn check(target: &Target) -> Result<(), InvalidCalcEvidence> {
     let mut paths = BTreeSet::new();
     for definition in &target.definitions {
         if !is_path(&definition.path) {
-            return Err(InvalidCalcEvidence::InvalidDefinitionPath { target: name() });
+            return Err(InvalidCalcEvidence::InvalidDefinitionPath {
+                target: name(),
+                path: definition.path.clone(),
+            });
         }
         if !paths.insert(definition.path.as_str()) {
             return Err(InvalidCalcEvidence::DuplicateDefinition {
@@ -258,7 +289,10 @@ pub(crate) fn check(target: &Target) -> Result<(), InvalidCalcEvidence> {
     let mut leaves = BTreeSet::new();
     for leaf in &target.leaves {
         if !is_path(&leaf.id) {
-            return Err(InvalidCalcEvidence::InvalidLeafId { target: name() });
+            return Err(InvalidCalcEvidence::InvalidLeafId {
+                target: name(),
+                id: leaf.id.clone(),
+            });
         }
         if !leaves.insert(leaf.id.as_str()) {
             return Err(InvalidCalcEvidence::DuplicateLeaf {
@@ -393,6 +427,64 @@ mod tests {
             error,
             CalcParseError::UnsupportedVersion { found: 2 }
         ));
+    }
+
+    #[test]
+    fn a_newer_version_is_named_before_its_shape_is_judged() {
+        // A v2 file may carry keys v1 does not know; the reader must say
+        // "v2", not "unknown field".
+        let text = r#"{"v": 2, "digest": "x", "targets": [{"shape": "new"}]}"#;
+
+        let error = parse(text).expect_err("v2 is not this format");
+
+        assert!(matches!(
+            error,
+            CalcParseError::UnsupportedVersion { found: 2 }
+        ));
+    }
+
+    #[test]
+    fn a_null_result_is_rejected_as_the_schema_rejects_it() {
+        // A missing result is an absent key; `null` is not a boolean.
+        let text = r#"{"v": 1, "targets": [{"path": "P::?v",
+            "definitions": [{"path": "P::?v", "kind": "verification", "source": "s"}],
+            "assumes": [], "leaves": [{"id": "P::?v", "result": null}], "valid": true}]}"#;
+
+        assert!(matches!(parse(text), Err(CalcParseError::Json(_))));
+    }
+
+    #[test]
+    fn a_null_provenance_is_rejected_as_the_schema_rejects_it() {
+        let text = r#"{"v": 1, "provenance": null, "targets": []}"#;
+
+        assert!(matches!(parse(text), Err(CalcParseError::Json(_))));
+    }
+
+    #[test]
+    fn an_invalid_path_or_leaf_id_is_named_with_its_whitespace_visible() {
+        let target = |path: &str, definition: &str, leaf: &str| Target {
+            path: path.to_owned(),
+            definitions: vec![Definition::new(
+                definition,
+                DefinitionKind::Verification,
+                "s",
+            )],
+            assumes: Vec::new(),
+            leaves: vec![Leaf::new(leaf, Some(true))],
+            valid: true,
+            xfail: false,
+        };
+
+        let messages = [
+            target("P::\t?v", "P::\t?v", "P::?v"),
+            target("P::?v", "P::\u{a0}?v", "P::?v"),
+            target("P::?v", "P::?v", "P::?v .cell"),
+        ]
+        .map(|target| check(&target).expect_err("invalid").to_string());
+
+        assert!(messages[0].contains(r#""P::\t?v""#), "{}", messages[0]);
+        assert!(messages[1].contains(r#""P::\u{a0}?v""#), "{}", messages[1]);
+        assert!(messages[2].contains(r#""P::?v .cell""#), "{}", messages[2]);
     }
 
     #[test]
