@@ -13,9 +13,10 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 use inka_core::approvals;
+use inka_core::calc_evidence;
 use inka_core::evidence;
 use inka_core::graph::Graph;
-use inka_core::hash::LocalView;
+use inka_core::hash::{EvidenceContract, LocalView};
 use inka_core::project::load_project;
 use inka_core::record::{Record, RecordFields, Target};
 use inka_core::view::ArgumentView;
@@ -58,8 +59,10 @@ fn path_defaults_to_the_current_directory() {
 #[test]
 fn each_failure_kind_is_blamed_on_the_failing_node_alone() {
     // Act: the fixture holds one node per failure kind — missing, stale,
-    // declined, expired, and binds with missing, failing and incomplete
-    // evidence plus the calc stub — under one unapproved objective.
+    // declined, expired, test binds with missing, failing and incomplete
+    // evidence, and calc binds with missing evidence, false and missing
+    // leaves, a failed validity condition, an expected failure and an
+    // unestablished assumption — under one unapproved objective.
     // The declined leaf also has a current approval, exercising the veto.
     let assert = inka()
         .current_dir(local_fixture("unestablished"))
@@ -116,8 +119,8 @@ fn the_json_report_matches_the_human_verdict() {
 #[test]
 fn the_json_report_spells_every_blame_cause() {
     // Act: the fixture exercises every blame cause the JSON contract has —
-    // missing, stale, declined, expired, missing/failed/incomplete evidence,
-    // and the calc stub.
+    // missing, stale, declined, expired, missing/failed/incomplete test
+    // evidence, and every calc evidence cause.
     let assert = inka()
         .current_dir(local_fixture("unestablished"))
         .args(["eval", "--json", "."])
@@ -181,6 +184,25 @@ fn a_bind_established_through_loaded_evidence_evaluates_clean() {
         .assert()
         .success()
         .stdout("established 2/2\n")
+        .stderr("");
+}
+
+#[test]
+fn a_calc_bind_established_through_loaded_evidence_evaluates_clean() {
+    // Arrange: the manifest's [evidence] calcs file carries a passing target
+    // that assumes the fiat; every approval is bound to the current hashes,
+    // the bind's carrying the interface hash and the fiat's description.
+    let project = calc_evidence_project("calc-evidence-clean");
+
+    // Act & Assert: the closing condition of #40 end to end — calc evidence
+    // loaded from disk through the manifest establishes the bind, assumption
+    // included.
+    inka()
+        .arg("eval")
+        .arg(&project)
+        .assert()
+        .success()
+        .stdout("established 3/3\n")
         .stderr("");
 }
 
@@ -253,8 +275,92 @@ fn evidence_project(name: &str) -> PathBuf {
     let view = ArgumentView::build(&graph, &project.source_map);
     let interface = evidence::interface_hash(EVIDENCE_TEST_ID, EVIDENCE_BODY, &["default"]);
     for node in &view.nodes {
-        let bind_interface = (node.mode == inka_core::view::Mode::Bind).then_some(interface);
+        let bind_interface =
+            (node.mode == inka_core::view::Mode::Bind).then(|| EvidenceContract::from(interface));
         let hash = LocalView::of_node(&view, node, bind_interface)
+            .expect("fixture nodes should be hashable")
+            .view_hash();
+        let record = Record::approve(
+            RecordFields {
+                target: Target::new(node.mode, &node.id).expect("a valid target"),
+                view_hash: hash,
+                approver: "iwata".to_owned(),
+                key_id: "iwata-2026".to_owned(),
+                timestamp: "2026-09-10T08:30:00Z".parse().expect("a valid timestamp"),
+                phase: "M1".to_owned(),
+                until: None,
+                policy_hash: None,
+            },
+            None,
+        )
+        .expect("a valid record");
+        approvals::append(&dir.join("approvals"), &record)
+            .expect("the record should be appendable");
+    }
+    dir
+}
+
+/// The contract fixtures of the calc-evidence-established project.
+const CALC_TARGET: &str = "AOCS::?verify_detumble";
+const CALC_SOURCE: &str =
+    "@aocs.verification()\ndef verify_detumble(r: Result) -> bool:\n    return r.ok\n";
+const ASSUMED_DESCRIPTION: &str = "the disturbance model envelopes reality";
+
+/// Builds a project whose calc bind is established through loaded calc
+/// evidence: a manifest with `[evidence] calcs`, a passing target assuming
+/// the fiat, and approvals bound to the current view hashes — the bind's
+/// including the interface hash and the assumed fiat's description.
+fn calc_evidence_project(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("eval-{name}"));
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).expect("the old fixture should be removable");
+    }
+    std::fs::create_dir_all(dir.join("argument")).expect("the fixture should be creatable");
+    std::fs::write(
+        dir.join("inka.toml"),
+        "[project]\nname = \"calc-evidence-clean\"\n\n[phases]\norder = [\"M1\"]\ncurrent = \"M1\"\n\n\
+         [values]\nfiles = []\n\n[evidence]\ncalcs = [\"calc-evidence.json\"]\n",
+    )
+    .expect("the manifest should be writable");
+    std::fs::write(
+        dir.join("argument").join("main.inka"),
+        format!(
+            "objective root {{\n  ```\n  the mission succeeds\n  ```\n  children: modelled, assumed\n}}\n\n\
+             bind modelled {{\n  ```\n  the controller detumbles\n  ```\n  calc: \"{CALC_TARGET}\"\n}}\n\n\
+             fiat assumed {{\n  ```\n  {ASSUMED_DESCRIPTION}\n  ```\n}}\n"
+        ),
+    )
+    .expect("the argument should be writable");
+    let source_json = serde_json::to_string(CALC_SOURCE).expect("a JSON string");
+    std::fs::write(
+        dir.join("calc-evidence.json"),
+        format!(
+            r#"{{"v": 1, "targets": [{{"path": "{CALC_TARGET}",
+                "definitions": [{{"path": "{CALC_TARGET}", "kind": "verification", "source": {source_json}}}],
+                "assumes": ["assumed"], "leaves": [{{"id": "{CALC_TARGET}", "result": true}}], "valid": true}}]}}"#
+        ),
+    )
+    .expect("the evidence should be writable");
+
+    let project = load_project(&dir)
+        .result
+        .expect("the fixture project should load");
+    let graph = Graph::of_project(&project).expect("the fixture graph should build");
+    let view = ArgumentView::build(&graph, &project.source_map);
+    let interface = calc_evidence::interface_hash(
+        CALC_TARGET,
+        &[calc_evidence::Definition {
+            path: CALC_TARGET,
+            source: CALC_SOURCE,
+        }],
+        &[CALC_TARGET],
+    );
+    for node in &view.nodes {
+        let evidence = (node.mode == inka_core::view::Mode::Bind).then(|| EvidenceContract {
+            interface,
+            assumptions: vec![ASSUMED_DESCRIPTION],
+        });
+        let hash = LocalView::of_node(&view, node, evidence)
             .expect("fixture nodes should be hashable")
             .view_hash();
         let record = Record::approve(

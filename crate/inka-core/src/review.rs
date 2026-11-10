@@ -13,13 +13,15 @@
 //!
 //! Some unestablished targets cannot be acted on from the queue at all: a bind
 //! whose evidence has not been delivered has no interface hash and therefore
-//! no current view hash to approve, a calc bind is not evaluated yet, and a
-//! node whose `until:` has expired would not be helped by a new approval.
-//! These are reported separately as blocked, never silently dropped.
+//! no current view hash to approve, and a node whose `until:` has expired
+//! would not be helped by a new approval. These are reported separately as
+//! blocked, never silently dropped.
 
+use crate::bind;
+use crate::calc_evidence::CalcEvidenceSet;
 use crate::eval::{ApprovalStatus, EvalError, PhaseOrder, approval_status};
 use crate::evidence::EvidenceSet;
-use crate::hash::{InterfaceHash, LocalView, LocalViewError, ViewHash};
+use crate::hash::{EvidenceContract, LocalView, ViewHash};
 use crate::manifest::PhasesSection;
 use crate::record::Record;
 use crate::view::{ArgumentView, EvidenceKind, Mode, ViewNode};
@@ -58,14 +60,14 @@ pub struct QueueItem {
 /// Why review cannot act on an unestablished target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockedReason {
-    /// No imported evidence provides the bind's `test:` reference, so there
-    /// is no interface hash and no current view hash to decide on.
+    /// No imported evidence provides the bind's reference, so there is no
+    /// interface hash and no current view hash to decide on.
     MissingEvidence {
-        /// The `test:` reference no loaded evidence provides.
+        /// The scheme of the reference.
+        kind: EvidenceKind,
+        /// The reference no loaded evidence provides.
         target: String,
     },
-    /// calc evidence is not evaluated yet.
-    CalcNotEvaluated,
     /// The node's `until:` has expired; no new approval would count.
     UntilExpired {
         /// The phase the node was approved toward.
@@ -101,25 +103,27 @@ pub struct ReviewQueue {
 ///
 /// Returns an [`EvalError`] when the current phase or a node's `until:` phase
 /// is not in the declared order, or when a hand-built view names a bind
-/// without an evidence reference. A view projected from a checked project
-/// only trips the phase errors.
+/// without an evidence reference or one assuming a node the view does not
+/// define. A view projected from a checked project only trips the phase
+/// errors.
 pub fn derive_queue(
     view: &ArgumentView,
     phases: &PhasesSection,
     records: &[Record],
-    evidence: &EvidenceSet,
+    tests: &EvidenceSet,
+    calcs: &CalcEvidenceSet,
 ) -> Result<ReviewQueue, EvalError> {
     let order = PhaseOrder::new(phases)?;
     let mut queue = ReviewQueue::default();
     for node in &view.nodes {
-        match interface_hash(node, evidence)? {
+        match evidence_contract(view, node, tests, calcs)? {
             Resolution::Blocked(reason) => queue.blocked.push(BlockedItem {
                 id: node.id.clone(),
                 mode: node.mode,
                 reason,
             }),
-            Resolution::Hashable(interface) => {
-                let current_hash = LocalView::of_node(view, node, interface)?.view_hash();
+            Resolution::Hashable(evidence) => {
+                let current_hash = LocalView::of_node(view, node, evidence)?.view_hash();
                 match approval_status(records, node, current_hash, &order)? {
                     ApprovalStatus::Satisfied { .. } => {}
                     ApprovalStatus::Missing => {
@@ -160,44 +164,44 @@ impl ReviewQueue {
     }
 }
 
-/// Whether a node's current hash can be computed, and with which interface.
-enum Resolution {
-    Hashable(Option<InterfaceHash>),
+/// Whether a node's current hash can be computed, and with which evidence.
+enum Resolution<'a> {
+    Hashable(Option<EvidenceContract<'a>>),
     Blocked(BlockedReason),
 }
 
-/// Resolves the interface hash a node's view hash folds in, mirroring how
-/// evaluation treats binds: delivered test evidence hashes, anything else is
-/// blocked rather than guessed.
-fn interface_hash(node: &ViewNode, evidence: &EvidenceSet) -> Result<Resolution, EvalError> {
+/// Resolves what a node's view hash folds in, through the same lookup
+/// evaluation uses ([`bind::resolve`]): delivered evidence hashes, a
+/// reference nothing answers is blocked rather than guessed.
+fn evidence_contract<'a>(
+    view: &'a ArgumentView,
+    node: &'a ViewNode,
+    tests: &'a EvidenceSet,
+    calcs: &'a CalcEvidenceSet,
+) -> Result<Resolution<'a>, EvalError> {
     if node.mode != Mode::Bind {
         return Ok(Resolution::Hashable(None));
     }
-    let Some(reference) = node.evidence.as_ref() else {
-        // Projection always carries a bind's evidence reference; a hand-built
-        // view without one cannot be hashed, which is already an error.
-        return Err(LocalViewError::MissingInterfaceHash {
-            id: node.id.clone(),
-        }
-        .into());
-    };
-    Ok(match reference.kind {
-        EvidenceKind::Calc => Resolution::Blocked(BlockedReason::CalcNotEvaluated),
-        EvidenceKind::Test => match evidence.get(&reference.target) {
-            Some(test) => Resolution::Hashable(Some(test.interface_hash)),
-            None => Resolution::Blocked(BlockedReason::MissingEvidence {
-                target: reference.target.clone(),
-            }),
-        },
-    })
+    if let Some(evidence) = bind::resolve(view, node, tests, calcs)? {
+        return Ok(Resolution::Hashable(Some(evidence.contract())));
+    }
+    let reference = node
+        .evidence
+        .as_ref()
+        .expect("resolve reports a bind without a reference as an error");
+    Ok(Resolution::Blocked(BlockedReason::MissingEvidence {
+        kind: reference.kind,
+        target: reference.target.clone(),
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::record::{RecordFields, Target};
+    use crate::record::{RecordFields, Target as RecordTarget};
     use crate::view::{Deadline, Evidence, NodeComments, ViewEdge};
+    use inka_evidence::calc::{Definition, DefinitionKind, Leaf, Target};
 
     fn phases(current: &str) -> PhasesSection {
         PhasesSection {
@@ -262,7 +266,7 @@ mod tests {
 
     fn fields(kind: Mode, id: &str, hash: ViewHash, approver: &str) -> RecordFields {
         RecordFields {
-            target: Target::new(kind, id).expect("a valid target"),
+            target: RecordTarget::new(kind, id).expect("a valid target"),
             view_hash: hash,
             approver: approver.to_owned(),
             key_id: approver.to_owned(),
@@ -309,8 +313,14 @@ mod tests {
         let records = approve_all(&view);
 
         // Act
-        let queue = derive_queue(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert
         assert_eq!(queue, ReviewQueue::default());
@@ -320,8 +330,14 @@ mod tests {
     fn every_bare_target_queues_as_missing_in_view_order() {
         // Arrange & Act
         let view = chain();
-        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &view,
+            &phases("M1"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert: view order (sorted block IDs), every state Missing, and the
         // hash a decision would bind to is the node's current hash.
@@ -349,8 +365,14 @@ mod tests {
         ]);
 
         // Act
-        let queue = derive_queue(&after, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &after,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert: exactly the leaf and its direct parent come back, as Stale.
         assert_eq!(queued_ids(&queue), ["branch", "leaf"]);
@@ -374,8 +396,14 @@ mod tests {
         ));
 
         // Act
-        let queue = derive_queue(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert
         assert_eq!(queued_ids(&queue), ["leaf"]);
@@ -399,8 +427,14 @@ mod tests {
         let view = view(nodes);
 
         // Act
-        let queue = derive_queue(&view, &phases("M3"), &[], &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &view,
+            &phases("M3"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert
         assert_eq!(queue.items, []);
@@ -420,8 +454,14 @@ mod tests {
     fn a_bind_without_imported_evidence_is_blocked() {
         // Arrange & Act
         let view = view(vec![node("tested", Mode::Bind, "checked in CI", &[])]);
-        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &view,
+            &phases("M1"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert: no interface hash, so nothing to decide on.
         assert_eq!(queue.items, []);
@@ -431,6 +471,7 @@ mod tests {
                 id: "tested".to_owned(),
                 mode: Mode::Bind,
                 reason: BlockedReason::MissingEvidence {
+                    kind: EvidenceKind::Test,
                     target: "tests/x.rs".to_owned(),
                 },
             }]
@@ -438,18 +479,24 @@ mod tests {
     }
 
     #[test]
-    fn a_calc_bind_is_blocked_as_not_evaluated() {
+    fn a_calc_bind_without_imported_evidence_is_blocked_too() {
         // Arrange
         let mut nodes = vec![node("calc", Mode::Bind, "verified by calc", &[])];
         nodes[0].evidence = Some(Evidence {
             kind: EvidenceKind::Calc,
-            target: "calc/margin".to_owned(),
+            target: "Power::?verify_margin".to_owned(),
         });
         let view = view(nodes);
 
         // Act
-        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
-            .expect("the queue derives");
+        let queue = derive_queue(
+            &view,
+            &phases("M1"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
 
         // Assert
         assert_eq!(
@@ -457,9 +504,65 @@ mod tests {
             [BlockedItem {
                 id: "calc".to_owned(),
                 mode: Mode::Bind,
-                reason: BlockedReason::CalcNotEvaluated,
+                reason: BlockedReason::MissingEvidence {
+                    kind: EvidenceKind::Calc,
+                    target: "Power::?verify_margin".to_owned(),
+                },
             }]
         );
+    }
+
+    #[test]
+    fn a_calc_bind_with_imported_evidence_is_queued_on_its_assumption_bearing_hash() {
+        // Arrange: the target assumes `given`, whose text must enter the hash.
+        let mut nodes = vec![
+            node("calc", Mode::Bind, "verified by calc", &[]),
+            node("given", Mode::Fiat, "the model envelopes reality", &[]),
+        ];
+        nodes[0].evidence = Some(Evidence {
+            kind: EvidenceKind::Calc,
+            target: "Power::?verify_margin".to_owned(),
+        });
+        let view = view(nodes);
+        let calcs = CalcEvidenceSet::from_targets([Target {
+            path: "Power::?verify_margin".to_owned(),
+            definitions: vec![Definition::new(
+                "Power::?verify_margin",
+                DefinitionKind::Verification,
+                "def verify_margin(): ...",
+            )],
+            assumes: vec!["given".to_owned()],
+            leaves: vec![Leaf::new("Power::?verify_margin", Some(true))],
+            valid: true,
+            xfail: false,
+        }])
+        .expect("a valid target");
+
+        // Act
+        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default(), &calcs)
+            .expect("the queue derives");
+
+        // Assert: queued, not blocked, and on the hash that carries the
+        // assumed node's description — not the empty-slot hash.
+        let interface = calcs
+            .get("Power::?verify_margin")
+            .expect("loaded")
+            .interface_hash;
+        let expected = LocalView::bind(
+            "verified by calc",
+            None,
+            interface,
+            ["the model envelopes reality"],
+        )
+        .with_comments(&NodeComments::default())
+        .view_hash();
+        let empty_slot = LocalView::bind("verified by calc", None, interface, [])
+            .with_comments(&NodeComments::default())
+            .view_hash();
+        assert_eq!(queue.blocked, []);
+        assert_eq!(queued_ids(&queue), ["calc", "given"]);
+        assert_eq!(queue.items[0].current_hash, expected);
+        assert_ne!(queue.items[0].current_hash, empty_slot);
     }
 
     #[test]
@@ -481,11 +584,22 @@ mod tests {
         ];
 
         // Act
-        let queue = derive_queue(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("the queue derives");
-        let evaluation =
-            crate::eval::evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-                .expect("evaluation runs");
+        let queue = derive_queue(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("the queue derives");
+        let evaluation = crate::eval::evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: branch is satisfied in both; leaf stale, root declined, and
         // eval blames exactly the queued targets.

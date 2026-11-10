@@ -228,6 +228,29 @@ impl<'a> From<&'a str> for ChildContract<'a> {
     }
 }
 
+/// What a bind's evidence contributes to its local view: the interface hash
+/// of the imported evidence and the contract text of every node that
+/// evidence assumes.
+///
+/// Test evidence assumes nothing, so an [`InterfaceHash`] converts into a
+/// contract with an empty assumption list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceContract<'a> {
+    /// The evidence interface hash.
+    pub interface: InterfaceHash,
+    /// The rendered descriptions of the assumed nodes, in any order.
+    pub assumptions: Vec<&'a str>,
+}
+
+impl From<InterfaceHash> for EvidenceContract<'_> {
+    fn from(interface: InterfaceHash) -> Self {
+        Self {
+            interface,
+            assumptions: Vec::new(),
+        }
+    }
+}
+
 /// How the node is discharged, and the extra content that carries.
 ///
 /// Pairing the payload with the mode in one value rather than leaving a bag of
@@ -331,22 +354,22 @@ impl<'a> LocalView<'a> {
 
     /// Assembles the local view of one projected node.
     ///
-    /// `interface` is the evidence interface hash and is consulted for bind
-    /// nodes only; every other mode ignores it. The assumption slot of a bind
-    /// assembled here is empty: the evidence that fills it is not part of the
-    /// projected view.
+    /// `evidence` is what the bind's imported evidence contributes — its
+    /// interface hash and the assumed nodes' contract text, resolved by
+    /// [`crate::bind::resolve`] — and is consulted for bind nodes only; every
+    /// other mode ignores it.
     ///
     /// # Errors
     ///
     /// Returns [`LocalViewError::MissingInterfaceHash`] when a bind node is
-    /// given no interface hash, and [`LocalViewError::UndefinedChild`] when a
-    /// node names a child the view does not define. A view projected from a
-    /// built graph never contains an unresolved reference, so the latter says
-    /// the view was assembled by hand and is incomplete.
+    /// given no evidence, and [`LocalViewError::UndefinedChild`] when a node
+    /// names a child the view does not define. A view projected from a built
+    /// graph never contains an unresolved reference, so the latter says the
+    /// view was assembled by hand and is incomplete.
     pub fn of_node(
         view: &'a ArgumentView,
         node: &'a ViewNode,
-        interface: Option<InterfaceHash>,
+        evidence: Option<EvidenceContract<'a>>,
     ) -> Result<Self, LocalViewError> {
         let deadline = node.deadline.as_ref();
         let local = match node.mode {
@@ -358,10 +381,15 @@ impl<'a> LocalView<'a> {
             }
             Mode::Fiat => Self::fiat(&node.description, deadline),
             Mode::Bind => {
-                let interface = interface.ok_or_else(|| LocalViewError::MissingInterfaceHash {
+                let evidence = evidence.ok_or_else(|| LocalViewError::MissingInterfaceHash {
                     id: node.id.clone(),
                 })?;
-                Self::bind(&node.description, deadline, interface, [])
+                Self::bind(
+                    &node.description,
+                    deadline,
+                    evidence.interface,
+                    evidence.assumptions,
+                )
             }
         };
         Ok(local.with_comments(&node.comments))
@@ -1034,7 +1062,8 @@ mod tests {
         let root = view.node("root").expect("the fixture defines root");
 
         // Act
-        let offered = LocalView::of_node(&view, root, Some(INTERFACE)).expect("a structure builds");
+        let offered =
+            LocalView::of_node(&view, root, Some(INTERFACE.into())).expect("a structure builds");
         let plain = LocalView::of_node(&view, root, None).expect("a structure builds");
 
         // Assert: only a bind is discharged against evidence.

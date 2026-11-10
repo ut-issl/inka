@@ -299,9 +299,15 @@ fn established(root: &Path) -> usize {
     let graph = Graph::build(&project.blocks).expect("graph builds");
     let view = ArgumentView::build(&graph, &project.source_map);
     let records = approvals::load_dir(&root.join(APPROVALS_DIR)).expect("records load");
-    evaluate(&view, &project.manifest.phases, &records, &project.evidence)
-        .expect("eval runs")
-        .established_count()
+    evaluate(
+        &view,
+        &project.manifest.phases,
+        &records,
+        &project.evidence,
+        &project.calc_evidence,
+    )
+    .expect("eval runs")
+    .established_count()
 }
 
 /// Applies a workspace edit to the files on disk, the way an editor would.

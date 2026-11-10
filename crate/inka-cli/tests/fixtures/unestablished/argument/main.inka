@@ -9,7 +9,12 @@ objective root {
         tested,
         failing,
         partial,
-        modelled
+        modelled,
+        calc_failing,
+        calc_incomplete,
+        calc_invalid,
+        calc_xfail,
+        calc_assuming
 }
 
 structure branch {
@@ -58,6 +63,41 @@ bind modelled {
     the controller detumbles
     ```
     calc: "AOCS::?verify_detumble"
+}
+
+bind calc_failing {
+    ```
+    the power margin stays positive
+    ```
+    calc: "Power::?verify_margin"
+}
+
+bind calc_incomplete {
+    ```
+    the thermal margin is reported
+    ```
+    calc: "Thermal::?verify_margin"
+}
+
+bind calc_invalid {
+    ```
+    the battery reserve holds
+    ```
+    calc: "Power::?verify_reserve"
+}
+
+bind calc_xfail {
+    ```
+    the known shortfall is tracked
+    ```
+    calc: "Power::?verify_shortfall"
+}
+
+bind calc_assuming {
+    ```
+    the eclipse budget closes
+    ```
+    calc: "Power::?verify_eclipse"
 }
 
 fiat declined_leaf {

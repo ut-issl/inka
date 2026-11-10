@@ -71,6 +71,18 @@ pub enum EvidenceKind {
     Test,
 }
 
+impl EvidenceKind {
+    /// The scheme's one spelling: the DSL property name and the JSON
+    /// serialization.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            EvidenceKind::Calc => "calc",
+            EvidenceKind::Test => "test",
+        }
+    }
+}
+
 /// A bind block's machine-verifiable evidence target.
 ///
 /// The target is carried verbatim and stays opaque: matching a reference to an

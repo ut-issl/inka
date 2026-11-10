@@ -15,6 +15,7 @@
 use std::io::{self, Write};
 use std::path::Path;
 
+use inka_core::calc_evidence::CalcEvidenceSet;
 use inka_core::evidence::EvidenceSet;
 use inka_core::graph::Graph;
 use inka_core::manifest::Manifest;
@@ -25,14 +26,12 @@ use inka_core::view::ArgumentView;
 use crate::render::render;
 
 /// A loaded project reduced to what commands consume: the manifest's rule-side
-/// state, the imported test evidence, and the shared argument view. The
-/// imported calc evidence shapes the view — its assumptions are edges of the
-/// graph the view is projected from — but is not carried: nothing evaluates
-/// it yet.
+/// state, the imported test and calc evidence, and the shared argument view.
 #[derive(Debug, Clone)]
 pub struct ProjectView {
     pub manifest: Manifest,
     pub evidence: EvidenceSet,
+    pub calc_evidence: CalcEvidenceSet,
     pub view: ArgumentView,
 }
 
@@ -111,6 +110,7 @@ pub fn load_project_view(
     Ok(Some(ProjectView {
         manifest: project.manifest,
         evidence: project.evidence,
+        calc_evidence: project.calc_evidence,
         view,
     }))
 }

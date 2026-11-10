@@ -39,6 +39,7 @@ pub fn run(
     let Some(ProjectView {
         manifest,
         evidence,
+        calc_evidence,
         view,
     }) = load_project_view(project_dir, err, color)?
     else {
@@ -48,7 +49,7 @@ pub fn run(
         Ok(records) => records,
         Err(error) => return fail(&error.to_string(), err, color),
     };
-    let evaluation = match evaluate(&view, &manifest.phases, &records, &evidence) {
+    let evaluation = match evaluate(&view, &manifest.phases, &records, &evidence, &calc_evidence) {
         Ok(evaluation) => evaluation,
         Err(error) => return fail(&error.to_string(), err, color),
     };

@@ -21,17 +21,20 @@
 //! `established` is a fixpoint over the DAG, computed leaves first: a fiat is
 //! established by a satisfied approval alone; a structure or objective needs a
 //! satisfied approval and every child established; a bind needs a satisfied
-//! approval and passing test evidence. A bind's current view hash is computed
-//! from the interface hash of the imported evidence its `test:` reference
-//! names, so approval staleness and evidence failure stay independent causes;
-//! a reference no loaded evidence provides is the per-bind missing-evidence
-//! cause, not an input error. calc evidence is not evaluated yet.
+//! approval and passing evidence — and, for a calc bind, every node its
+//! evidence assumes established, the implicit dependency that assumption
+//! edges add to the graph. A bind's current view hash is computed from the
+//! imported evidence its reference names ([`crate::bind::resolve`]): the
+//! interface hash, plus the assumed nodes' contract text for a calc bind. So
+//! approval staleness, evidence failure and an undischarged assumption stay
+//! independent causes, and a reference no loaded evidence provides is the
+//! per-bind missing-evidence cause, not an input error.
 //!
 //! Blame lists only nodes whose failure cause is their own — a missing, stale,
-//! declined, or expired approval, or missing/failed/incomplete evidence —
-//! never nodes failing solely through their children. The unestablished
-//! child is the finding; its
-//! ancestors are consequences.
+//! declined, or expired approval, missing/failed/incomplete evidence, or an
+//! assumed node that is not established — never nodes failing solely through
+//! their children. The unestablished child is the finding; its ancestors are
+//! consequences.
 //!
 //! Policy is the built-in default only: every target needs `any(1)`, with the
 //! decline veto on top.
@@ -41,6 +44,8 @@ use std::fmt;
 
 use serde::Serialize;
 
+use crate::bind::{self, BindEvidence};
+use crate::calc_evidence::{CalcEvidenceSet, CalcTarget};
 use crate::evidence::{EvidenceSet, Outcome, TestEvidence};
 use crate::hash::{LocalView, LocalViewError, ViewHash};
 use crate::manifest::PhasesSection;
@@ -222,14 +227,23 @@ pub enum BlameReason {
     Declined { by: String, comment: String },
     /// The node's `until:` has expired; no approval counts any more.
     UntilExpired { until: String },
-    /// No loaded test evidence provides the bind's `test:` reference.
-    MissingEvidence { target: String },
+    /// No loaded evidence of the reference's kind provides the bind's target.
+    MissingEvidence { kind: EvidenceKind, target: String },
     /// Required executions reported `fail`.
     EvidenceFailed { cases: Vec<String> },
     /// Required executions were skipped, cancelled or reported no result.
     EvidenceIncomplete { cases: Vec<String> },
-    /// calc evidence is not evaluated yet.
-    CalcNotEvaluated,
+    /// Required leaves of the calc target reported `false`.
+    LeavesFailed { leaves: Vec<String> },
+    /// Required leaves of the calc target reported no result.
+    LeavesMissing { leaves: Vec<String> },
+    /// The producer's own validity conditions did not hold: an assumption
+    /// inside the calculation graph failed.
+    EvidenceInvalid,
+    /// The producer marks the target as an expected failure.
+    ExpectedFailure,
+    /// A node the calc evidence assumes is not established.
+    AssumptionNotEstablished { node: String },
 }
 
 impl fmt::Display for BlameReason {
@@ -246,8 +260,8 @@ impl fmt::Display for BlameReason {
                 f,
                 "approvals no longer count: the current phase is past until:{until}"
             ),
-            BlameReason::MissingEvidence { target } => {
-                write!(f, "no imported test evidence provides `{target}`")
+            BlameReason::MissingEvidence { kind, target } => {
+                write!(f, "no imported {} evidence provides `{target}`", kind.name())
             }
             BlameReason::EvidenceFailed { cases } => {
                 write!(f, "required executions failed: {}", cases.join(", "))
@@ -257,7 +271,21 @@ impl fmt::Display for BlameReason {
                 "required executions were skipped, cancelled or missing: {}",
                 cases.join(", ")
             ),
-            BlameReason::CalcNotEvaluated => f.write_str("calc evidence is not evaluated yet"),
+            BlameReason::LeavesFailed { leaves } => {
+                write!(f, "required leaves are false: {}", leaves.join(", "))
+            }
+            BlameReason::LeavesMissing { leaves } => {
+                write!(f, "required leaves have no result: {}", leaves.join(", "))
+            }
+            BlameReason::EvidenceInvalid => f.write_str(
+                "the producer reports the result as invalid: an assumption inside the calculation graph failed",
+            ),
+            BlameReason::ExpectedFailure => {
+                f.write_str("the producer marks the verification as an expected failure (xfail)")
+            }
+            BlameReason::AssumptionNotEstablished { node } => {
+                write!(f, "assumed node `{node}` is not established")
+            }
         }
     }
 }
@@ -325,40 +353,64 @@ pub enum EvalError {
     UnknownUntilPhase { id: String, until: String },
     #[error(transparent)]
     LocalView(#[from] LocalViewError),
+    #[error(
+        "bind `{bind}` assumes `{id}`, which the argument does not define; run `inka check` first"
+    )]
+    UnknownAssumption { bind: String, id: String },
     #[error("the argument graph has a cycle; run `inka check` first")]
     Cycle,
 }
 
-/// Evaluates a whole argument against its records and phase order.
+/// Everything evaluation reads besides the node under judgement.
+struct Inputs<'a> {
+    view: &'a ArgumentView,
+    records: &'a [Record],
+    phases: PhaseOrder,
+    tests: &'a EvidenceSet,
+    calcs: &'a CalcEvidenceSet,
+    /// Node id → position in `view.nodes`.
+    index_of: HashMap<&'a str, usize>,
+}
+
+/// Evaluates a whole argument against its records, phase order and imported
+/// evidence.
 ///
 /// Nodes are judged leaves first, so every parent reads settled child
-/// verdicts. The result carries every node's verdict and the blame list; the
-/// caller decides how bad a verdict is (the CLI maps a non-clean evaluation to
-/// a non-zero exit status).
+/// verdicts — and every calc bind settled verdicts for the nodes its
+/// evidence assumes. The result carries every node's verdict and the blame
+/// list; the caller decides how bad a verdict is (the CLI maps a non-clean
+/// evaluation to a non-zero exit status).
 ///
 /// # Errors
 ///
 /// Returns an [`EvalError`] when the current phase or a node's `until:` phase
-/// is not in the declared order, when the view is not a DAG, or when a
-/// hand-built view names a child it does not define. A view projected from a
-/// checked project only trips the phase errors.
+/// is not in the declared order, when the view is not a DAG (assumption
+/// edges included), or when a hand-built view names a child or assumes a
+/// node it does not define. A view projected from a checked project only
+/// trips the phase errors.
 pub fn evaluate(
     view: &ArgumentView,
     phases: &PhasesSection,
     records: &[Record],
-    evidence: &EvidenceSet,
+    tests: &EvidenceSet,
+    calcs: &CalcEvidenceSet,
 ) -> Result<Evaluation, EvalError> {
-    let order = PhaseOrder::new(phases)?;
+    let inputs = Inputs {
+        view,
+        records,
+        phases: PhaseOrder::new(phases)?,
+        tests,
+        calcs,
+        index_of: view
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| (node.id.as_str(), index))
+            .collect(),
+    };
+    let (dependents_of, mut pending) = dependencies(&inputs);
 
-    let index_of: HashMap<&str, usize> = view
-        .nodes
-        .iter()
-        .enumerate()
-        .map(|(index, node)| (node.id.as_str(), index))
-        .collect();
-    let (parents_of, mut pending_children) = dependencies(view, &index_of);
-
-    let mut queue: VecDeque<usize> = pending_children
+    let mut queue: VecDeque<usize> = pending
         .iter()
         .enumerate()
         .filter(|&(_, &pending)| pending == 0)
@@ -369,24 +421,25 @@ pub fn evaluate(
     let mut reasons: Vec<Vec<BlameReason>> = vec![Vec::new(); view.nodes.len()];
     while let Some(index) = queue.pop_front() {
         let node = &view.nodes[index];
-        let (satisfied, own_reasons) = judge(view, node, records, &order, evidence)?;
+        let (satisfied, own_reasons) = judge(&inputs, node, &established)?;
         let children_established = node.children.iter().all(|child| {
-            index_of
+            inputs
+                .index_of
                 .get(child.as_str())
                 .is_some_and(|&child_index| established[child_index] == Some(true))
         });
         established[index] = Some(match node.mode {
             // A fiat needs its approval alone; for a bind, judge already
-            // folded the evidence verdict into `satisfied`, and neither has
-            // children to wait for.
+            // folded the evidence and assumption verdicts into `satisfied`,
+            // and neither has children to wait for.
             Mode::Fiat | Mode::Bind => satisfied,
             Mode::Structure | Mode::Objective => satisfied && children_established,
         });
         reasons[index] = own_reasons;
-        for &parent in &parents_of[index] {
-            pending_children[parent] -= 1;
-            if pending_children[parent] == 0 {
-                queue.push_back(parent);
+        for &dependent in &dependents_of[index] {
+            pending[dependent] -= 1;
+            if pending[dependent] == 0 {
+                queue.push_back(dependent);
             }
         }
     }
@@ -397,28 +450,42 @@ pub fn evaluate(
 }
 
 /// The reverse adjacency and per-node dependency counts Kahn's algorithm
-/// consumes, so a node is judged only after every child it depends on.
+/// consumes, so a node is judged only after everything it depends on: its
+/// children, and for a calc bind the nodes its imported evidence assumes.
 ///
-/// Both are read from each node's own child list — the same list the
+/// Children are read from each node's own child list — the same list the
 /// judgement walks — so evaluation never assumes `view.edges` agrees with it.
-/// A child id the view does not define can only appear in a hand-built view;
-/// the judging pass reports it through [`LocalView::of_node`] rather than
-/// panicking here.
-fn dependencies(
-    view: &ArgumentView,
-    index_of: &HashMap<&str, usize>,
-) -> (Vec<Vec<usize>>, Vec<usize>) {
-    let mut parents_of: Vec<Vec<usize>> = vec![Vec::new(); view.nodes.len()];
-    let mut pending_children: Vec<usize> = vec![0; view.nodes.len()];
-    for (parent, node) in view.nodes.iter().enumerate() {
+/// A child or assumed id the view does not define can only appear in a
+/// hand-built view; the judging pass reports it rather than panicking here.
+fn dependencies(inputs: &Inputs<'_>) -> (Vec<Vec<usize>>, Vec<usize>) {
+    let view = inputs.view;
+    let mut dependents_of: Vec<Vec<usize>> = vec![Vec::new(); view.nodes.len()];
+    let mut pending: Vec<usize> = vec![0; view.nodes.len()];
+    let mut depend = |dependent: usize, on: &str| {
+        if let Some(&index) = inputs.index_of.get(on) {
+            dependents_of[index].push(dependent);
+            pending[dependent] += 1;
+        }
+    };
+    for (index, node) in view.nodes.iter().enumerate() {
         for child in &node.children {
-            if let Some(&child_index) = index_of.get(child.as_str()) {
-                parents_of[child_index].push(parent);
-                pending_children[parent] += 1;
+            depend(index, child);
+        }
+        if let Some(target) = calc_target_of(inputs.calcs, node) {
+            for assumed in &target.assumes {
+                depend(index, assumed);
             }
         }
     }
-    (parents_of, pending_children)
+    (dependents_of, pending)
+}
+
+/// The imported calc target a node's `calc:` reference names, if any.
+fn calc_target_of<'a>(calcs: &'a CalcEvidenceSet, node: &ViewNode) -> Option<&'a CalcTarget> {
+    let reference = node.evidence.as_ref()?;
+    (reference.kind == EvidenceKind::Calc)
+        .then(|| calcs.get(&reference.target))
+        .flatten()
 }
 
 /// Folds the per-node verdicts and reasons into the evaluation, keeping the
@@ -458,68 +525,108 @@ fn assemble(
 /// A bind is judged by [`judge_bind`]: its view hash depends on the imported
 /// evidence, and its verdict folds the evidence outcome in.
 fn judge(
-    view: &ArgumentView,
+    inputs: &Inputs<'_>,
     node: &ViewNode,
-    records: &[Record],
-    phases: &PhaseOrder,
-    evidence: &EvidenceSet,
+    established: &[Option<bool>],
 ) -> Result<(bool, Vec<BlameReason>), EvalError> {
     if node.mode == Mode::Bind {
-        return judge_bind(view, node, records, phases, evidence);
+        return judge_bind(inputs, node, established);
     }
 
-    let current_hash = LocalView::of_node(view, node, None)?.view_hash();
-    let status = approval_status(records, node, current_hash, phases)?;
+    let current_hash = LocalView::of_node(inputs.view, node, None)?.view_hash();
+    let status = approval_status(inputs.records, node, current_hash, &inputs.phases)?;
     Ok(approval_verdict(status))
 }
 
-/// Judges a bind: approval and evidence are independent causes, and both
-/// must hold for the bind to be established.
+/// Judges a bind: approval, evidence and — for a calc bind — the assumed
+/// nodes are independent causes, and all must hold for the bind to be
+/// established.
 ///
-/// Without imported evidence for the `test:` reference there is no interface
-/// hash, so no current view hash and no record-based judgement. The `until:`
+/// Without imported evidence for the reference there is no interface hash,
+/// so no current view hash and no record-based judgement. The `until:`
 /// deadline needs no hash, so it is still judged: an expired bind is reported
 /// as both expired and missing its evidence, and an unknown `until:` phase
-/// fails loudly whether or not the evidence has been delivered. calc
-/// references stay unevaluated.
+/// fails loudly whether or not the evidence has been delivered.
 fn judge_bind(
-    view: &ArgumentView,
+    inputs: &Inputs<'_>,
     node: &ViewNode,
-    records: &[Record],
-    phases: &PhaseOrder,
-    evidence: &EvidenceSet,
+    established: &[Option<bool>],
 ) -> Result<(bool, Vec<BlameReason>), EvalError> {
-    let Some(reference) = node.evidence.as_ref() else {
-        // Projection always carries a bind's evidence reference; a hand-built
-        // view without one cannot be hashed, which is already an error.
-        return Err(LocalViewError::MissingInterfaceHash {
-            id: node.id.clone(),
+    let Some(evidence) = bind::resolve(inputs.view, node, inputs.tests, inputs.calcs)? else {
+        let reference = node
+            .evidence
+            .as_ref()
+            .expect("resolve reports a bind without a reference as an error");
+        let mut reasons = Vec::new();
+        if let Some(until) = expired_deadline(node, &inputs.phases)? {
+            reasons.push(BlameReason::UntilExpired { until });
         }
-        .into());
+        reasons.push(BlameReason::MissingEvidence {
+            kind: reference.kind,
+            target: reference.target.clone(),
+        });
+        return Ok((false, reasons));
     };
-    match reference.kind {
-        EvidenceKind::Calc => Ok((false, vec![BlameReason::CalcNotEvaluated])),
-        EvidenceKind::Test => {
-            let Some(test) = evidence.get(&reference.target) else {
-                let mut reasons = Vec::new();
-                if let Some(until) = expired_deadline(node, phases)? {
-                    reasons.push(BlameReason::UntilExpired { until });
-                }
-                reasons.push(BlameReason::MissingEvidence {
-                    target: reference.target.clone(),
+    let current_hash =
+        LocalView::of_node(inputs.view, node, Some(evidence.contract()))?.view_hash();
+    let status = approval_status(inputs.records, node, current_hash, &inputs.phases)?;
+    let (approved, mut reasons) = approval_verdict(status);
+
+    let evidence_blame = match &evidence {
+        BindEvidence::Test(test) => evidence_reasons(test),
+        BindEvidence::Calc { target, .. } => calc_reasons(target),
+    };
+    let passing = evidence_blame.is_empty();
+    reasons.extend(evidence_blame);
+
+    // Every assumed node has been judged already: the dependency pass made
+    // each one a prerequisite of this bind.
+    let mut assumptions_hold = true;
+    if let BindEvidence::Calc { assumed, .. } = &evidence {
+        for assumed_node in assumed {
+            let settled = inputs
+                .index_of
+                .get(assumed_node.id.as_str())
+                .is_some_and(|&index| established[index] == Some(true));
+            if !settled {
+                assumptions_hold = false;
+                reasons.push(BlameReason::AssumptionNotEstablished {
+                    node: assumed_node.id.clone(),
                 });
-                return Ok((false, reasons));
-            };
-            let current_hash =
-                LocalView::of_node(view, node, Some(test.interface_hash))?.view_hash();
-            let status = approval_status(records, node, current_hash, phases)?;
-            let (approved, mut reasons) = approval_verdict(status);
-            let evidence_blame = evidence_reasons(test);
-            let passing = evidence_blame.is_empty();
-            reasons.extend(evidence_blame);
-            Ok((approved && passing, reasons))
+            }
         }
     }
+    Ok((approved && passing && assumptions_hold, reasons))
+}
+
+/// Folds a calc target's observed state into blame: false leaves, leaves
+/// without a result, a failed validity condition and an expected failure are
+/// distinct causes, reported together when several occur. An empty result
+/// means the evidence passes.
+fn calc_reasons(target: &CalcTarget) -> Vec<BlameReason> {
+    let mut failed = Vec::new();
+    let mut missing = Vec::new();
+    for leaf in &target.leaves {
+        match leaf.result {
+            Some(true) => {}
+            Some(false) => failed.push(leaf.id.clone()),
+            None => missing.push(leaf.id.clone()),
+        }
+    }
+    let mut reasons = Vec::new();
+    if !failed.is_empty() {
+        reasons.push(BlameReason::LeavesFailed { leaves: failed });
+    }
+    if !missing.is_empty() {
+        reasons.push(BlameReason::LeavesMissing { leaves: missing });
+    }
+    if !target.valid {
+        reasons.push(BlameReason::EvidenceInvalid);
+    }
+    if target.xfail {
+        reasons.push(BlameReason::ExpectedFailure);
+    }
+    reasons
 }
 
 /// Folds nonpass executions into blame: failures and skipped/cancelled/
@@ -707,8 +814,14 @@ mod tests {
         let records = approve_all(&view);
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: the fixpoint reaches the objective and nothing is blamed.
         assert!(evaluation.is_clean());
@@ -726,8 +839,14 @@ mod tests {
             .collect();
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: the ancestors fail only through the leaf, so only the leaf
         // is blamed — and its reason is its own.
@@ -749,8 +868,14 @@ mod tests {
         ]);
 
         // Act
-        let evaluation = evaluate(&after, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &after,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: the leaf and its direct parent are stale; the grandparent's
         // hash covers only its own children's text, so it stays satisfied and
@@ -779,8 +904,14 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert
         assert_eq!(blamed_ids(&evaluation), ["leaf"]);
@@ -808,8 +939,14 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: a stale decline is simply not counted.
         assert!(evaluation.is_clean());
@@ -832,10 +969,22 @@ mod tests {
         let records = approve_all(&view);
 
         // Act
-        let at_m2 = evaluate(&view, &phases("M2"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
-        let at_m3 = evaluate(&view, &phases("M3"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let at_m2 = evaluate(
+            &view,
+            &phases("M2"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
+        let at_m3 = evaluate(
+            &view,
+            &phases("M3"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: valid at the deadline, hard-expired one phase later.
         assert!(at_m2.is_clean());
@@ -858,8 +1007,14 @@ mod tests {
 
         // Act: no records at all — the missing-evidence lookup returns before
         // approval checking.
-        let evaluation =
-            evaluate(&view, &phases("M1"), &[], &EvidenceSet::default()).expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert
         let tested = evaluation
@@ -870,6 +1025,7 @@ mod tests {
         assert_eq!(
             tested.reasons,
             [BlameReason::MissingEvidence {
+                kind: EvidenceKind::Test,
                 target: "tests/x.rs".to_owned()
             }]
         );
@@ -893,8 +1049,14 @@ mod tests {
             .collect();
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: the root's wording is agreed like any other contract.
         assert_eq!(blamed_ids(&evaluation), ["root"]);
@@ -919,8 +1081,14 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M1"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M1"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: a kind mismatch is a different target entirely, so the node
         // reads as missing, not stale.
@@ -951,8 +1119,14 @@ mod tests {
         ));
 
         // Act
-        let evaluation = evaluate(&view, &phases("M3"), &records, &EvidenceSet::default())
-            .expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M3"),
+            &records,
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert
         assert_eq!(
@@ -979,8 +1153,14 @@ mod tests {
         let view = view(nodes);
 
         // Act
-        let evaluation =
-            evaluate(&view, &phases("M3"), &[], &EvidenceSet::default()).expect("evaluation runs");
+        let evaluation = evaluate(
+            &view,
+            &phases("M3"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect("evaluation runs");
 
         // Assert: both hash-independent causes are reported, expiry first as
         // in the evidence-present path.
@@ -996,6 +1176,7 @@ mod tests {
                     until: "M2".to_owned(),
                 },
                 BlameReason::MissingEvidence {
+                    kind: EvidenceKind::Test,
                     target: "tests/x.rs".to_owned(),
                 },
             ]
@@ -1013,8 +1194,14 @@ mod tests {
         let view = view(nodes);
 
         // Act
-        let error = evaluate(&view, &phases("M1"), &[], &EvidenceSet::default())
-            .expect_err("FM is not a phase");
+        let error = evaluate(
+            &view,
+            &phases("M1"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect_err("FM is not a phase");
 
         // Assert
         assert_eq!(
@@ -1037,8 +1224,14 @@ mod tests {
         let view = view(nodes);
 
         // Act
-        let error = evaluate(&view, &phases("M1"), &[], &EvidenceSet::default())
-            .expect_err("FM is not a phase");
+        let error = evaluate(
+            &view,
+            &phases("M1"),
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect_err("FM is not a phase");
 
         // Assert
         assert_eq!(
@@ -1059,8 +1252,14 @@ mod tests {
         };
 
         // Act
-        let error = evaluate(&chain(), &section, &[], &EvidenceSet::default())
-            .expect_err("M9 is not a phase");
+        let error = evaluate(
+            &chain(),
+            &section,
+            &[],
+            &EvidenceSet::default(),
+            &CalcEvidenceSet::default(),
+        )
+        .expect_err("M9 is not a phase");
 
         // Assert
         assert_eq!(
@@ -1081,8 +1280,14 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            evaluate(&view, &phases("M1"), &[], &EvidenceSet::default())
-                .expect_err("a cycle cannot be evaluated"),
+            evaluate(
+                &view,
+                &phases("M1"),
+                &[],
+                &EvidenceSet::default(),
+                &CalcEvidenceSet::default()
+            )
+            .expect_err("a cycle cannot be evaluated"),
             EvalError::Cycle
         );
     }

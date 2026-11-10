@@ -60,7 +60,7 @@ fn hash_of(view: &ArgumentView, id: &str) -> String {
     let node = view
         .node(id)
         .unwrap_or_else(|| panic!("the argument should define `{id}`"));
-    LocalView::of_node(view, node, Some(INTERFACE))
+    LocalView::of_node(view, node, Some(INTERFACE.into()))
         .unwrap_or_else(|error| panic!("`{id}` should assemble a local view: {error}"))
         .view_hash()
         .to_string()
