@@ -1,0 +1,113 @@
+# Cut a release of every inka package. See RELEASING.md.
+#
+# Run it with workflow_dispatch from the Actions tab:
+#
+# * `mode: dry-run` (the default) runs every check and shows the release
+#   notes in the run summary, from any branch, and creates nothing.
+# * `mode: release` (from main only) releases the version in Cargo.toml as
+#   the tag `v<version>`: it creates the GitHub Release, and with it the
+#   tag, on the dispatched commit, with the CHANGELOG.md section of that
+#   version as the body.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Check only (dry-run) or release the version in Cargo.toml
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - release
+
+permissions: {}
+
+# Releases share one group, so two of them never create the same tag at
+# once: a second one waits, then fails its tag check. GitHub keeps only one
+# waiting run per group, so a third dispatch cancels the waiting one. Dry
+# runs never wait.
+#
+# The workflow does not look at CI results: release only a commit of main
+# whose CI has passed, which RELEASING.md's procedure guarantees.
+concurrency:
+  group: ${{ inputs.mode == 'release' && 'release' || format('release-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+
+  plan:
+    name: Check the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check every package carries the workspace version
+        run: python3 scripts/release.py check
+
+      - name: Check the branch, the tag, and the release notes
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ inputs.mode }}
+        run: |
+          if [ "${RELEASE_MODE}" = release ] && [ "${GITHUB_REF}" != refs/heads/main ]; then
+            echo "::error title=Release::Releases must be run from main, not ${GITHUB_REF}."
+            exit 1
+          fi
+          version=$(python3 scripts/release.py version)
+          tag="v${version}"
+          # matching-refs matches by prefix, so keep only the exact tag.
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${tag}" \
+            --jq "[.[] | select(.ref == \"refs/tags/${tag}\")] | length")
+          if [ "${existing}" != 0 ]; then
+            echo "::error title=Release::Tag ${tag} already exists; bump the version first."
+            exit 1
+          fi
+          python3 scripts/release.py notes "${version}" > "${RUNNER_TEMP}/notes.md"
+          python3 scripts/release.py notes "${version}" --changelog CHANGELOG.ja.md > /dev/null
+          {
+            echo "# ${tag} (${RELEASE_MODE})"
+            echo
+            cat "${RUNNER_TEMP}/notes.md"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+  release:
+    name: Create the GitHub Release
+    needs: plan
+    if: ${{ inputs.mode == 'release' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout the main repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create the release and its tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          python3 scripts/release.py notes "${TAG#v}" > "${RUNNER_TEMP}/notes.md"
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "${TAG}" \
+            --notes-file "${RUNNER_TEMP}/notes.md" \
+            --latest
