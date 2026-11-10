@@ -356,6 +356,16 @@ impl<'a> Parser<'a> {
             "children" => self.parse_children(raw, name_span),
             "test" => self.parse_source(raw, name_span, SourceScheme::Test),
             "calc" => self.parse_source(raw, name_span, SourceScheme::Calc),
+            "veriq" => {
+                // `calc:`'s name before the rename. Say so, and still read the
+                // reference so the bind is not also blamed for lacking one.
+                self.error(
+                    name_span,
+                    "`veriq:` is now `calc:`, and its value is the target's path in the producer's \
+                     graph, e.g. `calc: \"Power::?verify_margin\"`",
+                );
+                self.parse_source(raw, name_span, SourceScheme::Calc)
+            }
             "until" => self.parse_until(raw, name_span),
             "promote" => self.parse_promote(raw, name_span),
             _ => {
@@ -1177,6 +1187,36 @@ mod tests {
                 &parse,
                 "a `calc:` reference is a path in the producer's graph"
             ),
+            "{:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn the_retired_veriq_property_is_reported_once_as_renamed() {
+        let parse = parse_str("bind old {\n```\nClaim\n```\nveriq: \"aocs.check\"\n}\n");
+
+        // One error that names the fix, not "unknown property" plus a
+        // complaint that the bind has no source.
+        assert_eq!(
+            messages(&parse).len(),
+            1,
+            "expected exactly one error: {:?}",
+            messages(&parse)
+        );
+        assert!(
+            has_message(&parse, "`veriq:` is now `calc:`"),
+            "{:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn rejects_a_calc_reference_on_a_fiat() {
+        let parse = parse_str("fiat leaf {\n```\nLeaf\n```\ncalc: \"M::?check\"\n}\n");
+
+        assert!(
+            has_message(&parse, "a fiat cannot have a source"),
             "{:?}",
             messages(&parse)
         );
