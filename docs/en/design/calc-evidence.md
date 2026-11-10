@@ -145,7 +145,9 @@ It leaves out:
 
 - classes of veriq, pydantic and the Python standard library, so upgrading
   those does not invalidate approvals. A class of any other package counts as
-  project code.
+  project code, and so does a class of a project module that shares its name
+  with a standard library module (`profile.py`, a `test` package): where the
+  module was loaded from decides, not what it is called.
 - whatever a function merely calls or reads: helper functions, module-level
   constants, imported values. Editing a helper can change a verification's
   result without changing any hashed source. Logic that must be approved again
@@ -153,9 +155,15 @@ It leaves out:
   its own.
 
 The adapter stops with an error, writing nothing, rather than emit evidence
-that says less than it seems to: a leaf result that is neither a boolean nor
-absent, `inka` metadata other than a list of strings under `assumes`, and a
-project that defines no verification are all refused.
+that says less than it seems to. It refuses:
+
+- a leaf result that is neither a boolean nor absent;
+- `inka` metadata other than a list of strings under `assumes`;
+- a project that defines no verification;
+- a return annotation or type alias with a name that does not resolve, since
+  the classes behind it could not be followed;
+- two different classes reached under one qualified name, since a source
+  lists each name once and the other class would go unhashed.
 
 ## Assumptions
 

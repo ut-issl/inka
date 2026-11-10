@@ -55,9 +55,10 @@ it reaches — through the root model's fields or a function's return
 annotation, type arguments, PEP 695 aliases and base classes — each once,
 in name order. Classes of veriq, pydantic and the standard library are left
 out, so upgrading those leaves approvals alone; a class of any other
-package counts as project code and is part of the source. An enum that
-`@vq.with_range` generated has no text of its own and is emitted as the
-list of its members.
+package counts as project code and is part of the source, and so does a
+class of a project module that shares a standard library module's name. An
+enum that `@vq.with_range` generated has no text of its own and is emitted
+as the list of its members.
 
 Helper functions and module constants that a definition merely calls or
 reads are in no source. Editing one can change a result without changing

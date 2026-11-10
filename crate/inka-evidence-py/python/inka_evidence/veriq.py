@@ -13,9 +13,10 @@ The source of a definition is its own text followed by that of every
 project class it reaches: through field and return annotations, type
 arguments, PEP 695 aliases and base classes. Classes of veriq, pydantic and
 the standard library are left out, so upgrading those does not disturb an
-approval; a class of any other package counts as project code. An enum that
-``@vq.with_range`` generated has no text of its own and is emitted as the
-list of its members.
+approval; a class of any other package counts as project code, and so does
+one of a project module that merely shares a standard library module's name.
+An enum that ``@vq.with_range`` generated has no text of its own and is
+emitted as the list of its members.
 
 What a function merely calls or reads — helper functions, module constants —
 is not followed: only veriq definitions and the classes they name are hashed.
@@ -31,16 +32,19 @@ strings and that ``inka`` holds nothing else.
 
 Rather than emit evidence that says less than it seems to, the adapter
 refuses a leaf result that is neither a ``bool`` nor ``None``, malformed
-``inka`` metadata, and a project without any verification.
+``inka`` metadata, a project without any verification, an annotation that
+does not resolve, and two different classes that go by one name.
 """
 
 from __future__ import annotations
 
 import argparse
 import enum
+import functools
 import inspect
 import reprlib
 import sys
+import sysconfig
 import typing
 from collections.abc import Mapping
 from pathlib import Path
@@ -62,8 +66,13 @@ ASSUMES_KEY = "assumes"
 
 #: Top-level packages whose classes are library code. Their source is not
 #: what a project's reviewers approve, and hashing it would tie every
-#: approval to the installed version of the library.
-LIBRARY_PACKAGES = frozenset({"builtins", "pydantic", "pydantic_core", "veriq"}) | sys.stdlib_module_names
+#: approval to the installed version of the library. The standard library is
+#: library code as well; see :func:`_is_library_module`.
+LIBRARY_PACKAGES = frozenset({"pydantic", "pydantic_core", "veriq"})
+
+#: Directory names that hold installed packages, also when they sit inside
+#: the standard library's own directory.
+SITE_DIRECTORIES = frozenset({"site-packages", "dist-packages"})
 
 #: The module veriq files the enums of ``@vq.with_range`` under. The decorator
 #: rebuilds the class through the functional ``IntEnum`` API, so it carries
@@ -94,15 +103,53 @@ def _source(obj: object, what: str) -> str:
         raise AdapterError(msg) from error
 
 
+@functools.cache
+def _stdlib_directories() -> tuple[Path, ...]:
+    names = ("stdlib", "platstdlib")
+    return tuple({Path(path).resolve() for path in map(sysconfig.get_path, names) if path})
+
+
+def _is_stdlib_module(name: str) -> bool:
+    """Whether the loaded module of this name is the standard library's.
+
+    The name alone does not say: veriq imports a project script under its
+    file stem, and ``profile.py`` or a ``test`` package is the project's own
+    code whatever the standard library calls its modules. What settles it is
+    where the module was loaded from. A module that cannot be placed counts
+    as the project's, so it is hashed or refused, never silently left out.
+    """
+    module = sys.modules.get(name)
+    if module is None:
+        return False
+    if getattr(getattr(module, "__spec__", None), "origin", None) in {"built-in", "frozen"}:
+        return True
+    file = getattr(module, "__file__", None)
+    if file is None:
+        return False
+    location = Path(file).resolve()
+    return any(
+        location.is_relative_to(directory) and SITE_DIRECTORIES.isdisjoint(location.relative_to(directory).parts)
+        for directory in _stdlib_directories()
+    )
+
+
+def _is_library_module(name: str) -> bool:
+    top_level = name.partition(".")[0]
+    if top_level in LIBRARY_PACKAGES:
+        return True
+    return top_level in sys.stdlib_module_names and _is_stdlib_module(name)
+
+
 def _is_user_class(candidate: object) -> bool:
     """A class the project answers for, as opposed to a library or builtin one.
 
-    Deliberately conservative: only :data:`LIBRARY_PACKAGES` are excluded, so
-    a class of any other third-party package stays in the hashed source.
+    Deliberately conservative: only :data:`LIBRARY_PACKAGES` and the standard
+    library are excluded, so a class of any other third-party package stays
+    in the hashed source.
     """
     if not isinstance(candidate, type):
         return False
-    return _is_range_enum(candidate) or candidate.__module__.partition(".")[0] not in LIBRARY_PACKAGES
+    return _is_range_enum(candidate) or not _is_library_module(candidate.__module__)
 
 
 def _is_range_enum(candidate: object) -> bool:
@@ -137,9 +184,8 @@ def _class_source(cls: type, what: str) -> str:
 
 def _is_type_alias(annotation: object) -> bool:
     """A PEP 695 alias: a ``type X = ...`` statement or a ``TypeAliasType``
-    call, of ``typing`` or of the ``typing_extensions`` backport (a distinct
-    class that pydantic accepts just the same)."""
-    return type(annotation).__name__ == "TypeAliasType" and hasattr(annotation, "__value__")
+    call. Told by the class name, so that asking does not evaluate the alias."""
+    return type(annotation).__name__ == "TypeAliasType"
 
 
 def _parametrization(cls: type) -> tuple[object, ...] | None:
@@ -173,13 +219,36 @@ def _successors(annotation: object) -> tuple[object, ...]:
     return (*annotation.__mro__[1:], *(field.annotation for field in fields))
 
 
-def _referenced_classes(annotation: object) -> dict[str, type]:
+def _collect(found: dict[str, type], cls: type, what: str) -> None:
+    """Files a class under its name, refusing a second, different one.
+
+    A source lists each name once, so the other class would be left out of
+    what is hashed and shown. The same text met twice (a class a function
+    builds on every call) is one class as far as a reviewer is concerned.
+    """
+    key = _class_key(cls)
+    known = found.setdefault(key, cls)
+    if known is cls or _class_source(known, f"class {key}") == _class_source(cls, f"class {key}"):
+        return
+    msg = f"{what} reaches two different classes named {key}; give them distinct names"
+    raise AdapterError(msg)
+
+
+def _referenced_classes(annotation: object, what: str) -> dict[str, type]:
     """The user classes an annotation reaches, by qualified name.
 
     Followed: type arguments, PEP 695 aliases, the bases of every user class
     and the fields of every user model. A library class is passed through —
     its type arguments are followed — without being collected.
     """
+    try:
+        return _walk_classes(annotation, what)
+    except NameError as error:  # an alias is evaluated when it is followed
+        msg = f"cannot resolve a type alias that {what} reaches: {error}"
+        raise AdapterError(msg) from error
+
+
+def _walk_classes(annotation: object, what: str) -> dict[str, type]:
     found: dict[str, type] = {}
     # Classes and aliases already expanded; a recursive alias or a model that
     # refers to itself would otherwise never end. Holding the objects keeps
@@ -193,7 +262,7 @@ def _referenced_classes(annotation: object) -> dict[str, type]:
                 continue
             expanded[id(current)] = current
         if _is_user_class(current) and _parametrization(current) is None:
-            found[_class_key(current)] = current
+            _collect(found, current, what)  # type: ignore[arg-type]
         pending.extend(_successors(current))
     return found
 
@@ -205,20 +274,31 @@ def _class_sources(classes: Mapping[str, type], what: str) -> list[str]:
 def model_source(root_model: type[BaseModel]) -> str:
     """The reviewable source of a root model: its class, then every user
     class its bases and fields reach, each once, in name order."""
+    what = f"root model {root_model.__qualname__}"
     root_key = _class_key(root_model)
-    nested = {key: cls for key, cls in _referenced_classes(root_model).items() if key != root_key}
-    root_source = _source(root_model, f"root model {root_model.__qualname__}")
-    return "\n".join([root_source, *_class_sources(nested, "model class")])
+    nested = {key: cls for key, cls in _referenced_classes(root_model, what).items() if key != root_key}
+    return "\n".join([_source(root_model, what), *_class_sources(nested, "model class")])
 
 
 def function_source(func: object, what: str) -> str:
     """The reviewable source of a calculation or verification: the function,
     then every user class its return annotation reaches, in name order."""
+    returned = _return_annotation(func, what)
+    return "\n".join([_source(func, what), *_class_sources(_referenced_classes(returned, what), "class")])
+
+
+def _return_annotation(func: object, what: str) -> object:
     try:
-        returned = typing.get_type_hints(func).get("return")  # type: ignore[arg-type]
-    except (NameError, TypeError):
-        returned = inspect.signature(func).return_annotation  # type: ignore[arg-type]
-    return "\n".join([_source(func, what), *_class_sources(_referenced_classes(returned), "class")])
+        return typing.get_type_hints(func).get("return")  # type: ignore[arg-type]
+    except TypeError:
+        # Not a plain function (a callable object): there are no names to
+        # resolve, and the signature holds the annotation as written.
+        return inspect.signature(func).return_annotation  # type: ignore[arg-type]
+    except (NameError, AttributeError, SyntaxError) as error:
+        # A name inside the annotation that does not resolve. Carrying on
+        # would leave the classes behind it out of the source.
+        msg = f"cannot resolve the return annotation of {what}: {error}"
+        raise AdapterError(msg) from error
 
 
 def definition_of(project: vq.Project, node: vq.DefinitionNode) -> Definition:

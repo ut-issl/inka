@@ -187,8 +187,8 @@ def test_a_pep_695_alias_is_followed_to_the_classes_it_names(class_graph):
     assert "class Chemistry(vq.StrEnumWithDoc):" in model, "and on through the fields of what it names"
 
 
-def test_a_typing_extensions_alias_is_followed_like_a_pep_695_one():
-    from typing_extensions import TypeAliasType  # a pydantic dependency
+def test_an_alias_built_by_calling_typealiastype_is_followed_like_a_type_statement():
+    from typing import TypeAliasType
 
     class Cell(BaseModel):
         capacity_wh: float
@@ -219,6 +219,109 @@ def test_library_classes_stay_out_of_the_sources(class_graph):
     assert "class StrEnumWithDoc" not in emitted, "the veriq base of a user enum"
     assert "class BaseModel" not in emitted
     assert "class StrEnum" not in emitted
+
+
+#: A project whose root model reaches a class of its own; the module name is
+#: the test's choice.
+NESTED_CLASS_SCRIPT = """\
+from typing import Annotated
+
+from pydantic import BaseModel
+
+import veriq as vq
+
+project = vq.Project("Probe")
+scope = vq.Scope("S")
+project.add_scope(scope)
+
+
+class Limit(BaseModel):
+    ceiling: float
+
+
+@scope.root_model()
+class M(BaseModel):
+    x: float
+    limit: Limit
+
+
+@scope.verification()
+def verify_x(x: Annotated[float, vq.Ref("$.x")]) -> bool:
+    return x > 0
+"""
+NESTED_CLASS_INPUT = "[S.model]\nx = 1.0\n\n[S.model.limit]\nceiling = 2.0\n"
+
+
+def test_a_project_module_named_like_a_standard_library_one_is_still_project_code(tmp_path, write_script):
+    # `sched` is a standard library module; a project file may be called
+    # that all the same, and veriq imports a script under its file stem.
+    assert "sched" in sys.stdlib_module_names
+    assert "sched" not in sys.modules, "the test needs a standard library module nothing has imported"
+    script = write_script("sched", NESTED_CLASS_SCRIPT)
+    (tmp_path / "sched.in.toml").write_text(NESTED_CLASS_INPUT)
+
+    model = sources(collect_script(script, tmp_path / "sched.in.toml"), "S::?verify_x")["S::$"]
+
+    assert class_headers(model) == ["class M(BaseModel):", "class Limit(BaseModel):"]
+
+
+def test_two_different_classes_of_one_name_are_refused_rather_than_one_dropped():
+    def cell(*, redundant: bool) -> type[BaseModel]:
+        if redundant:
+
+            class Cell(BaseModel):
+                capacity_wh: float
+                spare_wh: float
+
+        else:
+
+            class Cell(BaseModel):
+                capacity_wh: float
+
+        return Cell
+
+    Single, Redundant = cell(redundant=False), cell(redundant=True)
+
+    def cells() -> tuple[Single, Redundant]:
+        raise NotImplementedError
+
+    with pytest.raises(adapter.AdapterError, match=r"calculation S::@cells .*two different classes .*Cell"):
+        adapter.function_source(cells, "calculation S::@cells")
+
+
+def test_one_class_reached_twice_under_one_name_is_emitted_once():
+    def cell() -> type[BaseModel]:
+        class Cell(BaseModel):
+            capacity_wh: float
+
+        return Cell
+
+    First, Second = cell(), cell()
+
+    def cells() -> tuple[First, Second]:
+        raise NotImplementedError
+
+    source = adapter.function_source(cells, "calculation S::@cells")
+
+    assert source.count("class Cell(BaseModel):") == 1
+
+
+def test_a_return_annotation_that_does_not_resolve_is_reported_with_the_definition():
+    def cells() -> list["NoSuchCell"]:  # noqa: F821
+        raise NotImplementedError
+
+    with pytest.raises(adapter.AdapterError, match=r"calculation S::@cells.*NoSuchCell"):
+        adapter.function_source(cells, "calculation S::@cells")
+
+
+def test_an_alias_that_does_not_resolve_is_reported_with_the_definition():
+    type Cells = list[NoSuchCell]  # noqa: F821
+
+    def cells() -> Cells:
+        raise NotImplementedError
+
+    with pytest.raises(adapter.AdapterError, match=r"calculation S::@cells.*NoSuchCell"):
+        adapter.function_source(cells, "calculation S::@cells")
 
 
 def test_a_with_range_enum_is_emitted_as_the_members_veriq_generated():
