@@ -26,7 +26,12 @@ on:
 permissions: {}
 
 # Releases share one group, so two of them never create the same tag at
-# once: the second waits, then fails its tag check. Dry runs never wait.
+# once: a second one waits, then fails its tag check. GitHub keeps only one
+# waiting run per group, so a third dispatch cancels the waiting one. Dry
+# runs never wait.
+#
+# The workflow does not look at CI results: release only a commit of main
+# whose CI has passed, which RELEASING.md's procedure guarantees.
 concurrency:
   group: ${{ inputs.mode == 'release' && 'release' || format('release-{0}', github.run_id) }}
   cancel-in-progress: false

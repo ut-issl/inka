@@ -42,11 +42,13 @@ On a new branch from `main`:
 ### 2. Optional: dry run
 
 In the Actions tab, run the `Release` workflow with `mode` left at its default `dry-run`. A dry run can start from any
-branch. It runs every check of a release and shows the release notes in the run summary, but creates nothing.
+branch. It runs every check of a release (so it also fails when the tag already exists) and shows the release notes in
+the run summary, but creates nothing.
 
 ### 3. Run the release
 
-Run the `Release` workflow on `main` with `mode` set to `release`.
+Run the `Release` workflow on `main` with `mode` set to `release`, once CI has passed on the commit at the tip of
+`main`. The workflow does not check CI results itself.
 
 The workflow releases the version in `Cargo.toml` as the tag `v<version>`. Do not push the tag yourself: the workflow
 creates it on the dispatched commit together with the GitHub Release. The run fails before creating anything when

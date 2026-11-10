@@ -15,6 +15,9 @@ where those fields live:
 must match. Versions are plain `MAJOR.MINOR.PATCH`: pre-release and build
 suffixes are spelled differently by Cargo, Python, and npm, so none is
 accepted. Only the standard library is used (Python 3.11 or later).
+
+The crates under `crate/inka-evidence-rust/tests/fixtures` are standalone
+test inputs with versions of their own, not packages of this repository.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ import sys
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 CARGO_MANIFEST = "Cargo.toml"
 CARGO_LOCK = "Cargo.lock"
@@ -50,8 +53,11 @@ VERSIONED_FILES = (
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 TABLE_HEADER = re.compile(r"^\[")
 NAME_LINE = re.compile(r'^name = "([^"]*)"$')
-VERSION_LINE = re.compile(r'^version = "[^"]*"$')
+VERSION_LINE = re.compile(r'^version = "([^"]*)"$')
 SOURCE_LINE = re.compile(r"^source = ")
+FENCE = re.compile(r"^(```|~~~)")
+
+Table = dict[str, Any]
 
 
 class ReleaseError(Exception):
@@ -67,25 +73,38 @@ class Found(NamedTuple):
 
 
 def _read(root: Path, relative: str) -> str:
-    path = root / relative
     try:
-        return path.read_text(encoding="utf-8")
+        return (root / relative).read_text(encoding="utf-8")
     except OSError as error:
-        raise ReleaseError(f"cannot read {relative}: {error.strerror}") from error
+        raise ReleaseError(f"cannot read {relative}: {error.strerror or error}") from error
 
 
-def _toml(root: Path, relative: str) -> dict:
+def _parse_toml(text: str, relative: str) -> Table:
     try:
-        return tomllib.loads(_read(root, relative))
+        return tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         raise ReleaseError(f"{relative} is not valid TOML: {error}") from error
 
 
-def _json(root: Path, relative: str) -> dict:
+def _toml(root: Path, relative: str) -> Table:
+    return _parse_toml(_read(root, relative), relative)
+
+
+def _json(root: Path, relative: str) -> Table:
     try:
         return json.loads(_read(root, relative))
     except json.JSONDecodeError as error:
         raise ReleaseError(f"{relative} is not valid JSON: {error}") from error
+
+
+def _field(data: Any, relative: str, *keys: str) -> Any:
+    """`data[keys[0]][keys[1]]...`, or a ReleaseError naming the field."""
+    for key in keys:
+        if not isinstance(data, dict) or key not in data:
+            dotted = ".".join(f'"{k}"' if k == "" else k for k in keys)
+            raise ReleaseError(f"{relative} has no {dotted}")
+        data = data[key]
+    return data
 
 
 def _check_semver(version: str) -> None:
@@ -95,10 +114,7 @@ def _check_semver(version: str) -> None:
 
 def workspace_version(root: Path) -> str:
     """The version every package must carry: Cargo's workspace version."""
-    try:
-        return _toml(root, CARGO_MANIFEST)["workspace"]["package"]["version"]
-    except KeyError as error:
-        raise ReleaseError(f"{CARGO_MANIFEST} has no [workspace.package] version") from error
+    return _field(_toml(root, CARGO_MANIFEST), CARGO_MANIFEST, "workspace", "package", "version")
 
 
 def _workspace_members(root: Path) -> list[str]:
@@ -108,17 +124,22 @@ def _workspace_members(root: Path) -> list[str]:
     for pattern in patterns:
         for manifest in sorted(root.glob(f"{pattern}/Cargo.toml")):
             relative = manifest.relative_to(root).as_posix()
-            names.append(_toml(root, relative)["package"]["name"])
+            names.append(_field(_toml(root, relative), relative, "package", "name"))
     return names
 
 
-def _lock_packages(lock: dict) -> list[dict]:
-    return lock.get("package", [])
+def _lock_packages(lock: Table, relative: str) -> list[Table]:
+    packages = lock.get("package", [])
+    for package in packages:
+        _field(package, relative, "name")
+        _field(package, relative, "version")
+    return packages
 
 
 def _cargo_lock_versions(root: Path) -> list[Found]:
     # Workspace members are the only packages without a `source`.
-    local = {p["name"]: p["version"] for p in _lock_packages(_toml(root, CARGO_LOCK)) if "source" not in p}
+    packages = _lock_packages(_toml(root, CARGO_LOCK), CARGO_LOCK)
+    local = {p["name"]: p["version"] for p in packages if "source" not in p}
     found = []
     for name in _workspace_members(root):
         if name not in local:
@@ -128,13 +149,14 @@ def _cargo_lock_versions(root: Path) -> list[Found]:
 
 
 def _project_name(root: Path, directory: str) -> str:
-    return _toml(root, _relative(directory, "pyproject.toml"))["project"]["name"]
+    relative = _relative(directory, "pyproject.toml")
+    return _field(_toml(root, relative), relative, "project", "name")
 
 
 def _uv_lock_version(root: Path, directory: str) -> Found:
     relative = _relative(directory, "uv.lock")
     name = _project_name(root, directory)
-    for package in _lock_packages(_toml(root, relative)):
+    for package in _lock_packages(_toml(root, relative), relative):
         if package["name"] == name:
             return Found(relative, name, package["version"])
     raise ReleaseError(f"project {name} is missing from {relative}; run `uv lock`")
@@ -146,75 +168,104 @@ def versions(root: Path) -> list[Found]:
     found += _cargo_lock_versions(root)
     for directory in PYTHON_PROJECTS:
         relative = _relative(directory, "pyproject.toml")
-        found.append(Found(relative, "project.version", _toml(root, relative)["project"]["version"]))
+        found.append(Found(relative, "project.version", _field(_toml(root, relative), relative, "project", "version")))
         found.append(_uv_lock_version(root, directory))
     for directory in NPM_PACKAGES:
         manifest = _relative(directory, "package.json")
-        found.append(Found(manifest, "version", _json(root, manifest)["version"]))
+        found.append(Found(manifest, "version", _field(_json(root, manifest), manifest, "version")))
         lock_path = _relative(directory, "package-lock.json")
         lock = _json(root, lock_path)
-        found.append(Found(lock_path, "version", lock["version"]))
-        found.append(Found(lock_path, 'packages[""].version', lock["packages"][""]["version"]))
+        found.append(Found(lock_path, "version", _field(lock, lock_path, "version")))
+        root_version = _field(lock, lock_path, "packages", "", "version")
+        found.append(Found(lock_path, 'packages[""].version', root_version))
     return found
 
 
-def mismatches(root: Path) -> list[Found]:
+def mismatches(root: Path, found: list[Found] | None = None) -> list[Found]:
     """The version fields that differ from the workspace version."""
     expected = workspace_version(root)
-    return [entry for entry in versions(root) if entry.version != expected]
+    return [entry for entry in (versions(root) if found is None else found) if entry.version != expected]
 
 
-def _rewrite_toml(
-    text: str,
-    relative: str,
-    header: str,
-    select: Callable[[str | None, bool], bool],
-    expected: int,
-    version: str,
-) -> str:
-    """Rewrite the `version = "..."` line of every `header` table chosen by
-    `select(name, has_source)`, leaving every other byte as it was."""
-    lines = text.splitlines(keepends=True)
+def _changed_leaves(old: Any, new: Any, path: tuple[Any, ...] = ()) -> list[tuple[tuple[Any, ...], Any]]:
+    """Every value that differs between two parsed documents, by path."""
+    if isinstance(old, dict) and isinstance(new, dict) and old.keys() == new.keys():
+        return [leaf for key in old for leaf in _changed_leaves(old[key], new[key], (*path, key))]
+    if isinstance(old, list) and isinstance(new, list) and len(old) == len(new):
+        return [leaf for index, pair in enumerate(zip(old, new)) for leaf in _changed_leaves(*pair, (*path, index))]
+    return [] if old == new else [(path, new)]
+
+
+class _TomlTarget(NamedTuple):
+    """Which `version = "..."` lines of a TOML file a bump rewrites: those
+    of the `header` tables that `select(name, has_source)` accepts."""
+
+    header: str
+    select: Callable[[str | None, bool], bool]
+    expected: int
+
+
+def _rewrite_toml(text: str, relative: str, target: _TomlTarget, version: str) -> str:
+    """Rewrite the chosen version lines, leaving every other byte as it was.
+
+    The lines are found textually, so the result is parsed again and must
+    differ from the original in exactly those version fields: a header or a
+    version line inside a multi-line string fails instead of being edited.
+    """
     sections: list[list[str]] = [[]]
-    for line in lines:
+    for line in text.splitlines(keepends=True):
         if TABLE_HEADER.match(line):
             sections.append([])
         sections[-1].append(line)
 
-    rewritten = 0
+    previous: list[str] = []
     for section in sections:
-        if not section or section[0].rstrip("\n") != header:
+        if not section or section[0].rstrip("\n") != target.header:
             continue
         bare = [line.rstrip("\n") for line in section]
         names = [m.group(1) for m in map(NAME_LINE.match, bare) if m]
         has_source = any(SOURCE_LINE.match(line) for line in bare)
-        if not select(names[0] if names else None, has_source):
+        if not target.select(names[0] if names else None, has_source):
             continue
         for index, line in enumerate(bare):
-            if VERSION_LINE.match(line):
+            if match := VERSION_LINE.match(line):
+                previous.append(match.group(1))
                 section[index] = f'version = "{version}"\n'
-                rewritten += 1
                 break
-    if rewritten != expected:
-        raise ReleaseError(f"expected {expected} version field(s) under {header} in {relative}, found {rewritten}")
-    return "".join(line for section in sections for line in section)
+    if len(previous) != target.expected:
+        raise ReleaseError(
+            f"expected {target.expected} version field(s) under {target.header} in {relative}, found {len(previous)}"
+        )
+
+    rewritten = "".join(line for section in sections for line in section)
+    changed = _changed_leaves(_parse_toml(text, relative), _parse_toml(rewritten, relative))
+    expected_changes = sum(old != version for old in previous)
+    if len(changed) != expected_changes or any(path[-1] != "version" or value != version for path, value in changed):
+        raise ReleaseError(f"{relative} is laid out in a way bump cannot edit safely; update its version by hand")
+    return rewritten
+
+
+def _dump_json(data: Table) -> str:
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
 def _rewrite_json(text: str, relative: str, paths: list[tuple[str, ...]], version: str) -> str:
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ReleaseError(f"{relative} is not valid JSON: {error}") from error
     if _dump_json(data) != text:
-        # Rewriting would also reformat the file; refuse rather than churn it.
-        raise ReleaseError(f"{relative} is not formatted as npm writes it; run npm install first")
+        raise ReleaseError(
+            f"{relative} is not laid out as npm writes it (two-space indent, one entry per line), "
+            "and bump does not reformat files; fix its layout or update its version by hand"
+        )
     for path in paths:
+        _field(data, relative, *path)
         target = data
         for key in path[:-1]:
             target = target[key]
         target[path[-1]] = version
     return _dump_json(data)
-
-
-def _dump_json(data: dict) -> str:
-    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
 def bump(root: Path, version: str) -> None:
@@ -227,37 +278,39 @@ def bump(root: Path, version: str) -> None:
     members = set(_workspace_members(root))
     rewritten: dict[str, str] = {}
 
-    rewritten[CARGO_MANIFEST] = _rewrite_toml(
-        _read(root, CARGO_MANIFEST), CARGO_MANIFEST, "[workspace.package]", lambda _n, _s: True, 1, version
-    )
-    rewritten[CARGO_LOCK] = _rewrite_toml(
-        _read(root, CARGO_LOCK),
-        CARGO_LOCK,
-        "[[package]]",
-        lambda name, has_source: name in members and not has_source,
-        len(members),
-        version,
-    )
+    def toml(relative: str, target: _TomlTarget) -> None:
+        rewritten[relative] = _rewrite_toml(_read(root, relative), relative, target, version)
+
+    def npm(relative: str, paths: list[tuple[str, ...]]) -> None:
+        rewritten[relative] = _rewrite_json(_read(root, relative), relative, paths, version)
+
+    toml(CARGO_MANIFEST, _TomlTarget("[workspace.package]", lambda _n, _s: True, 1))
+    toml(CARGO_LOCK, _TomlTarget("[[package]]", lambda n, has_source: n in members and not has_source, len(members)))
     for directory in PYTHON_PROJECTS:
-        manifest = _relative(directory, "pyproject.toml")
-        rewritten[manifest] = _rewrite_toml(
-            _read(root, manifest), manifest, "[project]", lambda _n, _s: True, 1, version
-        )
-        lock = _relative(directory, "uv.lock")
+        toml(_relative(directory, "pyproject.toml"), _TomlTarget("[project]", lambda _n, _s: True, 1))
         name = _project_name(root, directory)
-        rewritten[lock] = _rewrite_toml(
-            _read(root, lock), lock, "[[package]]", lambda n, _s, name=name: n == name, 1, version
-        )
+        toml(_relative(directory, "uv.lock"), _TomlTarget("[[package]]", lambda n, _s, name=name: n == name, 1))
     for directory in NPM_PACKAGES:
-        manifest = _relative(directory, "package.json")
-        rewritten[manifest] = _rewrite_json(_read(root, manifest), manifest, [("version",)], version)
-        lock = _relative(directory, "package-lock.json")
-        rewritten[lock] = _rewrite_json(
-            _read(root, lock), lock, [("version",), ("packages", "", "version")], version
-        )
+        npm(_relative(directory, "package.json"), [("version",)])
+        npm(_relative(directory, "package-lock.json"), [("version",), ("packages", "", "version")])
 
     for relative, text in rewritten.items():
         (root / relative).write_text(text, encoding="utf-8")
+
+
+def _headings(lines: list[str]) -> list[int]:
+    """Indices of the `## ` headings outside fenced code blocks."""
+    headings = []
+    fence: str | None = None
+    for index, line in enumerate(lines):
+        if match := FENCE.match(line):
+            if fence is None:
+                fence = match.group(1)
+            elif line.startswith(fence):
+                fence = None
+        elif fence is None and line.startswith("## "):
+            headings.append(index)
+    return headings
 
 
 def notes(changelog: str, version: str) -> str:
@@ -265,11 +318,14 @@ def notes(changelog: str, version: str) -> str:
     to the next `## ` heading, without surrounding blank lines."""
     heading = f"## v{version}"
     lines = changelog.splitlines()
-    try:
-        start = next(i for i, line in enumerate(lines) if line.rstrip() == heading) + 1
-    except StopIteration:
-        raise ReleaseError(f"the changelog has no '{heading}' section") from None
-    end = next((i for i in range(start, len(lines)) if lines[i].startswith("## ")), len(lines))
+    headings = _headings(lines)
+    starts = [i for i in headings if lines[i].rstrip() == heading]
+    if not starts:
+        raise ReleaseError(f"the changelog has no '{heading}' section")
+    if len(starts) > 1:
+        raise ReleaseError(f"the changelog has more than one '{heading}' section")
+    start = starts[0] + 1
+    end = next((i for i in headings if i >= start), len(lines))
     body = "\n".join(lines[start:end]).strip("\n")
     if not body.strip():
         raise ReleaseError(f"the '{heading}' section of the changelog is empty")
@@ -277,7 +333,7 @@ def notes(changelog: str, version: str) -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    parser = argparse.ArgumentParser(description="Keep every inka package on one version, and extract release notes.")
     parser.add_argument(
         "--root",
         type=Path,
@@ -295,20 +351,26 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _check(root: Path) -> int:
+    expected = workspace_version(root)
+    _check_semver(expected)
+    found = versions(root)
+    wrong = mismatches(root, found)
+    for entry in wrong:
+        print(f"{entry.path}: {entry.field} is {entry.version}, expected {expected}", file=sys.stderr)
+    if wrong:
+        print("Run `python3 scripts/release.py bump <version>` to bring them in step.", file=sys.stderr)
+        return 1
+    print(f"All {len(found)} version fields are {expected}.")
+    return 0
+
+
 def _run(arguments: argparse.Namespace) -> int:
     root: Path = arguments.root
     if arguments.command == "version":
         print(workspace_version(root))
     elif arguments.command == "check":
-        expected = workspace_version(root)
-        _check_semver(expected)
-        wrong = mismatches(root)
-        for entry in wrong:
-            print(f"{entry.path}: {entry.field} is {entry.version}, expected {expected}", file=sys.stderr)
-        if wrong:
-            print("Run `python3 scripts/release.py bump <version>` to bring them in step.", file=sys.stderr)
-            return 1
-        print(f"All {len(versions(root))} version fields are {expected}.")
+        return _check(root)
     elif arguments.command == "bump":
         bump(root, arguments.version)
         print(f"Set every version field to {arguments.version}.")

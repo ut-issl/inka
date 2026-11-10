@@ -7,6 +7,8 @@ or writes the real manifests.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import textwrap
@@ -155,8 +157,8 @@ class CheckTest(RepositoryTest):
         )
 
     def test_a_disagreeing_lockfile_entry_is_reported(self) -> None:
-        lock = (self.root / "Cargo.lock").read_text(encoding="utf-8")
-        write(self.root, "Cargo.lock", lock.replace('name = "inka-core"\nversion = "0.1.0"', 'name = "inka-core"\nversion = "0.0.9"'))
+        old = 'name = "inka-core"\nversion = "0.1.0"'
+        write(self.root, "Cargo.lock", CARGO_LOCK.replace(old, old.replace("0.1.0", "0.0.9")))
 
         self.assertEqual(
             release.mismatches(self.root),
@@ -196,7 +198,8 @@ class BumpTest(RepositoryTest):
         cargo_lock = (self.root / "Cargo.lock").read_text(encoding="utf-8")
         self.assertIn('name = "serde"\nversion = "0.1.0"', cargo_lock)
         self.assertIn('serde = { version = "1" }', (self.root / "Cargo.toml").read_text(encoding="utf-8"))
-        self.assertIn('[tool.other]\nversion = "9.9.9"', (self.root / "crate/inka-evidence-py/pyproject.toml").read_text(encoding="utf-8"))
+        python = (self.root / "crate/inka-evidence-py/pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('[tool.other]\nversion = "9.9.9"', python)
         npm_lock = json.loads((self.root / "web/package-lock.json").read_text(encoding="utf-8"))
         self.assertEqual(npm_lock["packages"]["node_modules/dep"]["version"], "0.1.0")
 
@@ -246,6 +249,105 @@ class NotesTest(unittest.TestCase):
     def test_an_empty_section_is_an_error(self) -> None:
         with self.assertRaisesRegex(release.ReleaseError, "empty"):
             release.notes("## v0.0.2\n\n## v0.0.1\n\nFirst.\n", "0.0.2")
+
+
+class BumpGuardTest(RepositoryTest):
+    """The cases bump's guards exist for: each must fail loudly or pick the
+    right field, and a failure must leave every file as it was."""
+
+    def snapshot(self) -> dict[str, str]:
+        return {path: (self.root / path).read_text(encoding="utf-8") for path in release.VERSIONED_FILES}
+
+    def test_a_registry_crate_named_like_a_member_is_left_alone(self) -> None:
+        registry = '\n[[package]]\nname = "inka-core"\nversion = "0.1.0"\nsource = "registry+https://example.invalid"\n'
+        write(self.root, "Cargo.lock", CARGO_LOCK + registry)
+
+        release.bump(self.root, "0.0.1")
+
+        lock = (self.root / "Cargo.lock").read_text(encoding="utf-8")
+        self.assertTrue(lock.endswith(registry))
+        self.assertEqual(lock.count('version = "0.0.1"'), 2)
+
+    def test_a_block_whose_name_is_not_its_first_line_is_still_found(self) -> None:
+        reordered = CARGO_LOCK.replace('name = "inka-core"\nversion = "0.1.0"', 'version = "0.1.0"\nname = "inka-core"')
+        write(self.root, "Cargo.lock", reordered)
+
+        release.bump(self.root, "0.0.1")
+
+        self.assertEqual(release.mismatches(self.root), [])
+
+    def test_a_header_inside_a_multiline_string_is_refused(self) -> None:
+        tricky = CARGO_TOML.replace(
+            '[workspace.package]\nversion = "0.1.0"',
+            '[workspace.package]\ndescription = """\n[workspace.package]\nversion = "9.9.9"\n"""\nversion = "0.1.0"',
+        )
+        write(self.root, "Cargo.toml", tricky)
+        before = self.snapshot()
+
+        with self.assertRaisesRegex(release.ReleaseError, "Cargo.toml"):
+            release.bump(self.root, "0.0.1")
+
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_failure_in_a_late_file_leaves_the_early_ones_untouched(self) -> None:
+        compact = json.dumps(json.loads(package_lock("web", "0.1.0"))) + "\n"
+        write(self.root, "web/package-lock.json", compact)
+        before = self.snapshot()
+
+        with self.assertRaisesRegex(release.ReleaseError, "web/package-lock.json"):
+            release.bump(self.root, "0.0.1")
+
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_missing_field_names_the_file_and_the_field(self) -> None:
+        write(self.root, "pyproject.toml", '[project]\nname = "inka"\n')
+
+        with self.assertRaisesRegex(release.ReleaseError, r"pyproject.toml has no project\.version"):
+            release.versions(self.root)
+
+
+class MainTest(RepositoryTest):
+    def run_main(self, *argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = release.main(["--root", str(self.root), *argv])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_check_succeeds_when_versions_agree(self) -> None:
+        self.assertEqual(self.run_main("check"), (0, "All 16 version fields are 0.1.0.\n", ""))
+
+    def test_check_names_each_disagreeing_field(self) -> None:
+        write(self.root, "web/package.json", package_json("web", "0.2.0"))
+
+        code, _, err = self.run_main("check")
+
+        self.assertEqual(code, 1)
+        self.assertIn("web/package.json: version is 0.2.0, expected 0.1.0", err)
+
+    def test_an_error_is_reported_without_a_traceback(self) -> None:
+        code, out, err = self.run_main("bump", "1.0")
+
+        self.assertEqual((code, out), (1, ""))
+        self.assertTrue(err.startswith("error: '1.0' is not a plain MAJOR.MINOR.PATCH version"), err)
+
+
+class NotesEdgeTest(unittest.TestCase):
+    def test_crlf_and_a_trailing_space_after_the_heading_are_accepted(self) -> None:
+        self.assertEqual(release.notes("## v0.0.1  \r\n\r\nFirst.\r\n", "0.0.1"), "First.\n")
+
+    def test_a_heading_inside_a_code_fence_does_not_end_the_section(self) -> None:
+        changelog = "## v0.0.1\n\nText.\n\n```md\n## Not a heading\n```\n\nMore.\n\n## v0.0.0\n\nOld.\n"
+
+        self.assertEqual(release.notes(changelog, "0.0.1"), "Text.\n\n```md\n## Not a heading\n```\n\nMore.\n")
+
+    def test_a_release_heading_inside_a_code_fence_is_not_a_section(self) -> None:
+        changelog = "~~~\n## v0.0.1\n~~~\n\n## v0.0.1\n\nReal.\n"
+
+        self.assertEqual(release.notes(changelog, "0.0.1"), "Real.\n")
+
+    def test_a_duplicated_section_is_an_error(self) -> None:
+        with self.assertRaisesRegex(release.ReleaseError, "more than one"):
+            release.notes("## v0.0.1\n\nA.\n\n## v0.0.1\n\nB.\n", "0.0.1")
 
 
 if __name__ == "__main__":
