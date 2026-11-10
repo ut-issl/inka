@@ -7,26 +7,33 @@
 //! review` writes `approvals/snapshots/<hex>.json`, `<hex>` being the
 //! approved view hash's digest, with the target path, the assumption set
 //! (each node's id and rendered description) and the definitions (path,
-//! kind and source) as presented. The file is content-addressed: two
-//! approvers approving the same view write the same bytes, and nothing is
-//! appended.
+//! kind and source). The file is content-addressed and stored in a canonical
+//! form — definitions sorted by path, sources with the line endings the hash
+//! reads — so two approvers approving the same view write the same bytes
+//! however the evidence was delivered, and nothing is appended. A node's id
+//! and a definition's kind are outside the hash; for those the first
+//! approval's spelling stands.
 //!
 //! At the next review the current assumption set is diffed against the
 //! baseline: the snapshot of the most recently approved view hash of the
 //! same bind — the latest `approve` record for it whose snapshot exists.
 //! Snapshots are presentation aids and nothing more. Evaluation never reads
-//! them, so a missing or deleted snapshot changes what a reviewer is shown,
-//! never what is established.
+//! them, so a missing, deleted or damaged snapshot changes what a reviewer
+//! is shown, never what is established. A file is written whole or not at
+//! all (a temporary file renamed into place), and a destination that is not
+//! a snapshot is replaced by the next approval of the same view.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
 use crate::calc_evidence::{CalcTarget, DefinitionKind};
 use crate::hash::ViewHash;
+use crate::normalize;
 use crate::record::{Label, Record};
 use crate::view::{Mode, ViewNode};
 
@@ -52,7 +59,8 @@ pub struct Snapshot {
     pub target: String,
     /// The assumed nodes, in sorted block-ID order.
     pub assumptions: Vec<Assumption>,
-    /// The definitions of the target's upstream subgraph, as delivered.
+    /// The definitions of the target's upstream subgraph, sorted bytewise
+    /// by path, each source with CRLF read as LF.
     pub definitions: Vec<Definition>,
 }
 
@@ -74,24 +82,29 @@ pub struct Definition {
 }
 
 impl Snapshot {
-    /// The snapshot of a calc bind as it is presented: `target` is the
-    /// imported evidence the bind's reference names, `assumed` the nodes it
-    /// assumes.
+    /// The snapshot of a calc bind: `target` is the imported evidence the
+    /// bind's reference names, `assumed` the nodes it assumes.
+    ///
+    /// Definitions are stored the way the interface hash reads them — sorted
+    /// bytewise by path, CRLF as LF — so deliveries the hash cannot tell
+    /// apart snapshot to the same bytes.
     #[must_use]
     pub fn of(path: &str, target: &CalcTarget, assumed: &[&ViewNode]) -> Self {
+        let mut definitions: Vec<Definition> = target
+            .definitions
+            .iter()
+            .map(|definition| Definition {
+                path: definition.path.clone(),
+                kind: definition.kind,
+                source: normalize::evidence_body(&definition.source).into_owned(),
+            })
+            .collect();
+        definitions.sort_unstable_by(|a, b| a.path.as_bytes().cmp(b.path.as_bytes()));
         Self {
             v: VERSION,
             target: path.to_owned(),
             assumptions: assumed.iter().map(|node| Assumption::of(node)).collect(),
-            definitions: target
-                .definitions
-                .iter()
-                .map(|definition| Definition {
-                    path: definition.path.clone(),
-                    kind: definition.kind,
-                    source: definition.source.clone(),
-                })
-                .collect(),
+            definitions,
         }
     }
 
@@ -142,9 +155,15 @@ pub enum SnapshotError {
 
 /// Writes the snapshot of `hash`, creating the directory as needed.
 ///
-/// Content-addressed, so an existing file is left as it is: the second
-/// approver of the same view finds the first one's snapshot and writes
-/// nothing. Returns whether a file was written.
+/// Content-addressed, so a destination that already holds a snapshot is left
+/// as it is: the second approver of the same view finds the first one's file
+/// and writes nothing. A destination that cannot be read as a snapshot — a
+/// truncated or otherwise damaged file — is replaced, which is how damage
+/// heals. One a newer build wrote ([`SnapshotError::UnsupportedVersion`]) is
+/// not damage and is left alone. Returns whether a file was written.
+///
+/// The file appears whole or not at all: the text goes to a temporary file
+/// in the same directory, which is then renamed into place.
 ///
 /// # Errors
 ///
@@ -160,9 +179,11 @@ pub fn write(
     hash: ViewHash,
     snapshot: &Snapshot,
 ) -> Result<bool, SnapshotError> {
-    let path = snapshots_dir.join(Snapshot::file_name(hash));
-    if path.exists() {
-        return Ok(false);
+    match read(snapshots_dir, hash) {
+        Ok(Some(_)) | Err(SnapshotError::UnsupportedVersion { .. }) => return Ok(false),
+        // Absent, or present and not a snapshot: either way this view has
+        // no snapshot yet, and writing one is what puts that right.
+        Ok(None) | Err(_) => {}
     }
     fs::create_dir_all(snapshots_dir).map_err(|source| SnapshotError::Write {
         path: snapshots_dir.to_owned(),
@@ -170,8 +191,40 @@ pub fn write(
     })?;
     let mut text = serde_json::to_string_pretty(snapshot).expect("a snapshot serializes to JSON");
     text.push('\n');
-    fs::write(&path, text).map_err(|source| SnapshotError::Write { path, source })?;
+    let name = Snapshot::file_name(hash);
+    let path = snapshots_dir.join(&name);
+    let temporary = snapshots_dir.join(temporary_name(&name));
+    let renamed = write_new(&temporary, &text).and_then(|()| fs::rename(&temporary, &path));
+    if let Err(source) = renamed {
+        // Best effort: the write already failed, and that is what is reported.
+        let _ = fs::remove_file(&temporary);
+        return Err(SnapshotError::Write { path, source });
+    }
     Ok(true)
+}
+
+/// A name no other writer is using: this process's id and a counter, so two
+/// processes — or two threads — writing the same snapshot never share a
+/// temporary file. Dot-prefixed, and not `.json`, so it is never mistaken
+/// for a snapshot.
+fn temporary_name(name: &str) -> String {
+    static WRITES: AtomicU64 = AtomicU64::new(0);
+    let write = WRITES.fetch_add(1, Ordering::Relaxed);
+    format!(".{name}.{}.{write}.tmp", std::process::id())
+}
+
+/// Writes `text` to `path` and flushes it to the device, so the rename that
+/// follows never publishes a file whose content is still in flight.
+fn write_new(path: &Path, text: &str) -> io::Result<()> {
+    let mut file = File::create(path)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()
+}
+
+/// The one field every version of the format carries.
+#[derive(Deserialize)]
+struct Versioned {
+    v: u64,
 }
 
 /// Reads the snapshot of `hash`, or `None` when none was written.
@@ -179,8 +232,9 @@ pub fn write(
 /// # Errors
 ///
 /// Returns [`SnapshotError::Read`] when the file exists but cannot be read,
-/// [`SnapshotError::Malformed`] when it is not a snapshot, and
-/// [`SnapshotError::UnsupportedVersion`] when it declares another version.
+/// [`SnapshotError::UnsupportedVersion`] when it declares another version —
+/// whatever else it holds — and [`SnapshotError::Malformed`] when it is not
+/// a snapshot.
 pub fn read(snapshots_dir: &Path, hash: ViewHash) -> Result<Option<Snapshot>, SnapshotError> {
     let path = snapshots_dir.join(Snapshot::file_name(hash));
     let text = match fs::read_to_string(&path) {
@@ -188,18 +242,16 @@ pub fn read(snapshots_dir: &Path, hash: ViewHash) -> Result<Option<Snapshot>, Sn
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(source) => return Err(SnapshotError::Read { path, source }),
     };
-    let snapshot: Snapshot =
-        serde_json::from_str(&text).map_err(|source| SnapshotError::Malformed {
-            path: path.clone(),
-            source,
-        })?;
-    if snapshot.v != VERSION {
-        return Err(SnapshotError::UnsupportedVersion {
-            path,
-            found: snapshot.v,
-        });
+    // The version is read on its own first: another version need not have
+    // this one's fields, and the strict parse below would call it malformed.
+    if let Ok(Versioned { v: found }) = serde_json::from_str(&text)
+        && found != VERSION
+    {
+        return Err(SnapshotError::UnsupportedVersion { path, found });
     }
-    Ok(Some(snapshot))
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|source| SnapshotError::Malformed { path, source })
 }
 
 /// The snapshot a review diffs against, and the approval it belongs to.
@@ -220,14 +272,16 @@ pub struct Baseline<'r> {
 ///
 /// # Errors
 ///
-/// Returns a [`SnapshotError`] when a snapshot file exists but cannot be
-/// read as one.
+/// Returns a [`SnapshotError`] when the snapshot of the latest approval that
+/// has one exists but cannot be read as one. An older readable snapshot is
+/// not offered in its place: it would be a baseline the reviewer did not
+/// last approve against.
 pub fn baseline<'r>(
     snapshots_dir: &Path,
     records: &'r [Record],
     node: &ViewNode,
 ) -> Result<Option<Baseline<'r>>, SnapshotError> {
-    let mut approvals: Vec<(jiff::Timestamp, usize, &Record)> = records
+    let mut approvals: Vec<(Instant<'_>, usize, &Record)> = records
         .iter()
         .enumerate()
         .filter(|(_, record)| {
@@ -246,13 +300,32 @@ pub fn baseline<'r>(
     Ok(None)
 }
 
-/// A record's instant; the stored spelling is validated RFC3339 UTC.
-fn instant(record: &Record) -> jiff::Timestamp {
-    record
-        .timestamp()
-        .as_str()
-        .parse()
-        .expect("a record timestamp is a valid RFC3339 UTC instant")
+/// The length of `YYYY-MM-DDThh:mm:ss`, the fixed-width part of a timestamp.
+const WHOLE_SECONDS_LEN: usize = 19;
+
+/// A record's instant as a sort key: the whole seconds, then the fraction's
+/// significant digits.
+///
+/// A stored timestamp has one spelling — `YYYY-MM-DDThh:mm:ss(.digits)?Z`,
+/// every field fixed-width and always UTC — so comparing the pieces bytewise
+/// is comparing the instants. Nothing is converted, so no accepted spelling
+/// can fail to order: not a fraction finer than a nanosecond, not an instant
+/// at the far end of the calendar.
+type Instant<'r> = (&'r str, &'r str);
+
+fn instant(record: &Record) -> Instant<'_> {
+    let text = record.timestamp().as_str();
+    let (seconds, rest) = text
+        .split_at_checked(WHOLE_SECONDS_LEN)
+        .unwrap_or((text, ""));
+    // `.5`, `.50` and no fraction against `.0` are the same instants:
+    // trailing zeros carry nothing, and without them digit strings order as
+    // the fractions they spell.
+    let fraction = rest
+        .trim_start_matches('.')
+        .trim_end_matches('Z')
+        .trim_end_matches('0');
+    (seconds, fraction)
 }
 
 /// How the current assumption set differs from a baseline, by node id.
@@ -332,6 +405,7 @@ fn assumption(id: &str, description: &str) -> Assumption {
 mod tests {
     use super::*;
 
+    use crate::calc_evidence::DefinitionSource;
     use crate::hash::LocalView;
     use crate::record::{RecordFields, Target};
 
@@ -504,6 +578,288 @@ mod tests {
             baseline(&snapshots, &records, &bind("unknown")).expect("reads"),
             None
         );
+    }
+
+    /// A calc target delivering `definitions` in the given order.
+    fn calc_target(definitions: &[(&str, DefinitionKind, &str)]) -> CalcTarget {
+        let hashed: Vec<crate::calc_evidence::Definition<'_>> = definitions
+            .iter()
+            .map(|&(path, _, source)| crate::calc_evidence::Definition { path, source })
+            .collect();
+        CalcTarget {
+            definitions: definitions
+                .iter()
+                .map(|&(path, kind, source)| DefinitionSource {
+                    path: path.to_owned(),
+                    kind,
+                    source: source.to_owned(),
+                })
+                .collect(),
+            assumes: Vec::new(),
+            leaves: Vec::new(),
+            valid: true,
+            xfail: false,
+            interface_hash: crate::calc_evidence::interface_hash(TARGET, &hashed, &[]),
+        }
+    }
+
+    const TARGET: &str = "Power::?verify_margin";
+
+    fn snapshot_text(snapshots: &Path, hash: ViewHash) -> String {
+        fs::read_to_string(snapshots.join(Snapshot::file_name(hash))).expect("reads")
+    }
+
+    #[test]
+    fn a_snapshot_stores_definitions_sorted_by_path_with_lf_line_endings() {
+        // Arrange: delivered budget-first, with CRLF line endings.
+        let target = calc_target(&[
+            (
+                "Power::@budget",
+                DefinitionKind::Calculation,
+                "def budget():\r\n    ...\r\n",
+            ),
+            (TARGET, DefinitionKind::Verification, "def verify(): ...\n"),
+        ]);
+
+        // Act
+        let snapshot = Snapshot::of(TARGET, &target, &[]);
+
+        // Assert: the order and the normalization the interface hash uses.
+        assert_eq!(
+            snapshot.definitions,
+            [
+                Definition {
+                    path: TARGET.to_owned(),
+                    kind: DefinitionKind::Verification,
+                    source: "def verify(): ...\n".to_owned(),
+                },
+                Definition {
+                    path: "Power::@budget".to_owned(),
+                    kind: DefinitionKind::Calculation,
+                    source: "def budget():\n    ...\n".to_owned(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn deliveries_the_hash_cannot_tell_apart_write_identical_bytes() {
+        // Arrange: the same view delivered in another definition order and
+        // with CRLF line endings — the interface hash is the same.
+        let lf = calc_target(&[
+            (TARGET, DefinitionKind::Verification, "def verify(): ...\n"),
+            (
+                "Power::@budget",
+                DefinitionKind::Calculation,
+                "def budget():\n    ...\n",
+            ),
+        ]);
+        let crlf = calc_target(&[
+            (
+                "Power::@budget",
+                DefinitionKind::Calculation,
+                "def budget():\r\n    ...\r\n",
+            ),
+            (
+                TARGET,
+                DefinitionKind::Verification,
+                "def verify(): ...\r\n",
+            ),
+        ]);
+        assert_eq!(lf.interface_hash, crlf.interface_hash);
+        let (first, second) = (
+            tempfile::tempdir().expect("a temp dir"),
+            tempfile::tempdir().expect("a temp dir"),
+        );
+        let hash = view_hash("same view");
+
+        // Act
+        write(first.path(), hash, &Snapshot::of(TARGET, &lf, &[])).expect("writes");
+        write(second.path(), hash, &Snapshot::of(TARGET, &crlf, &[])).expect("writes");
+
+        // Assert
+        assert_eq!(
+            snapshot_text(first.path(), hash),
+            snapshot_text(second.path(), hash)
+        );
+    }
+
+    #[test]
+    fn a_newer_version_is_unsupported_whatever_fields_it_carries() {
+        // Arrange: a v2 file shaped unlike v1 — a field this build does not
+        // know, and one it requires missing.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let hash = view_hash("v2");
+        fs::write(
+            dir.path().join(Snapshot::file_name(hash)),
+            r#"{"v": 2, "target": "t", "assumptions": [], "sources": {}}"#,
+        )
+        .expect("writes");
+
+        // Act
+        let read = read(dir.path(), hash);
+
+        // Assert
+        assert!(
+            matches!(
+                read,
+                Err(SnapshotError::UnsupportedVersion { found: 2, .. })
+            ),
+            "{read:?}"
+        );
+    }
+
+    #[test]
+    fn a_write_replaces_a_destination_that_is_not_a_snapshot() {
+        // Arrange: an interrupted write left half a file.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let hash = view_hash("truncated");
+        let path = dir.path().join(Snapshot::file_name(hash));
+        fs::write(&path, "{\n  \"v\": 1,\n  \"target\": \"Pow").expect("writes");
+        let fresh = snapshot(vec![assumption("a", "the a model holds")]);
+
+        // Act
+        let written = write(dir.path(), hash, &fresh).expect("writes");
+
+        // Assert: the next approval repaired it.
+        assert!(written);
+        assert_eq!(read(dir.path(), hash).expect("reads"), Some(fresh));
+    }
+
+    #[test]
+    fn a_write_leaves_a_newer_version_destination_alone() {
+        // Arrange: a newer build already recorded this view.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let hash = view_hash("newer");
+        let newer = r#"{"v": 2, "target": "t", "sources": {}}"#;
+        fs::write(dir.path().join(Snapshot::file_name(hash)), newer).expect("writes");
+
+        // Act
+        let written = write(dir.path(), hash, &snapshot(vec![])).expect("writes nothing");
+
+        // Assert
+        assert!(!written);
+        assert_eq!(snapshot_text(dir.path(), hash), newer);
+    }
+
+    #[test]
+    fn a_write_leaves_nothing_but_the_snapshot_in_the_directory() {
+        // Arrange
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let snapshots = snapshots_dir(dir.path());
+        let hash = view_hash("atomic");
+
+        // Act: a fresh write, then a repair of a corrupt destination.
+        write(&snapshots, hash, &snapshot(vec![])).expect("writes");
+        fs::write(snapshots.join(Snapshot::file_name(hash)), "").expect("truncates");
+        write(&snapshots, hash, &snapshot(vec![])).expect("rewrites");
+
+        // Assert: the temporary file was renamed into place, not left over.
+        let names: Vec<String> = fs::read_dir(&snapshots)
+            .expect("lists")
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(names, [Snapshot::file_name(hash)]);
+    }
+
+    #[test]
+    fn a_write_into_a_directory_that_cannot_exist_is_an_error() {
+        // Arrange: the snapshots directory's name is taken by a file.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let snapshots = snapshots_dir(dir.path());
+        fs::write(&snapshots, "not a directory").expect("writes");
+
+        // Act
+        let written = write(&snapshots, view_hash("blocked"), &snapshot(vec![]));
+
+        // Assert
+        assert!(
+            matches!(written, Err(SnapshotError::Write { .. })),
+            "{written:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(&snapshots).expect("reads"),
+            "not a directory"
+        );
+    }
+
+    #[test]
+    fn the_baseline_orders_every_accepted_timestamp_without_panicking() {
+        // Arrange: spellings a record accepts but jiff cannot represent —
+        // more than nine fractional digits, and an instant past its range —
+        // next to ordinary ones.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let hashes: Vec<ViewHash> = ["a", "b", "c", "d", "e"]
+            .into_iter()
+            .map(view_hash)
+            .collect();
+        for (hash, name) in hashes.iter().zip(["a", "b", "c", "d", "e"]) {
+            write(dir.path(), *hash, &snapshot(vec![assumption("a", name)])).expect("writes");
+        }
+        let timestamps = [
+            "2026-11-10T02:55:10.2Z",
+            "2026-11-10T02:55:10.1234567890123Z",
+            "2026-11-10T02:55:10.1234567890124Z",
+            "2026-11-10T02:55:10.123456789Z",
+            "2026-11-10T02:55:10Z",
+        ];
+        let mut records: Vec<Record> = hashes
+            .iter()
+            .zip(timestamps)
+            .map(|(hash, timestamp)| approve("margin_ok", *hash, timestamp))
+            .collect();
+        let latest_of = |records: &[Record]| {
+            baseline(dir.path(), records, &bind("margin_ok"))
+                .expect("reads")
+                .expect("a baseline exists")
+                .snapshot
+                .assumptions[0]
+                .description
+                .clone()
+        };
+
+        // Act & Assert: the order is the instants' own, digit for digit, as
+        // one record after another is taken away.
+        assert_eq!(latest_of(&records), "a");
+        records.remove(0);
+        assert_eq!(latest_of(&records), "c");
+        records.remove(1);
+        assert_eq!(latest_of(&records), "b");
+        records.remove(0);
+        assert_eq!(latest_of(&records), "d");
+
+        // An instant at the end of the calendar is simply the latest.
+        records.push(approve("margin_ok", hashes[4], "9999-12-31T23:59:59Z"));
+        assert_eq!(latest_of(&records), "e");
+    }
+
+    #[test]
+    fn equal_instants_spelled_differently_fall_back_to_load_order() {
+        // Arrange: `.5`, `.50` and `.500` name one instant.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let (first, second, third) = (view_hash("1"), view_hash("2"), view_hash("3"));
+        for (hash, name) in [(first, "first"), (second, "second"), (third, "third")] {
+            write(dir.path(), hash, &snapshot(vec![assumption("a", name)])).expect("writes");
+        }
+        let records = [
+            approve("margin_ok", first, "2026-11-10T02:55:10.50Z"),
+            approve("margin_ok", second, "2026-11-10T02:55:10.500Z"),
+            approve("margin_ok", third, "2026-11-10T02:55:10.5Z"),
+        ];
+
+        // Act
+        let found = baseline(dir.path(), &records, &bind("margin_ok"))
+            .expect("reads")
+            .expect("a baseline exists");
+
+        // Assert: the last one loaded wins the tie.
+        assert_eq!(found.record.view_hash(), third);
     }
 
     #[test]
