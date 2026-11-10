@@ -335,16 +335,52 @@ difference next time.
 On approval of a calc bind, `inka review` writes
 `approvals/snapshots/<view_hash>.json`, where `<view_hash>` is the approved
 hash's hex digest. The file records the target path, the assumption set (each
-node's ID and rendered description) and the definitions (path and source) as
-presented. It is content-addressed: two approvers approving the same view
-write the same file, and nothing is appended.
+node's ID and rendered description) and the definitions (path, kind and
+source) as presented. It is content-addressed: two approvers approving the
+same view write the same file, and nothing is appended.
+
+```json
+{
+  "v": 1,
+  "target": "Power::?verify_margin",
+  "assumptions": [
+    { "id": "eclipse_model_valid", "description": "The eclipse model envelopes …" }
+  ],
+  "definitions": [
+    { "path": "Power::?verify_margin", "kind": "verification", "source": "@power.verification()\n…" }
+  ]
+}
+```
 
 At review time, the current assumption set is diffed against the snapshot of
 the most recently approved view hash of the same target — the latest
-`approve` record for the target whose snapshot exists — and shown as added,
+`approve` record for the bind whose snapshot exists — and shown as added,
 removed and reworded assumptions. When no snapshot exists the review says so
 and shows the full set. Sources are shown in full; a source diff is not part
-of this design.
+of this design. A bind is presented as:
+
+```text
+  calc: "Power::?verify_margin"
+  sources:
+    Power::?verify_margin (verification)
+      @power.verification()
+      def verify_margin(b: Budget) -> bool: …
+  leaves:
+    Power::?verify_margin: true
+  valid: true
+  assumes: (2 nodes; changed since the approval by iwata at 2026-09-10T08:30:00Z)
+    + battery_model_valid
+        The battery model is conservative
+    = eclipse_model_valid
+        The eclipse model envelopes …
+    ~ loads_complete
+        The load table covers every mode, safe mode included
+        (was) The load table covers every mode
+```
+
+`=` is unchanged, `+` added, `-` removed (with the earlier text as `(was)`),
+`~` reworded. Assumptions are joined by ID, so a renamed node reads as removed
+and added even though the hash did not change.
 
 Snapshots are presentation aids. `inka eval` never reads them, so a missing
 or deleted snapshot changes what a reviewer is shown, never what is

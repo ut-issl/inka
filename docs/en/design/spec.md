@@ -183,6 +183,10 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
   absent optional fields serialize as `null`.
 - jsonl, append-only, one file per approver (`approvals/<name>.jsonl`);
   a malformed line fails loudly with file and line; unknown fields are rejected.
+- `approvals/snapshots/<hex>.json`: what a calc bind's approval was shown,
+  content-addressed by the approved view hash; a presentation aid `review`
+  writes and diffs against, never read by `eval` (see
+  [calc evidence](calc-evidence.md#approval-snapshots-and-diffs)).
 
 ## Evaluation semantics
 

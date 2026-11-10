@@ -265,13 +265,48 @@ bind の承認はハッシュに結びつく。再承認を求められたレビ
 
 calc の bind を承認すると、`inka review` は `approvals/snapshots/<view_hash>.json` を書く。`<view_hash>` は
 承認したハッシュの hex ダイジェストである。ファイルには、ターゲットパス、仮定集合(各ノードの ID と展開済み
-description)、提示した定義(パスとソース)を記録する。内容アドレスなので、同じビューを承認する2人の承認者は
-同じファイルを書き、追記は起きない。
+description)、提示した定義(パス・種別・ソース)を記録する。内容アドレスなので、同じビューを承認する2人の
+承認者は同じファイルを書き、追記は起きない。
+
+```json
+{
+  "v": 1,
+  "target": "Power::?verify_margin",
+  "assumptions": [
+    { "id": "eclipse_model_valid", "description": "The eclipse model envelopes …" }
+  ],
+  "definitions": [
+    { "path": "Power::?verify_margin", "kind": "verification", "source": "@power.verification()\n…" }
+  ]
+}
+```
 
 review 時には、現在の仮定集合を、同じターゲットの直近に承認されたビューハッシュのスナップショット — その
-ターゲットに対する最新の `approve` レコードのうちスナップショットが存在するもの — と比較し、追加・削除・文言
+bind に対する最新の `approve` レコードのうちスナップショットが存在するもの — と比較し、追加・削除・文言
 変更された仮定として表示する。スナップショットが存在しない場合はその旨を伝え、集合全体を表示する。ソースは
-全文を表示する。ソースの diff はこの設計の範囲外である。
+全文を表示する。ソースの diff はこの設計の範囲外である。bind は次のように提示される。
+
+```text
+  calc: "Power::?verify_margin"
+  sources:
+    Power::?verify_margin (verification)
+      @power.verification()
+      def verify_margin(b: Budget) -> bool: …
+  leaves:
+    Power::?verify_margin: true
+  valid: true
+  assumes: (2 nodes; changed since the approval by iwata at 2026-09-10T08:30:00Z)
+    + battery_model_valid
+        The battery model is conservative
+    = eclipse_model_valid
+        The eclipse model envelopes …
+    ~ loads_complete
+        The load table covers every mode, safe mode included
+        (was) The load table covers every mode
+```
+
+`=` は変更なし、`+` は追加、`-` は削除(以前の文言を `(was)` として併記)、`~` は文言変更。仮定は ID で
+突き合わせるので、ノードの改名はハッシュが変わらなくても削除+追加として表示される。
 
 スナップショットは提示の補助である。`inka eval` は決して読まないので、スナップショットの欠落や削除はレビュアーに
 見えるものを変えるだけで、何が established かは変えない。すべてのレビュアーが同じ基準を見るように、承認と一緒に

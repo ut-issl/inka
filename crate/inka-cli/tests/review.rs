@@ -144,6 +144,75 @@ fn editing_a_description_returns_the_target_and_its_direct_parent_as_stale() {
 }
 
 #[test]
+fn approving_a_calc_bind_writes_a_content_addressed_snapshot() {
+    // Arrange: a project whose one bind is backed by loaded calc evidence
+    // assuming the fiat.
+    let dir = tempfile::tempdir().expect("a temp dir creates");
+    fs::write(
+        dir.path().join("inka.toml"),
+        "[project]\nname = \"calc-scenario\"\n\n[phases]\norder = [\"M0\"]\ncurrent = \"M0\"\n\n\
+         [values]\nfiles = []\n\n[evidence]\ncalcs = [\"calc-evidence.json\"]\n",
+    )
+    .expect("the manifest writes");
+    fs::create_dir(dir.path().join("argument")).expect("the argument directory creates");
+    fs::write(
+        dir.path().join("argument/arg.inka"),
+        "objective root {\n  ```\n  the root claim\n  ```\n  children: margin_ok, model_valid\n}\n\n\
+         bind margin_ok {\n  ```\n  the margin holds\n  ```\n  calc: \"Power::?verify_margin\"\n}\n\n\
+         fiat model_valid {\n  ```\n  the model envelopes reality\n  ```\n}\n",
+    )
+    .expect("the argument writes");
+    fs::write(
+        dir.path().join("calc-evidence.json"),
+        r#"{"v": 1, "targets": [{"path": "Power::?verify_margin",
+            "definitions": [{"path": "Power::?verify_margin", "kind": "verification", "source": "def verify_margin(): ...\n"}],
+            "assumes": ["model_valid"], "leaves": [{"id": "Power::?verify_margin", "result": true}], "valid": true}]}"#,
+    )
+    .expect("the evidence writes");
+
+    // Act: approve the bind twice, as two approvers.
+    for approver in ["alice", "bob"] {
+        inka()
+            .arg("review")
+            .arg("--path")
+            .arg(dir.path())
+            .arg("--as")
+            .arg(approver)
+            .arg("margin_ok")
+            .arg("--approve")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("; snapshot approvals/snapshots/"))
+            .stdout(predicate::str::contains(".json\n"));
+    }
+
+    // Assert: one snapshot for the one approved view, recording what was shown.
+    let snapshots: Vec<_> = fs::read_dir(dir.path().join("approvals/snapshots"))
+        .expect("the snapshots directory exists")
+        .map(|entry| entry.expect("an entry").path())
+        .collect();
+    assert_eq!(snapshots.len(), 1, "{snapshots:?}");
+    let snapshot: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&snapshots[0]).expect("reads"))
+            .expect("valid JSON");
+    assert_eq!(snapshot["v"], 1);
+    assert_eq!(snapshot["target"], "Power::?verify_margin");
+    assert_eq!(snapshot["assumptions"][0]["id"], "model_valid");
+    assert_eq!(
+        snapshot["assumptions"][0]["description"],
+        "the model envelopes reality"
+    );
+    assert_eq!(snapshot["definitions"][0]["path"], "Power::?verify_margin");
+    // The records still load: the snapshots directory is not a records file.
+    inka()
+        .arg("eval")
+        .arg(dir.path())
+        .assert()
+        .failure()
+        .stdout(predicate::str::starts_with("established 0/3"));
+}
+
+#[test]
 fn a_declined_target_shows_as_declined_in_the_queue() {
     // Arrange
     let dir = tempfile::tempdir().expect("a temp dir creates");

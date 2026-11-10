@@ -19,6 +19,7 @@ pub mod project;
 pub mod read;
 pub mod record;
 pub mod review;
+pub mod snapshot;
 pub mod source;
 pub mod values;
 pub mod view;

@@ -13,17 +13,27 @@
 //! session runs cannot be approved unseen — a record against the older
 //! content simply reads as stale, exactly as if it had been written before
 //! the edit.
+//!
+//! A calc bind is shown with what its approval covers beyond the block: the
+//! sources of the target's upstream subgraph, the required leaves with their
+//! results, and the assumed nodes — diffed against the snapshot of the bind's
+//! most recently approved view when one exists. Approving a calc bind writes
+//! that snapshot (`approvals/snapshots/<hex>.json`), content-addressed by the
+//! approved hash, so the next reviewer sees what changed.
 
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
+use std::path::PathBuf;
+
 use inka_core::approvals::{self, APPROVALS_DIR};
-use inka_core::bind;
-use inka_core::calc_evidence::CalcEvidenceSet;
+use inka_core::bind::{self, BindEvidence};
+use inka_core::calc_evidence::{CalcEvidenceSet, CalcTarget};
 use inka_core::evidence::EvidenceSet;
 use inka_core::hash::{LocalView, ViewHash};
 use inka_core::record::{Record, RecordFields, Target, Timestamp};
 use inka_core::review::{BlockedReason, QueueItem, QueueState, ReviewQueue, derive_queue};
+use inka_core::snapshot::{self, Assumption, Baseline, Snapshot};
 use inka_core::source::{Diagnostics, Error, SourceMap};
 use inka_core::view::{ArgumentView, EvidenceKind, Mode, NodeComments, Property, ViewNode};
 
@@ -111,20 +121,21 @@ pub fn run(
         Ok(records) => records,
         Err(error) => return fail(&error.to_string(), err, color),
     };
-    let context = RecordContext {
+    let context = ReviewContext {
         project_dir,
         approver: &request.approver,
         key_id: request.key_id.as_deref(),
         phase: &manifest.phases.current,
+        imported: Imported {
+            tests: &evidence,
+            calcs: &calc_evidence,
+        },
+        records: &records,
     };
 
     match &request.action {
         Action::Single { target, decision } => {
-            let imported = Imported {
-                tests: &evidence,
-                calcs: &calc_evidence,
-            };
-            let answer = single(&context, &view, imported, target, decision, &mut session);
+            let answer = single(&context, &view, target, decision, &mut session);
             match answer {
                 Ok(line) => {
                     writeln!(out, "{line}")?;
@@ -160,21 +171,78 @@ struct Imported<'a> {
     calcs: &'a CalcEvidenceSet,
 }
 
-/// Everything a recorded decision needs besides the decision itself.
-struct RecordContext<'a> {
+/// Everything a session needs besides the decisions themselves: where
+/// records go, who decides, and the inputs a bind is resolved and presented
+/// against.
+struct ReviewContext<'a> {
     project_dir: &'a Path,
     approver: &'a str,
     key_id: Option<&'a str>,
     phase: &'a str,
+    imported: Imported<'a>,
+    /// The records as loaded, read for the snapshot baseline of a calc bind.
+    records: &'a [Record],
+}
+
+impl ReviewContext<'_> {
+    fn snapshots_dir(&self) -> PathBuf {
+        snapshot::snapshots_dir(&self.project_dir.join(APPROVALS_DIR))
+    }
+}
+
+/// What `inka review` shows for a calc bind beyond its block, and what an
+/// approval of it snapshots: the imported target, the nodes it assumes, and
+/// the baseline the assumption set is diffed against.
+struct CalcPresentation<'a> {
+    path: &'a str,
+    target: &'a CalcTarget,
+    assumed: Vec<&'a ViewNode>,
+    baseline: Option<Baseline<'a>>,
+}
+
+impl CalcPresentation<'_> {
+    fn snapshot(&self) -> Snapshot {
+        Snapshot::of(self.path, self.target, &self.assumed)
+    }
+}
+
+/// Resolves what a calc bind is presented with, or `None` for every other
+/// node and for a calc bind whose evidence is not loaded (which the queue
+/// reports as blocked and the single form refuses before getting here).
+fn calc_presentation<'a>(
+    context: &ReviewContext<'a>,
+    view: &'a ArgumentView,
+    node: &'a ViewNode,
+) -> Result<Option<CalcPresentation<'a>>, String> {
+    if node.mode != Mode::Bind {
+        return Ok(None);
+    }
+    let resolved = bind::resolve(view, node, context.imported.tests, context.imported.calcs)
+        .map_err(|error| error.to_string())?;
+    let Some(BindEvidence::Calc { target, assumed }) = resolved else {
+        return Ok(None);
+    };
+    let path = &node
+        .evidence
+        .as_ref()
+        .expect("a resolved bind carries its reference")
+        .target;
+    let baseline = snapshot::baseline(&context.snapshots_dir(), context.records, node)
+        .map_err(|error| error.to_string())?;
+    Ok(Some(CalcPresentation {
+        path,
+        target,
+        assumed,
+        baseline,
+    }))
 }
 
 /// Records one decision on one named target, whatever its queue state: an
 /// extra approval or a veto is a judgement too, and counting is eval's job.
 /// Returns the confirmation line, or the failure to report.
 fn single(
-    context: &RecordContext<'_>,
+    context: &ReviewContext<'_>,
     view: &ArgumentView,
-    imported: Imported<'_>,
     target: &str,
     decision: &Decision,
     session: &mut Session<'_>,
@@ -182,24 +250,36 @@ fn single(
     let Some(node) = view.node(target) else {
         return Err(format!("no block named `{target}` in the argument"));
     };
-    let current_hash = current_hash(view, node, imported)?;
+    let current_hash = current_hash(view, node, context.imported)?;
     let (label, comment) = match decision {
         Decision::Approve { comment } => (ReviewLabel::Approve, comment.clone()),
         Decision::Decline { comment } => (ReviewLabel::Decline, Some(comment.clone())),
     };
-    write_record(context, node, current_hash, label, comment, session)?;
-    Ok(format!(
+    let calc = calc_presentation(context, view, node)?;
+    let decision = Recorded {
+        node,
+        current_hash,
+        label,
+        comment,
+        snapshot: calc.as_ref().map(CalcPresentation::snapshot),
+    };
+    let snapshot = write_record(context, &decision, session)?;
+    let mut line = format!(
         "recorded {} of {}:{} in {APPROVALS_DIR}/{}.jsonl",
         label.name(),
         node.mode.name(),
         node.id,
         context.approver
-    ))
+    );
+    if let Some(path) = snapshot {
+        line = format!("{line}; snapshot {}", path.display());
+    }
+    Ok(line)
 }
 
 /// Walks the actionable queue one target at a time, reading `a`/`d`/`s`/`q`.
 fn interactive(
-    context: &RecordContext<'_>,
+    context: &ReviewContext<'_>,
     view: &ArgumentView,
     queue: &ReviewQueue,
     session: &mut Session<'_>,
@@ -234,7 +314,13 @@ fn interactive(
         let node = view
             .node(&item.id)
             .expect("the queue names nodes of the same view");
-        write_target(node, item, index + 1, total, view, out)?;
+        // A snapshot that exists but cannot be read is a repository problem,
+        // not something to review around: stop before any decision.
+        let calc = match calc_presentation(context, view, node) {
+            Ok(calc) => calc,
+            Err(message) => return fail(&message, err, color),
+        };
+        write_target(node, item, index + 1, total, view, calc.as_ref(), out)?;
         let decision = match prompt_decision(session, out)? {
             Answer::Approve => Some((ReviewLabel::Approve, None)),
             Answer::Decline => {
@@ -248,15 +334,26 @@ fn interactive(
             Answer::Quit => break,
         };
         if let Some((label, comment)) = decision {
-            match write_record(context, node, item.current_hash, label, comment, session) {
-                Ok(()) => {
-                    writeln!(
+            let decision = Recorded {
+                node,
+                current_hash: item.current_hash,
+                label,
+                comment,
+                snapshot: calc.as_ref().map(CalcPresentation::snapshot),
+            };
+            match write_record(context, &decision, session) {
+                Ok(snapshot) => {
+                    write!(
                         out,
                         "recorded {} of {}:{}",
                         label.name(),
                         node.mode.name(),
                         node.id
                     )?;
+                    if let Some(path) = snapshot {
+                        write!(out, "; snapshot {}", path.display())?;
+                    }
+                    writeln!(out)?;
                     recorded += 1;
                 }
                 Err(message) => {
@@ -353,19 +450,31 @@ fn prompt_comment(session: &mut Session<'_>, out: &mut impl Write) -> io::Result
     }
 }
 
-/// Builds and appends one record; the only write path the command has.
-fn write_record(
-    context: &RecordContext<'_>,
-    node: &ViewNode,
+/// One decision about to be written: the record's content and, for a calc
+/// bind, the snapshot of what was shown.
+struct Recorded<'a> {
+    node: &'a ViewNode,
     current_hash: ViewHash,
     label: ReviewLabel,
     comment: Option<String>,
+    snapshot: Option<Snapshot>,
+}
+
+/// Builds and appends one record — the only write path the command has —
+/// and, on the approval of a calc bind, writes the snapshot of the approved
+/// view. Returns the snapshot's path, relative to the project, when one
+/// belongs to the decision (whether this approval wrote it or an earlier
+/// approval of the same view already had).
+fn write_record(
+    context: &ReviewContext<'_>,
+    decision: &Recorded<'_>,
     session: &mut Session<'_>,
-) -> Result<(), String> {
+) -> Result<Option<PathBuf>, String> {
+    let node = decision.node;
     let target = Target::new(node.mode, &node.id).map_err(|error| error.to_string())?;
     let fields = RecordFields {
         target,
-        view_hash: current_hash,
+        view_hash: decision.current_hash,
         approver: context.approver.to_owned(),
         key_id: context.key_id.unwrap_or(context.approver).to_owned(),
         timestamp: (session.now)(),
@@ -373,15 +482,30 @@ fn write_record(
         until: None,
         policy_hash: None,
     };
-    let record = match label {
-        ReviewLabel::Approve => Record::approve(fields, comment),
-        ReviewLabel::Decline => {
-            Record::decline(fields, comment.expect("a decline carries a comment"))
-        }
+    let record = match decision.label {
+        ReviewLabel::Approve => Record::approve(fields, decision.comment.clone()),
+        ReviewLabel::Decline => Record::decline(
+            fields,
+            decision
+                .comment
+                .clone()
+                .expect("a decline carries a comment"),
+        ),
     }
     .map_err(|error| error.to_string())?;
     approvals::append(&context.project_dir.join(APPROVALS_DIR), &record)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+
+    let (ReviewLabel::Approve, Some(snapshot)) = (decision.label, &decision.snapshot) else {
+        return Ok(None);
+    };
+    snapshot::write(&context.snapshots_dir(), decision.current_hash, snapshot)
+        .map_err(|error| format!("the approval was recorded, but {error}"))?;
+    Ok(Some(
+        Path::new(APPROVALS_DIR)
+            .join(snapshot::SNAPSHOTS_DIR)
+            .join(Snapshot::file_name(decision.current_hash)),
+    ))
 }
 
 /// The view hash a decision recorded now would name, or why none exists.
@@ -472,14 +596,17 @@ fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
 /// the expanded description, the evidence reference, where the local view
 /// includes them the direct children's descriptions, and the deadline, each
 /// with the comment attached to it written above it as `//` lines, the way
-/// the formatter places comments in a source file. Nothing deeper is shown —
-/// the local view is all an approval binds to.
+/// the formatter places comments in a source file. For a calc bind, the
+/// evidence the approval also covers follows the reference: see
+/// [`write_calc_evidence`]. Nothing deeper is shown — the local view is all
+/// an approval binds to.
 fn write_target(
     node: &ViewNode,
     item: &QueueItem,
     position: usize,
     total: usize,
     view: &ArgumentView,
+    calc: Option<&CalcPresentation<'_>>,
     out: &mut impl Write,
 ) -> io::Result<()> {
     writeln!(
@@ -500,6 +627,9 @@ fn write_target(
         let quoted = format!("\"{}\"", reference.target);
         write_property(comments, property, &quoted, out)?;
     }
+    if let Some(calc) = calc {
+        write_calc_evidence(calc, out)?;
+    }
     write_children(node, view, out)?;
     if let Some(deadline) = &node.deadline {
         write_property(comments, Property::Until, &deadline.until, out)?;
@@ -508,6 +638,114 @@ fn write_target(
         }
     }
     Ok(())
+}
+
+/// What a calc bind's approval covers beyond the block: the source of every
+/// definition of the target's upstream subgraph, the required leaves with
+/// the results the producer reported, the validity flags, and the assumed
+/// nodes with their descriptions. The assumed set is shown against the
+/// baseline snapshot when one exists — `=` unchanged, `+` added, `-`
+/// removed, `~` reworded with the earlier text as `(was)` — and in full,
+/// saying so, when none does.
+fn write_calc_evidence(calc: &CalcPresentation<'_>, out: &mut impl Write) -> io::Result<()> {
+    writeln!(out, "  sources:")?;
+    for definition in &calc.target.definitions {
+        write_indented(
+            &format!("{} ({})", definition.path, definition.kind.name()),
+            4,
+            out,
+        )?;
+        write_indented(&definition.source, 6, out)?;
+    }
+    writeln!(out, "  leaves:")?;
+    for leaf in &calc.target.leaves {
+        let result = match leaf.result {
+            Some(true) => "true",
+            Some(false) => "false",
+            None => "(no result)",
+        };
+        write_indented(&format!("{}: {result}", leaf.id), 4, out)?;
+    }
+    writeln!(out, "  valid: {}", calc.target.valid)?;
+    if calc.target.xfail {
+        writeln!(out, "  xfail: true")?;
+    }
+
+    let current: Vec<Assumption> = calc
+        .assumed
+        .iter()
+        .map(|node| Assumption::of(node))
+        .collect();
+    let Some(baseline) = &calc.baseline else {
+        if current.is_empty() {
+            return writeln!(out, "  assumes: (none)");
+        }
+        writeln!(
+            out,
+            "  assumes: ({}; no snapshot of an earlier approval, full set)",
+            count(current.len())
+        )?;
+        for assumption in &current {
+            write_indented(&assumption.id, 4, out)?;
+            write_indented(&assumption.description, 6, out)?;
+        }
+        return Ok(());
+    };
+
+    let diff = snapshot::diff(&current, &baseline.snapshot.assumptions);
+    writeln!(
+        out,
+        "  assumes: ({}; {} since the approval by {} at {})",
+        count(current.len()),
+        if diff.is_empty() {
+            "unchanged"
+        } else {
+            "changed"
+        },
+        sanitize(baseline.record.approver()),
+        baseline.record.timestamp()
+    )?;
+    // One entry per id, in id order, whatever happened to it.
+    let mut entries: Vec<(&str, char, Vec<&str>)> = Vec::new();
+    for assumption in &diff.unchanged {
+        entries.push((&assumption.id, '=', vec![&assumption.description]));
+    }
+    for assumption in &diff.added {
+        entries.push((&assumption.id, '+', vec![&assumption.description]));
+    }
+    let removed: Vec<String> = diff
+        .removed
+        .iter()
+        .map(|assumption| format!("(was) {}", assumption.description))
+        .collect();
+    for (assumption, was) in diff.removed.iter().zip(&removed) {
+        entries.push((&assumption.id, '-', vec![was]));
+    }
+    let before: Vec<String> = diff
+        .reworded
+        .iter()
+        .map(|reworded| format!("(was) {}", reworded.before))
+        .collect();
+    for (reworded, was) in diff.reworded.iter().zip(&before) {
+        entries.push((&reworded.id, '~', vec![&reworded.after, was]));
+    }
+    entries.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    for (id, marker, lines) in entries {
+        write_indented(&format!("{marker} {id}"), 4, out)?;
+        for line in lines {
+            write_indented(line, 8, out)?;
+        }
+    }
+    Ok(())
+}
+
+/// `1 node` / `n nodes`.
+fn count(nodes: usize) -> String {
+    if nodes == 1 {
+        "1 node".to_owned()
+    } else {
+        format!("{nodes} nodes")
+    }
 }
 
 /// The `children:` property: each direct child's id and description, under
@@ -647,6 +885,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::io::Cursor;
+    use std::path::PathBuf;
 
     use inka_core::view::Evidence;
 
@@ -853,7 +1092,7 @@ fiat leaf {
         let mut out = Vec::new();
 
         // Act
-        write_target(&node, &item, 1, 1, &view, &mut out).expect("writing to a vec succeeds");
+        write_target(&node, &item, 1, 1, &view, None, &mut out).expect("writing to a vec succeeds");
 
         // Assert
         let text = String::from_utf8(out).expect("UTF-8");
@@ -862,6 +1101,277 @@ fiat leaf {
                 "  checked by a solver\n  // the shipped check\n  calc: \"AOCS::?check\"\n"
             ),
             "{text}"
+        );
+    }
+
+    /// The calc scenario: an objective over a calc bind and the fiats its
+    /// evidence may assume. Block ids sort the bind first, so one `a` in the
+    /// interactive loop approves it.
+    const CALC_ARGUMENT: &str = "\
+objective root {
+  ```
+  the root claim
+  ```
+  children: margin_ok, model_valid, table_complete
+}
+
+bind margin_ok {
+  ```
+  the power margin stays positive
+  ```
+  calc: \"Power::?verify_margin\"
+}
+
+fiat model_valid {
+  ```
+  the eclipse model envelopes reality
+  ```
+}
+
+fiat table_complete {
+  ```
+  the load table covers every mode
+  ```
+}
+";
+
+    /// One calc target over `@budget`, assuming `assumes`.
+    fn calc_evidence(assumes: &[&str]) -> String {
+        let assumes: Vec<String> = assumes.iter().map(|id| format!("\"{id}\"")).collect();
+        format!(
+            r#"{{"v": 1, "targets": [{{"path": "Power::?verify_margin",
+                "definitions": [
+                    {{"path": "Power::?verify_margin", "kind": "verification",
+                     "source": "@power.verification()\ndef verify_margin(b: Budget) -> bool:\n    return b.margin_w > 0\n"}},
+                    {{"path": "Power::@budget", "kind": "calculation",
+                     "source": "@power.calculation()\ndef budget(c: Config) -> Budget: ...\n"}}
+                ],
+                "assumes": [{}], "leaves": [{{"id": "Power::?verify_margin", "result": true}}],
+                "valid": true}}]}}"#,
+            assumes.join(", ")
+        )
+    }
+
+    /// Writes the calc scenario with the given evidence and returns its directory.
+    fn calc_project(argument: &str, evidence: &str) -> tempfile::TempDir {
+        let dir = project_with(argument);
+        fs::write(
+            dir.path().join("inka.toml"),
+            "[project]\nname = \"review-scenario\"\n\n[phases]\norder = [\"M0\"]\ncurrent = \"M0\"\n\n\
+             [values]\nfiles = []\n\n[evidence]\ncalcs = [\"calc-evidence.json\"]\n",
+        )
+        .expect("the manifest writes");
+        fs::write(dir.path().join("calc-evidence.json"), evidence).expect("the evidence writes");
+        dir
+    }
+
+    fn snapshot_files(dir: &Path) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = fs::read_dir(dir.join("approvals/snapshots"))
+            .map(|entries| {
+                entries
+                    .map(|entry| entry.expect("an entry").path())
+                    .collect()
+            })
+            .unwrap_or_default();
+        files.sort();
+        files
+    }
+
+    #[test]
+    fn a_calc_bind_shows_its_sources_leaves_and_full_assumption_set_when_no_snapshot_exists() {
+        // Arrange
+        let dir = calc_project(
+            CALC_ARGUMENT,
+            &calc_evidence(&["model_valid", "table_complete"]),
+        );
+
+        // Act: look at the bind, then quit.
+        let transcript = run_interactive(dir.path(), "s\nq\n");
+
+        // Assert: the reference, every upstream source, the leaves with their
+        // results, the flags, and the assumed nodes with their descriptions.
+        assert!(
+            transcript.contains(
+                "\
+  the power margin stays positive
+  calc: \"Power::?verify_margin\"
+  sources:
+    Power::?verify_margin (verification)
+      @power.verification()
+      def verify_margin(b: Budget) -> bool:
+          return b.margin_w > 0
+    Power::@budget (calculation)
+      @power.calculation()
+      def budget(c: Config) -> Budget: ...
+  leaves:
+    Power::?verify_margin: true
+  valid: true
+  assumes: (2 nodes; no snapshot of an earlier approval, full set)
+    model_valid
+      the eclipse model envelopes reality
+    table_complete
+      the load table covers every mode
+"
+            ),
+            "{transcript}"
+        );
+    }
+
+    #[test]
+    fn approving_a_calc_bind_writes_its_snapshot_once_and_names_it() {
+        // Arrange
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+
+        // Act: approve the bind interactively, then once more non-interactively
+        // as a second approver of the same view.
+        let transcript = run_interactive(dir.path(), "a\nq\n");
+        let request = Request {
+            approver: "bob".to_owned(),
+            key_id: None,
+            action: Action::Single {
+                target: "margin_ok".to_owned(),
+                decision: Decision::Approve { comment: None },
+            },
+        };
+        let mut input = Cursor::new(Vec::new());
+        let mut now = || -> Timestamp { "2026-11-02T00:00:00Z".parse().expect("parses") };
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        let outcome = run(
+            dir.path(),
+            &request,
+            Session {
+                input: &mut input,
+                input_is_tty: false,
+                now: &mut now,
+            },
+            &mut out,
+            &mut err,
+            false,
+        )
+        .expect("writing to vecs succeeds");
+
+        // Assert: one content-addressed file, named in both confirmations,
+        // holding what was shown.
+        assert!(
+            matches!(outcome, Outcome::Ok),
+            "{}",
+            String::from_utf8_lossy(&err)
+        );
+        let files = snapshot_files(dir.path());
+        assert_eq!(files.len(), 1, "{files:?}");
+        let name = files[0]
+            .file_name()
+            .expect("a file name")
+            .to_string_lossy()
+            .into_owned();
+        assert!(
+            transcript.contains(&format!(
+                "recorded approve of bind:margin_ok; snapshot approvals/snapshots/{name}\n"
+            )),
+            "{transcript}"
+        );
+        let second = String::from_utf8(out).expect("UTF-8");
+        assert!(
+            second.contains(&format!(
+                "in approvals/bob.jsonl; snapshot approvals/snapshots/{name}"
+            )),
+            "{second}"
+        );
+        let snapshot: inka_core::snapshot::Snapshot =
+            serde_json::from_str(&fs::read_to_string(&files[0]).expect("reads"))
+                .expect("a valid snapshot");
+        assert_eq!(snapshot.target, "Power::?verify_margin");
+        assert_eq!(snapshot.assumptions.len(), 1);
+        assert_eq!(snapshot.assumptions[0].id, "model_valid");
+        assert_eq!(
+            snapshot.assumptions[0].description,
+            "the eclipse model envelopes reality"
+        );
+        assert_eq!(snapshot.definitions.len(), 2);
+        assert_eq!(snapshot.definitions[1].path, "Power::@budget");
+        // A decline writes no snapshot; the test bind path is unaffected.
+        assert_eq!(record_lines(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn a_reapproval_shows_the_assumption_set_as_a_diff_against_the_latest_snapshot() {
+        // Arrange: approve with {model_valid, table_complete}; then the model
+        // fiat is reworded, table_complete is no longer assumed, and a new
+        // node is.
+        let dir = calc_project(
+            CALC_ARGUMENT,
+            &calc_evidence(&["model_valid", "table_complete"]),
+        );
+        run_interactive(dir.path(), "a\nq\n");
+        fs::write(
+            dir.path().join("argument/arg.inka"),
+            CALC_ARGUMENT
+                .replace(
+                    "the eclipse model envelopes reality",
+                    "the eclipse model envelopes reality with margin",
+                )
+                .replace(
+                    "children: margin_ok, model_valid, table_complete",
+                    "children: margin_ok, model_valid, table_complete, wheel_model_valid",
+                )
+                + "\nfiat wheel_model_valid {\n  ```\n  the wheel model is conservative\n  ```\n}\n",
+        )
+        .expect("the argument rewrites");
+        fs::write(
+            dir.path().join("calc-evidence.json"),
+            calc_evidence(&["model_valid", "wheel_model_valid"]),
+        )
+        .expect("the evidence rewrites");
+
+        // Act: the bind is stale (its assumption slot changed) and comes up first.
+        let transcript = run_interactive(dir.path(), "s\nq\n");
+
+        // Assert: one entry per id in id order, each marked by what happened.
+        assert!(
+            transcript.contains(
+                "\
+  assumes: (2 nodes; changed since the approval by alice at 2026-11-01T00:00:00Z)
+    ~ model_valid
+        the eclipse model envelopes reality with margin
+        (was) the eclipse model envelopes reality
+    - table_complete
+        (was) the load table covers every mode
+    + wheel_model_valid
+        the wheel model is conservative
+"
+            ),
+            "{transcript}"
+        );
+        assert!(transcript.contains("approvals are stale: alice approved an earlier version"));
+    }
+
+    #[test]
+    fn an_unchanged_assumption_set_is_shown_as_such_against_its_snapshot() {
+        // Arrange: approve, then edit only an upstream source so the bind is
+        // stale for another reason.
+        let dir = calc_project(CALC_ARGUMENT, &calc_evidence(&["model_valid"]));
+        run_interactive(dir.path(), "a\nq\n");
+        fs::write(
+            dir.path().join("calc-evidence.json"),
+            calc_evidence(&["model_valid"])
+                .replace("-> Budget: ...", "-> Budget:\\n    return Budget()"),
+        )
+        .expect("the evidence rewrites");
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\nq\n");
+
+        // Assert
+        assert!(
+            transcript.contains(
+                "\
+  assumes: (1 node; unchanged since the approval by alice at 2026-11-01T00:00:00Z)
+    = model_valid
+        the eclipse model envelopes reality
+"
+            ),
+            "{transcript}"
         );
     }
 
