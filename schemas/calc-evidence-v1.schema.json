@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://www.space.t.u-tokyo.ac.jp/inka/schemas/calc-evidence-v1.schema.json",
   "title": "Inka calc evidence v1",
-  "description": "Evidence JSON emitted by a calculation-graph producer (veriq is the first) and read by an inka project. Each target is one verification a `calc:` bind can reference, carried with the reviewable source of its whole definition-level upstream subgraph, the inka nodes that subgraph assumes, and the leaf results the target must satisfy. Target paths are opaque to inka and must be unique within a loaded evidence set; the loader rejects duplicates.",
+  "description": "Evidence JSON emitted by a calculation-graph producer (veriq is the first) and read by an inka project. Each target is one verification a `calc:` bind can reference, carried with the reviewable source of its whole definition-level upstream subgraph, the inka nodes that subgraph assumes, and the leaf results the target must satisfy. Target paths are opaque to inka and must be unique within a loaded evidence set; the loader rejects duplicates. Paths and leaf IDs contain no whitespace, meaning no character with the Unicode White_Space property; the patterns spell that set out because `\\s` differs between regex dialects.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -35,7 +35,7 @@
             "description": "The target verification's path in the producer's graph, referenced by `calc:` in a bind. For veriq it is `Scope::?name`.",
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\S+$"
+            "pattern": "^[^\\t\\n\\u000B\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]+$"
           },
           "definitions": {
             "description": "The target's definition-level upstream subgraph, the target itself included: every root model, calculation and verification it depends on, each once. Paths are unique within a target.",
@@ -49,7 +49,7 @@
                   "description": "The definition's path in the producer's graph, e.g. `Power::$Config`, `Power::@budget`, `Power::?verify_margin`.",
                   "type": "string",
                   "minLength": 1,
-                  "pattern": "^\\S+$"
+                  "pattern": "^[^\\t\\n\\u000B\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]+$"
                 },
                 "kind": {
                   "description": "What the definition is. Presentation metadata; it does not enter the interface hash.",
@@ -92,7 +92,7 @@
                 "id": {
                   "type": "string",
                   "minLength": 1,
-                  "pattern": "^\\S+$"
+                  "pattern": "^[^\\t\\n\\u000B\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]+$"
                 },
                 "result": {
                   "description": "The verification outcome at this leaf.",

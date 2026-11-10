@@ -64,7 +64,8 @@ interface_hash = SHA-256(preimage)
 
 必要ケースIDはバイト順にソートして並べる。executionsの順序変更は編集ではない。実行結果(outcome)はハッシュに入らない。
 
-bindのview_hashは凍結済みv1のままとする。命題の説明・注釈、interfaceの生digest、現在は空の仮定リストを含む。run ID、実行結果、環境情報は承認契約に含めない。
+bindのview_hashは凍結済みv1のままとする。命題の説明・注釈、interfaceの生digest、仮定リストを含む。仮定リストはtestのbindでは空である([calc証拠](calc-evidence.md)だけが埋める)。
+run ID、実行結果、環境情報は承認契約に含めない。
 
 契約本文・test-id・必要実行集合のいずれかが変われば再承認が必要である。
 ソースレポジトリが失敗するケースを黙って必要集合から外しても、既存の承認のままpassに見えることはない。

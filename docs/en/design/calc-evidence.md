@@ -8,8 +8,10 @@ Calc evidence is evidence drawn from a calculation graph: a graph of root
 models, calculations and verifications whose nodes depend on one another, as
 [veriq](https://github.com/ut-issl/veriq) builds from decorated Python
 functions. A bind references one verification of such a graph with
-`calc: "<path>"`. veriq is the first producer; the contract below names no
-veriq-specific concept, so another producer can emit the same evidence.
+`calc: "<path>"`. veriq is the first producer, and the contract is shaped by
+its graph: a definition's `kind` is one of veriq's three node kinds. Nothing
+in it requires veriq, though, so another producer whose graph maps onto those
+kinds can emit the same evidence.
 
 Define the project repository as the repository holding the inka project, and
 the source repository as the repository holding the calculation graph. They
@@ -69,7 +71,9 @@ repository root. For each target it records:
 - **valid** — whether the producer's own validity conditions hold for the
   target. For veriq this is the `@vq.assume` mechanism: a verification whose
   upstream assumes another verification is invalid when that verification
-  fails.
+  fails. The assumed verification is part of the target's upstream subgraph,
+  so its definitions and the argument nodes it assumes enter the target's
+  `definitions` and `assumes` like any other dependency's.
 - **xfail** — whether the producer marks the target as an expected failure.
   Optional; defaults to false.
 
@@ -109,6 +113,20 @@ The required leaf set is declared by the evidence JSON itself. It must not be
 inferred from successful results alone, shrunk by an aborted evaluation, or
 assembled from successes across different runs.
 
+Inka reads the file strictly. A file that breaks the contract is an input
+error, never weaker evidence:
+
+- a version other than 1, or an unknown key anywhere outside `provenance`;
+- a target path, definition path or leaf ID that is empty or contains
+  whitespace — any character with the Unicode `White_Space` property, the same
+  rule a `calc:` value is held to;
+- a target with no definitions, a repeated definition path, an empty source,
+  or no definition for its own path;
+- an assumption that is not a fully-qualified node ID, or is repeated;
+- a target with no leaves, or a repeated leaf ID;
+- a `result` or `provenance` written as `null` rather than omitted;
+- a target path that appears more than once in the loaded evidence.
+
 ## Assumptions
 
 An assumption is a proposition the evidence relies on without establishing
@@ -138,8 +156,10 @@ inka does with it are:
 - **Hashing.** The assumed nodes' rendered descriptions, normalized like any
   description and sorted bytewise, fill the assumption slot of the bind's view
   hash (see [Content hashing](#content-hashing-and-reapproval)). Rewording an
-  assumption invalidates the bind approval; renaming the node does not, as
-  IDs are never contract content.
+  assumption invalidates the bind approval. The slot holds no IDs, so renaming
+  a node does not by itself — but a producer that writes the ID inside a
+  hashed source, as veriq's decorator does, changes that source with the
+  rename, and the interface hash with it.
 - **Dependency.** A calc bind is established only if every node it assumes is
   established, in addition to its own approval and passing evidence. An
   assumption that is not yet discharged — an unapproved fiat, an expired
@@ -183,7 +203,7 @@ entries(definitions) = u64-LE(count) ‖ field(path[0]) ‖ field(normalized sou
 interface_hash = SHA-256(preimage)
 ```
 
-Definitions are sorted by path and leaf IDs are sorted bytewise: the order a
+Definitions are sorted bytewise by path and leaf IDs bytewise: the order a
 producer lists them in is not an edit. A definition's `kind` is presentation
 metadata and does not enter the hash. Results, validity, `xfail` and
 provenance do not enter the hash.
@@ -233,7 +253,7 @@ true and `xfail` is false.
 | `xfail` is true | Evidence does not establish the bind (expected failure) |
 | The referenced target path is absent from the evidence | Missing evidence; not established |
 | An assumed node is not established | Not established; the assumption is the cause |
-| Duplicate target paths, definitions or leaves | Malformed input; abort evaluation |
+| A file that breaks the contract, e.g. a duplicate target path | Input error at load; nothing is evaluated |
 
 | Imported evidence, argument and approvals | Evaluation |
 | --- | --- |
@@ -244,7 +264,8 @@ true and `xfail` is false.
 | Same sources, new passing evaluation | Approval stays valid; established |
 | Same sources, an assumed fiat not yet approved | Unestablished; assumption not established |
 | Same sources, an assumed node's description edited | Unestablished until the changed contract is approved |
-| Same sources, an assumed node renamed | Same result as before the rename |
+| An assumed node renamed, its ID kept outside the hashed sources | Same result as before the rename |
+| An assumed node renamed, its ID written in a hashed source (veriq) | Unestablished; stale approval |
 | Same sources, a new `assumes` entry added upstream | Unestablished until the changed contract is approved |
 | Same sources under a different target path | Unestablished until the changed interface is approved |
 
