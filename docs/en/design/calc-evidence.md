@@ -336,8 +336,17 @@ On approval of a calc bind, `inka review` writes
 `approvals/snapshots/<view_hash>.json`, where `<view_hash>` is the approved
 hash's hex digest. The file records the target path, the assumption set (each
 node's ID and rendered description) and the definitions (path, kind and
-source) as presented. It is content-addressed: two approvers approving the
-same view write the same file, and nothing is appended.
+source). It is content-addressed and stored in a canonical form — definitions
+sorted bytewise by path, sources with CRLF read as LF, the way the interface
+hash reads them — so two approvers approving the same view write the same
+file however the evidence was delivered, and nothing is appended. A node's ID
+and a definition's `kind` are outside the hash; for those the first approval's
+file stands, and a later approval of the same view does not rewrite it.
+
+The snapshot is written before the record, whole or not at all (a temporary
+file renamed into place). If it cannot be written the approval is not
+recorded and the command says so, so running it again is the whole remedy. A
+decline writes no snapshot.
 
 ```json
 {
@@ -355,9 +364,11 @@ same view write the same file, and nothing is appended.
 At review time, the current assumption set is diffed against the snapshot of
 the most recently approved view hash of the same target — the latest
 `approve` record for the bind whose snapshot exists — and shown as added,
-removed and reworded assumptions. When no snapshot exists the review says so
-and shows the full set. Sources are shown in full; a source diff is not part
-of this design. A bind is presented as:
+removed and reworded assumptions. "Latest" is by the records' timestamps, the
+one thing `inka review` reads them for; records of the same instant keep the
+order they were loaded in. When no snapshot exists the review says so and
+shows the full set. Sources are shown in full; a source diff is not part of
+this design. A bind is presented as:
 
 ```text
   calc: "Power::?verify_margin"
@@ -380,12 +391,24 @@ of this design. A bind is presented as:
 
 `=` is unchanged, `+` added, `-` removed (with the earlier text as `(was)`),
 `~` reworded. Assumptions are joined by ID, so a renamed node reads as removed
-and added even though the hash did not change.
+and added even though the hash did not change. An empty set reads
+`assumes: (none)`. A bind that was re-pointed since its baseline — the
+snapshot records another target path — opens with `~ target: <current path>`
+and the earlier path as `(was)`; the diff below it compares across that
+change.
 
-Snapshots are presentation aids. `inka eval` never reads them, so a missing
-or deleted snapshot changes what a reviewer is shown, never what is
+Snapshots are presentation aids. `inka eval` never reads them, so a missing,
+deleted or damaged snapshot changes what a reviewer is shown, never what is
 established. They are committed with the approvals so every reviewer sees
 the same baseline.
+
+A baseline snapshot that exists but cannot be read — truncated, malformed, or
+of a format version this build does not know — does not stop a review. `inka
+review` prints one `warning:` line naming the file and presents the bind in
+full, as on a first approval; every decision stays available. An older
+readable snapshot is not used in its place: it is not what was last approved.
+The next approval of the same view replaces a damaged file, and leaves a file
+of another version alone.
 
 Large assumption sets are presented naively for now; grouping and diff-only
 views are an [open question](open-questions.md).

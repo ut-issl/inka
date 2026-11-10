@@ -31,5 +31,16 @@ inka の最初のリリースです。inka は，設計の論証を構造化さ�
 - Python パッケージ `inka-evidence` はこれを出力し，pytest プラグインを含みます。
 - npm パッケージ `@ut-issl/inka-evidence` はこれを出力し，Vitest アダプタを含みます。
 
+### 計算エビデンス
+
+- 計算エビデンス v1 は，計算グラフの検証結果と，その根拠となるソースを記録する JSON スキーマです。
+- bind は `calc: "<path>"` で検証を引用し，読み込むファイルは `inka.toml` の `[evidence] calcs` に列挙します。
+- 計算が仮定するノードは bind の依存先になり，bind の承認対象にも含まれます。
+- `inka review` は calc の bind のソース・結果・仮定を表示します。
+- その bind を前回承認したときから仮定がどう変わったかも示します。
+- Python パッケージ `inka-evidence` は，`inka-evidence-veriq` コマンドで veriq のプロジェクトからこれを出力します。
+
+`inka-evidence-veriq` にはリリース済みのどの版よりも新しい veriq が必要なため，`veriq` extra は固定した git コミットから veriq をインストールします。
+
 各パッケージは crates.io・PyPI・npm・VS Code Marketplace にはまだ公開していません。
 このリポジトリからビルドしてください。

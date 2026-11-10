@@ -31,5 +31,16 @@ Every package in the repository is released together under this version.
 - The `inka-evidence` Python package emits it, with a pytest plugin.
 - The `@ut-issl/inka-evidence` npm package emits it, with a Vitest adapter.
 
+### Calc evidence
+
+- Calc evidence v1 is a JSON schema for the results of a calculation graph's verifications, with the sources they rest on.
+- A bind cites a verification with `calc: "<path>"`, and `[evidence] calcs` in `inka.toml` lists the files to load.
+- The nodes a calculation assumes become dependencies of the bind and part of what its approval covers.
+- `inka review` shows a calc bind's sources, results and assumptions.
+- It also shows how the assumptions changed since the last approval of the bind.
+- The `inka-evidence` Python package emits it from a veriq project, with the `inka-evidence-veriq` command.
+
+`inka-evidence-veriq` needs a veriq newer than any released one, so the `veriq` extra installs veriq from a pinned git commit.
+
 The packages are not yet published to crates.io, PyPI, npm, or the VS Code Marketplace.
 Build them from this repository.

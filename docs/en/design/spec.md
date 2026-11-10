@@ -176,7 +176,9 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
 - Fields: `v` (=1), `target` (`"<kind>:<id>"`, kind ∈ objective | structure |
   bind | fiat), `view_hash` (`"sha256:<hex>"`),
   `label` (approve | decline), `comment` (required for decline), `approver`,
-  `key_id`, `timestamp` (RFC3339 UTC; audit only — eval never reads it),
+  `key_id`, `timestamp` (RFC3339 UTC; audit only — eval never reads it, and
+  `inka review` only orders a bind's approvals by it to choose the snapshot it
+  diffs against),
   `phase` (current phase at approval time), `until` (approver-side reservation),
   `policy_hash`, `sig` (reserved; empty until signatures land).
 - Canonical signing bytes: sorted-key compact JSON of the record minus `sig`;
