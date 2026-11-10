@@ -99,4 +99,4 @@ prek install --hook-type pre-commit --hook-type pre-push
 - Apache License, Version 2.0([LICENSE-APACHE](LICENSE-APACHE) または <https://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license([LICENSE-MIT](LICENSE-MIT) または <https://opensource.org/licenses/MIT>)
 
-明示的に別段の意思表示をしない限り，Apache-2.0 ライセンスの定義に従って本プロジェクトに取り込まれることを意図して提出されたあらゆる貢献は，追加の条件なしに上記のデュアルライセンスで提供されるものとします。
+貢献者が明示的に別段の意思表示をしない限り，Apache-2.0 ライセンスの定義に従い，貢献者が本作品に取り込まれることを意図して提出したあらゆる貢献は，追加の条件なしに上記のデュアルライセンスで提供されるものとします。
