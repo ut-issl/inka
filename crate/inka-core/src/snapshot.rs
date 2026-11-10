@@ -99,9 +99,7 @@ impl Snapshot {
     #[must_use]
     pub fn file_name(hash: ViewHash) -> String {
         let digest = hash.to_string();
-        let hex = digest
-            .strip_prefix("sha256:")
-            .expect("a view hash displays as sha256:<hex>");
+        let hex = digest.strip_prefix("sha256:").unwrap_or(&digest);
         format!("{hex}.json")
     }
 }
