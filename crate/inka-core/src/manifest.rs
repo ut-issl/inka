@@ -22,7 +22,7 @@ pub struct Manifest {
     pub project: ProjectSection,
     pub phases: PhasesSection,
     pub values: ValuesSection,
-    /// Absent when the project imports no test evidence.
+    /// Absent when the project imports no evidence.
     #[serde(default)]
     pub evidence: Option<EvidenceSection>,
 }
@@ -65,16 +65,22 @@ pub struct ValuesSection {
     pub files: Vec<PathBuf>,
 }
 
-/// The optional `[evidence]` section: test evidence JSON files to import.
+/// The optional `[evidence]` section: the evidence JSON files to import, test
+/// evidence under `tests` and calc evidence under `calcs`.
 ///
 /// Paths are relative to the manifest's directory, like `values.files`, and
 /// joining them is the loader's job. The delivery machinery (capsula) is
 /// responsible for the files being present and current; the manifest only
-/// names where they are expected.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+/// names where they are expected. Either list may be left out.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceSection {
-    pub files: Vec<PathBuf>,
+    /// Test evidence files (`schemas/test-evidence-v1.schema.json`).
+    #[serde(default)]
+    pub tests: Vec<PathBuf>,
+    /// Calc evidence files (`schemas/calc-evidence-v1.schema.json`).
+    #[serde(default)]
+    pub calcs: Vec<PathBuf>,
 }
 
 /// A reason an `inka.toml` file was rejected.

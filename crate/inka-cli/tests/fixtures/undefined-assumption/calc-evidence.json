@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "targets": [
+    {
+      "path": "AOCS::?verify_detumble",
+      "definitions": [
+        {
+          "path": "AOCS::?verify_detumble",
+          "kind": "verification",
+          "source": "@aocs.verification()\ndef verify_detumble(result: DetumbleResult) -> bool:\n    return result.settling_time_s <= result.limit_s\n"
+        }
+      ],
+      "assumes": [
+        "disturbance_model_valid",
+        "mass_properties_valid"
+      ],
+      "leaves": [
+        {
+          "id": "AOCS::?verify_detumble",
+          "result": true
+        }
+      ],
+      "valid": true
+    }
+  ]
+}

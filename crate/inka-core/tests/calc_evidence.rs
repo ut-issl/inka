@@ -92,3 +92,248 @@ fn every_recorded_calc_evidence_vector_still_hashes_to_its_recorded_value() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Loading
+// ---------------------------------------------------------------------------
+
+use inka_core::calc_evidence::{CalcEvidenceError, CalcEvidenceSet, DefinitionKind};
+use inka_core::read::DiskText;
+
+/// A scratch directory unique to one test, cleaned up on drop.
+struct Scratch {
+    dir: PathBuf,
+}
+
+impl Scratch {
+    fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!(
+            "inka-calc-evidence-test-{}-{name}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("the scratch directory should be creatable");
+        Self { dir }
+    }
+
+    fn write(&self, file: &str, contents: &str) -> PathBuf {
+        fs::write(self.dir.join(file), contents).expect("the fixture file should be writable");
+        PathBuf::from(file)
+    }
+
+    fn load(&self, files: &[PathBuf]) -> Result<CalcEvidenceSet, CalcEvidenceError> {
+        calc_evidence::load_files(&self.dir, files, &DiskText)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// A valid file: a verification over one calculation, assuming two nodes.
+const VALID: &str = r#"{
+  "v": 1,
+  "provenance": {"source_revision": "4f2a1c9", "capsula_run_id": "01K8WSYC91YAE21R7CWHQ4KYN2"},
+  "targets": [
+    {
+      "path": "Power::?verify_margin",
+      "definitions": [
+        {"path": "Power::?verify_margin", "kind": "verification",
+         "source": "@power.verification()\ndef verify_margin(b: Budget) -> bool:\n    return b.margin > 0\n"},
+        {"path": "Power::@budget", "kind": "calculation",
+         "source": "@power.calculation()\ndef budget(c: Config) -> Budget: ...\n"}
+      ],
+      "assumes": ["power::loads_complete", "power::eclipse_model_valid"],
+      "leaves": [{"id": "Power::?verify_margin", "result": true}],
+      "valid": true
+    }
+  ]
+}"#;
+
+#[test]
+fn loads_a_valid_file_and_exposes_the_target_by_path() {
+    // Arrange
+    let scratch = Scratch::new("valid");
+    let file = scratch.write("calc-evidence.json", VALID);
+
+    // Act
+    let set = scratch.load(&[file]).expect("valid evidence should load");
+
+    // Assert: everything the wire carried, plus the hash the loader adds.
+    let target = set
+        .get("Power::?verify_margin")
+        .expect("the loaded target should be addressable by its path");
+    assert_eq!(target.definitions.len(), 2);
+    assert_eq!(target.definitions[1].path, "Power::@budget");
+    assert_eq!(target.definitions[1].kind, DefinitionKind::Calculation);
+    assert_eq!(
+        target.assumes,
+        ["power::loads_complete", "power::eclipse_model_valid"]
+    );
+    assert_eq!(target.leaves.len(), 1);
+    assert_eq!(target.leaves[0].result, Some(true));
+    assert!(target.valid);
+    assert!(!target.xfail);
+    let definitions: Vec<Definition<'_>> = target
+        .definitions
+        .iter()
+        .map(|definition| Definition {
+            path: &definition.path,
+            source: &definition.source,
+        })
+        .collect();
+    assert_eq!(
+        target.interface_hash,
+        calc_evidence::interface_hash(
+            "Power::?verify_margin",
+            &definitions,
+            &["Power::?verify_margin"]
+        )
+    );
+    assert!(set.get("Power::?verify_other").is_none());
+    assert_eq!(set.iter().count(), 1);
+}
+
+#[test]
+fn a_loaded_target_hashes_to_its_golden_vector() {
+    // Arrange: each frozen vector, written out as the evidence file a
+    // producer would deliver. The loader must reduce it to the recorded hash.
+    let scratch = Scratch::new("golden");
+    for path in vector_files() {
+        let vector = read_vector(&path);
+        let definitions: Vec<serde_json::Value> = vector
+            .definitions
+            .iter()
+            .map(|definition| {
+                serde_json::json!({
+                    "path": definition.path,
+                    "kind": "calculation",
+                    "source": definition.source,
+                })
+            })
+            .collect();
+        let leaves: Vec<serde_json::Value> = vector
+            .leaves
+            .iter()
+            .map(|leaf| serde_json::json!({"id": leaf, "result": true}))
+            .collect();
+        let file = serde_json::json!({
+            "v": 1,
+            "targets": [{
+                "path": vector.target,
+                "definitions": definitions,
+                "assumes": [],
+                "leaves": leaves,
+                "valid": true,
+            }],
+        });
+        let name = format!(
+            "{}.json",
+            path.file_stem()
+                .expect("a vector file has a stem")
+                .to_string_lossy()
+        );
+        let relative = scratch.write(&name, &file.to_string());
+
+        // Act
+        let set = scratch
+            .load(&[relative])
+            .expect("a vector is valid evidence");
+
+        // Assert
+        assert_eq!(
+            set.get(&vector.target)
+                .expect("the target is loaded")
+                .interface_hash
+                .to_string(),
+            vector.interface_hash,
+            "{} does not load to its frozen hash",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn a_missing_configured_file_is_an_input_error() {
+    let scratch = Scratch::new("missing-file");
+
+    let error = scratch
+        .load(&[PathBuf::from("not-there.json")])
+        .expect_err("a configured file that is absent breaks the delivery premise");
+
+    assert!(
+        matches!(error, CalcEvidenceError::Unreadable { .. }),
+        "got: {error}"
+    );
+    assert!(error.to_string().contains("not-there.json"));
+}
+
+#[test]
+fn malformed_json_and_an_unsupported_version_are_distinct_input_errors() {
+    let scratch = Scratch::new("malformed");
+    let malformed = scratch.write("malformed.json", "{ not json");
+    let versioned = scratch.write("v2.json", r#"{"v": 2, "targets": []}"#);
+
+    let malformed = scratch.load(&[malformed]).expect_err("must fail loudly");
+    let versioned = scratch
+        .load(&[versioned])
+        .expect_err("v2 is not this consumer's format");
+
+    assert!(
+        matches!(malformed, CalcEvidenceError::Malformed { .. }),
+        "got: {malformed}"
+    );
+    assert!(
+        matches!(
+            versioned,
+            CalcEvidenceError::UnsupportedVersion { found: 2, .. }
+        ),
+        "got: {versioned}"
+    );
+}
+
+#[test]
+fn semantic_defects_are_input_errors_naming_the_file() {
+    let scratch = Scratch::new("semantic");
+    // The target is not among its own definitions.
+    let file = scratch.write(
+        "undefined-target.json",
+        r#"{"v": 1, "targets": [{"path": "P::?v",
+            "definitions": [{"path": "P::@c", "kind": "calculation", "source": "x"}],
+            "assumes": [], "leaves": [{"id": "P::?v"}], "valid": true}]}"#,
+    );
+
+    let error = scratch
+        .load(&[file])
+        .expect_err("the target must be defined");
+
+    assert!(
+        matches!(error, CalcEvidenceError::Invalid { .. }),
+        "got: {error}"
+    );
+    assert!(error.to_string().contains("undefined-target.json"));
+}
+
+#[test]
+fn duplicate_target_paths_are_rejected_across_files() {
+    // Arrange: the same target delivered by two files is a routing conflict.
+    let scratch = Scratch::new("dup-target");
+    let one = r#"{"v": 1, "targets": [{"path": "P::?v",
+        "definitions": [{"path": "P::?v", "kind": "verification", "source": "x"}],
+        "assumes": [], "leaves": [{"id": "P::?v"}], "valid": true}]}"#;
+    let first = scratch.write("first.json", one);
+    let second = scratch.write("second.json", one);
+
+    // Act
+    let error = scratch
+        .load(&[first, second])
+        .expect_err("a duplicate across files");
+
+    // Assert: the second file is the one reported.
+    assert!(
+        matches!(error, CalcEvidenceError::Invalid { .. }),
+        "got: {error}"
+    );
+    assert!(error.to_string().contains("second.json"), "got: {error}");
+}

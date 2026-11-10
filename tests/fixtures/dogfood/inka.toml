@@ -22,7 +22,7 @@ files = ["values.toml"]
 [evidence]
 # Test evidence the Rust adapter emitted from a real `capsula run` of
 # inka's own tests, delivered per docs/en/design/test-evidence.md.
-files = ["evidence/test-evidence.json"]
+tests = ["evidence/test-evidence.json"]
 
 # [policy]
 # Policy location and format are settled in M3 (undecided).

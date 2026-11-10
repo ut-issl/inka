@@ -28,7 +28,7 @@ use crate::position;
 /// record store looks like.
 pub fn lenses(root: &Path, project: &Project, file: FileId) -> Option<Vec<CodeLens>> {
     let source = project.source_map.file(file)?;
-    let graph = Graph::build(&project.blocks).ok()?;
+    let graph = Graph::of_project(project).ok()?;
     let view = ArgumentView::build(&graph, &project.source_map);
     let records = match approvals::load_dir(&root.join(APPROVALS_DIR)) {
         Ok(records) => records,

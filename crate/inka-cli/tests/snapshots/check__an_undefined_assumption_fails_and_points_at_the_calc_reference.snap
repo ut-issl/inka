@@ -1,0 +1,11 @@
+---
+source: crate/inka-cli/tests/check.rs
+expression: stderr
+---
+Error: undefined assumption `mass_properties_valid`: the calc evidence for `AOCS::?verify_detumble` assumes it, but no block defines it
+    ╭─[ ./argument/main.inka:14:5 ]
+    │
+ 14 │     calc: "AOCS::?verify_detumble"
+    │     ───────────────┬──────────────  
+    │                    ╰──────────────── undefined assumption `mass_properties_valid`: the calc evidence for `AOCS::?verify_detumble` assumes it, but no block defines it
+────╯

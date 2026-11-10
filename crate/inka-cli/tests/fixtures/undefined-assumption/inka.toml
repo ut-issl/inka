@@ -1,0 +1,15 @@
+# A valid argument whose imported calc evidence assumes a node the argument
+# does not define: check must fail at the `calc:` reference.
+
+[project]
+name = "undefined-assumption"
+
+[phases]
+order = ["M1"]
+current = "M1"
+
+[values]
+files = []
+
+[evidence]
+calcs = ["calc-evidence.json"]

@@ -225,7 +225,7 @@ fn loads_the_evidence_the_manifest_imports() {
     let project = TempProject::new("evidence");
     project.write(
         "inka.toml",
-        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\nfiles = [\"evidence.json\"]\n"),
+        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\ntests = [\"evidence.json\"]\n"),
     );
     project.write(
         "evidence.json",
@@ -248,7 +248,7 @@ fn reports_an_unloadable_evidence_file_as_an_input_error() {
     let project = TempProject::new("missing-evidence-file");
     project.write(
         "inka.toml",
-        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\nfiles = [\"evidence.json\"]\n"),
+        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\ntests = [\"evidence.json\"]\n"),
     );
     project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
 
@@ -260,6 +260,56 @@ fn reports_an_unloadable_evidence_file_as_an_input_error() {
     // Assert
     assert!(matches!(error, LoadError::Evidence(_)));
     assert!(error.to_string().contains("evidence.json"));
+}
+
+/// One calc evidence target assuming `assumed`, as a producer delivers it.
+const CALC_EVIDENCE: &str = r#"{"v": 1, "targets": [{"path": "AOCS::?verify_detumble",
+    "definitions": [{"path": "AOCS::?verify_detumble", "kind": "verification", "source": "def verify_detumble(): ..."}],
+    "assumes": ["assumed"], "leaves": [{"id": "AOCS::?verify_detumble", "result": true}], "valid": true}]}"#;
+
+#[test]
+fn loads_the_calc_evidence_the_manifest_imports() {
+    // Arrange: calc evidence alone; the tests list may be left out.
+    let project = TempProject::new("calc-evidence");
+    project.write(
+        "inka.toml",
+        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\ncalcs = [\"calc-evidence.json\"]\n"),
+    );
+    project.write("calc-evidence.json", CALC_EVIDENCE);
+    project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
+
+    // Act
+    let loaded = load_project(&project.root)
+        .result
+        .expect("calc evidence project should load");
+
+    // Assert
+    let target = loaded
+        .calc_evidence
+        .get("AOCS::?verify_detumble")
+        .expect("the target is loaded");
+    assert_eq!(target.assumes, ["assumed"]);
+    assert!(loaded.evidence.iter().next().is_none());
+}
+
+#[test]
+fn reports_an_unloadable_calc_evidence_file_as_an_input_error() {
+    // Arrange: the file the manifest names is not there.
+    let project = TempProject::new("missing-calc-evidence-file");
+    project.write(
+        "inka.toml",
+        &format!("{MANIFEST_WITHOUT_VALUES}\n[evidence]\ncalcs = [\"calc-evidence.json\"]\n"),
+    );
+    project.write("argument/a.inka", PLAIN_FIAT_BLOCK);
+
+    // Act
+    let error = load_project(&project.root)
+        .result
+        .expect_err("a missing calc evidence file should fail the load");
+
+    // Assert
+    assert!(matches!(error, LoadError::CalcEvidence(_)));
+    assert!(error.to_string().contains("calc-evidence.json"));
 }
 
 #[test]

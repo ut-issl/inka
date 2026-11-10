@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use inka_core::calc_evidence::CalcEvidenceError;
 use inka_core::evidence::EvidenceError;
 use inka_core::graph;
 use inka_core::project::{LoadError, load_project_with};
@@ -121,6 +122,12 @@ fn anchor_of(error: &LoadError) -> Option<PathBuf> {
             | EvidenceError::UnsupportedVersion { path, .. }
             | EvidenceError::Invalid { path, .. } => path.clone(),
         }),
+        LoadError::CalcEvidence(evidence) => Some(match evidence {
+            CalcEvidenceError::Unreadable { path, .. }
+            | CalcEvidenceError::Malformed { path, .. }
+            | CalcEvidenceError::UnsupportedVersion { path, .. }
+            | CalcEvidenceError::Invalid { path, .. } => path.clone(),
+        }),
         // Directory-shape problems have no file an editor could open; the
         // manifest that implies the layout is the anchor.
         LoadError::MissingArgumentDir { .. }
@@ -230,6 +237,72 @@ mod tests {
             "expected the missing-objective finding, got {diagnostics:?}"
         );
         assert_eq!(diagnostics[0].range, Range::default());
+    }
+
+    /// A manifest importing one calc evidence file.
+    const MANIFEST_WITH_CALCS: &str = concat!(
+        "[project]\nname = \"t\"\n\n",
+        "[phases]\norder = [\"P0\"]\ncurrent = \"P0\"\n\n",
+        "[values]\nfiles = []\n\n",
+        "[evidence]\ncalcs = [\"calc-evidence.json\"]\n",
+    );
+
+    /// One target backing `modelled`, whose upstream assumes `assumes`.
+    fn calc_evidence(assumes: &str) -> String {
+        format!(
+            r#"{{"v": 1, "targets": [{{"path": "P::?v",
+                "definitions": [{{"path": "P::?v", "kind": "verification", "source": "x"}}],
+                "assumes": [{assumes}], "leaves": [{{"id": "P::?v"}}], "valid": true}}]}}"#
+        )
+    }
+
+    const BIND_UNDER_ROOT: &str = "objective root {\n  ```\n  ok\n  ```\n  children: modelled\n}\n\nbind modelled {\n  ```\n  ok\n  ```\n  calc: \"P::?v\"\n}\n";
+
+    #[test]
+    fn an_assumption_cycle_is_an_error_on_the_calc_reference() {
+        // Arrange: the bind's evidence assumes the objective above it.
+        let temp = project_with(&[
+            ("argument/a.inka", BIND_UNDER_ROOT),
+            ("calc-evidence.json", &calc_evidence("\"root\"")),
+        ]);
+        std::fs::write(temp.path().join("inka.toml"), MANIFEST_WITH_CALCS).expect("manifest");
+
+        // Act
+        let found = analyze(temp.path(), &DiskText);
+
+        // Assert: anchored to `calc: "P::?v"` on line 11 (zero-based).
+        let path = temp.path().join("argument/a.inka");
+        let diagnostics = found.get(&path).expect("findings on a.inka");
+        let cycle = diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.message.contains("cycle through an assumption"))
+            .expect("the cycle finding");
+        assert_eq!(cycle.severity, Some(DiagnosticSeverity::ERROR));
+        assert_eq!(cycle.range.start.line, 11);
+    }
+
+    #[test]
+    fn a_broken_calc_evidence_file_anchors_its_error_to_that_file() {
+        // Arrange: the configured file declares a version this build does not read.
+        let temp = project_with(&[
+            ("argument/a.inka", BIND_UNDER_ROOT),
+            ("calc-evidence.json", r#"{"v": 2, "targets": []}"#),
+        ]);
+        std::fs::write(temp.path().join("inka.toml"), MANIFEST_WITH_CALCS).expect("manifest");
+
+        // Act
+        let found = analyze(temp.path(), &DiskText);
+
+        // Assert
+        let evidence = temp.path().join("calc-evidence.json");
+        let diagnostics = found
+            .get(&evidence)
+            .expect("findings on calc-evidence.json");
+        assert_eq!(diagnostics.len(), 1);
+        assert!(
+            diagnostics[0].message.contains("version 2"),
+            "got {diagnostics:?}"
+        );
     }
 
     #[test]

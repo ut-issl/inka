@@ -16,7 +16,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::ast::Block;
-use crate::evidence::{EvidenceError, EvidenceSet, load_files};
+use crate::calc_evidence::{self, CalcEvidenceError, CalcEvidenceSet};
+use crate::evidence::{self, EvidenceError, EvidenceSet};
 use crate::format::format_source;
 use crate::interpolate::{RenderedDescription, interpolate};
 use crate::lexer::Lexer;
@@ -27,8 +28,8 @@ use crate::source::{Error, SourceMap, Warning};
 use crate::values::{ValuesError, load_values};
 
 /// A fully loaded project: validated manifest, interpolated blocks, and the
-/// test evidence the manifest imports, plus the source map that resolves
-/// block spans.
+/// test and calc evidence the manifest imports, plus the source map that
+/// resolves block spans.
 ///
 /// Blocks carry [`RenderedDescription`], so the raw pre-interpolation fence
 /// text is not representable here: a later pass cannot read it by mistake.
@@ -38,10 +39,14 @@ pub struct Project {
     pub source_map: SourceMap,
     /// Blocks in file order; consumers must not rely on this order.
     pub blocks: Vec<Block<RenderedDescription>>,
-    /// Every test the manifest's `[evidence]` files provide; empty when the
-    /// manifest imports none. Loaded here so that a missing or malformed
+    /// Every test the manifest's `[evidence] tests` files provide; empty when
+    /// the manifest imports none. Loaded here so that a missing or malformed
     /// evidence file is an input error for every command, not only `eval`.
     pub evidence: EvidenceSet,
+    /// Every target the manifest's `[evidence] calcs` files provide; empty
+    /// when the manifest imports none. Loaded here for the same reason, and
+    /// because the nodes a target assumes are edges of the argument graph.
+    pub calc_evidence: CalcEvidenceSet,
 }
 
 /// The outcome of loading a project directory.
@@ -79,6 +84,8 @@ pub enum LoadError {
     Values(#[from] ValuesError),
     #[error(transparent)]
     Evidence(#[from] EvidenceError),
+    #[error(transparent)]
+    CalcEvidence(#[from] CalcEvidenceError),
     #[error("argument directory not found: {}", .path.display())]
     MissingArgumentDir { path: PathBuf },
     #[error("subdirectories under argument/ are not supported: {}", .path.display())]
@@ -102,9 +109,9 @@ pub enum LoadError {
 /// problems in another.
 ///
 /// The `result` is a [`LoadError`] when `inka.toml` is missing or invalid,
-/// values files fail to load or collide, `argument/` is missing or contains
-/// a subdirectory, a file cannot be read, or any file has lexer, parser, or
-/// interpolation errors.
+/// values files fail to load or collide, an evidence file is missing or
+/// invalid, `argument/` is missing or contains a subdirectory, a file cannot
+/// be read, or any file has lexer, parser, or interpolation errors.
 #[must_use]
 pub fn load_project(project_dir: &Path) -> LoadOutcome {
     load_project_with(project_dir, &DiskText)
@@ -135,9 +142,12 @@ fn load(project_dir: &Path, reader: &dyn ReadText) -> Result<Project, LoadError>
         source,
     })?;
     let values = load_values(project_dir, &manifest.values.files, reader)?;
-    let evidence = match &manifest.evidence {
-        Some(section) => load_files(project_dir, &section.files, reader)?,
-        None => EvidenceSet::default(),
+    let (evidence, calc_evidence) = match &manifest.evidence {
+        Some(section) => (
+            evidence::load_files(project_dir, &section.tests, reader)?,
+            calc_evidence::load_files(project_dir, &section.calcs, reader)?,
+        ),
+        None => (EvidenceSet::default(), CalcEvidenceSet::default()),
     };
 
     let mut source_map = SourceMap::new();
@@ -166,6 +176,7 @@ fn load(project_dir: &Path, reader: &dyn ReadText) -> Result<Project, LoadError>
         source_map,
         blocks,
         evidence,
+        calc_evidence,
     })
 }
 

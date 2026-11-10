@@ -1,0 +1,15 @@
+# A valid argument whose imported calc evidence assumes an ancestor of the
+# bind it backs: the assumption edge closes a cycle, which check must report.
+
+[project]
+name = "assumption-cycle"
+
+[phases]
+order = ["M1"]
+current = "M1"
+
+[values]
+files = []
+
+[evidence]
+calcs = ["calc-evidence.json"]

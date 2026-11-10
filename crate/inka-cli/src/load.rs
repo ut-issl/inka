@@ -25,7 +25,10 @@ use inka_core::view::ArgumentView;
 use crate::render::render;
 
 /// A loaded project reduced to what commands consume: the manifest's rule-side
-/// state, the imported test evidence, and the shared argument view.
+/// state, the imported test evidence, and the shared argument view. The
+/// imported calc evidence shapes the view — its assumptions are edges of the
+/// graph the view is projected from — but is not carried: nothing evaluates
+/// it yet.
 #[derive(Debug, Clone)]
 pub struct ProjectView {
     pub manifest: Manifest,
@@ -83,7 +86,7 @@ pub fn load_project_view(
         }
     };
 
-    let graph = match Graph::build(&project.blocks) {
+    let graph = match Graph::of_project(&project) {
         Ok(graph) => graph,
         Err(errors) => return report(&project.source_map, errors, warnings, err, color),
     };

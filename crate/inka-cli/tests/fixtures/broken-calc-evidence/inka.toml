@@ -1,0 +1,15 @@
+# A valid argument whose configured calc evidence file declares a version this
+# consumer does not read: check and eval must both fail loudly.
+
+[project]
+name = "broken-calc-evidence"
+
+[phases]
+order = ["M1"]
+current = "M1"
+
+[values]
+files = []
+
+[evidence]
+calcs = ["calc-evidence.json"]

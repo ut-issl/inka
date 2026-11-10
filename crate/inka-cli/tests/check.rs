@@ -139,6 +139,50 @@ fn an_invalid_evidence_file_fails_the_check() {
 }
 
 #[test]
+fn an_invalid_calc_evidence_file_fails_the_check() {
+    inka()
+        .current_dir(local_fixture("broken-calc-evidence"))
+        .args(["check", "."])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("calc evidence"));
+}
+
+#[test]
+fn an_undefined_assumption_fails_and_points_at_the_calc_reference() {
+    // Act: the imported calc evidence assumes `mass_properties_valid`, which
+    // no block defines; the other assumed node exists and raises nothing.
+    let assert = inka()
+        .current_dir(local_fixture("undefined-assumption"))
+        .args(["check", "."])
+        .assert()
+        .failure()
+        .code(1);
+
+    // Assert: freeze the snippet pointing at the `calc:` property.
+    let stderr = String::from_utf8(assert.get_output().stderr.clone())
+        .expect("diagnostic output should be valid UTF-8");
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
+fn an_assumption_cycle_fails_and_names_the_nodes_involved() {
+    // Act: the bind's evidence assumes the objective above it.
+    let assert = inka()
+        .current_dir(local_fixture("assumption-cycle"))
+        .args(["check", "."])
+        .assert()
+        .failure()
+        .code(1);
+
+    // Assert: freeze the rendering, with the assumption edge drawn as `⇢`.
+    let stderr = String::from_utf8(assert.get_output().stderr.clone())
+        .expect("diagnostic output should be valid UTF-8");
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
 fn missing_manifest_reports_a_structural_error() {
     // Arrange: a directory that exists but holds no inka.toml.
     let without_manifest = local_fixture("no-objective").join("argument");

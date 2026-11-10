@@ -13,4 +13,4 @@ current = "M1"
 files = []
 
 [evidence]
-files = ["evidence.json"]
+tests = ["evidence.json"]

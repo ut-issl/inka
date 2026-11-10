@@ -211,18 +211,29 @@ inka does with it are:
 
 Assumptions are edges of the argument graph, so inka reads the structural part
 of calc evidence — targets, definitions, assumption IDs — when it loads the
-project, not only when it evaluates. `inka check` reports as errors:
+project, not only when it evaluates. For every `calc:` bind whose target the
+loaded evidence provides, an assumption edge runs from the bind to each node
+the target assumes; an assumption ID resolves exactly as a `children:`
+reference does. Both kinds of edge are dependencies: they order evaluation,
+they close cycles, and a node that only an assumption reaches is still
+reached from the objective, not an orphan. They differ in that an assumed
+node is not a child: `children:` stays the declared structure, and the
+assumed node's own establishment is what the bind depends on.
+
+`inka check` reports as errors, anchored on the bind's `calc:` property:
 
 - an assumption ID that names no node of the argument;
 - a dependency cycle that passes through an assumption edge, e.g. a bind
   whose evidence assumes the bind itself or one of its ancestors. The nodes
-  on the cycle are named.
+  on the cycle are named in order, with the assumption edge drawn as `⇢`:
+  `dependency cycle through an assumption: branch → modelled ⇢ root → branch`.
 
 The leaf results, validity and `xfail` are read by evaluation only. A `calc:`
 reference whose target is absent from loaded evidence is not a check error;
 it is missing evidence, reported by `inka eval` as an unestablished bind.
 The `calc:` value itself gets a format check at check time: non-empty, a
-single line, no whitespace.
+single line, no whitespace. A configured calc evidence file that is missing
+or malformed is an input error for every command, as for test evidence.
 
 ## Content hashing and reapproval
 
