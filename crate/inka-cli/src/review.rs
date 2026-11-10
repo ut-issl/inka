@@ -1602,7 +1602,12 @@ fiat table_complete {
         // Act
         let transcript = run_interactive(dir.path(), "s\nq\n");
 
-        // Assert
+        // Assert: the baseline was found and compared, and it has the same
+        // target, so the missing line is a decision rather than a lost baseline.
+        assert!(
+            transcript.contains("changed since the approval by alice"),
+            "{transcript}"
+        );
         assert!(!transcript.contains("target:"), "{transcript}");
     }
 
