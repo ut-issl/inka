@@ -9,20 +9,31 @@ failed assumption is reported through ``valid``).
 The wire format and its validation live in the shared Rust crate; veriq is
 only imported here, as an optional dependency (``inka-evidence[veriq]``).
 
+The source of a definition is its own text followed by that of every
+project class it reaches: through field and return annotations, type
+arguments, PEP 695 aliases and base classes. Classes of veriq, pydantic and
+the standard library are left out, so upgrading those does not disturb an
+approval; a class of any other package counts as project code.
+
 Assumptions are declared in veriq node metadata under the ``inka`` key::
 
     @power.calculation(metadata={"inka": {"assumes": ["power::eclipse_model_valid"]}})
     def budget(...): ...
 
 and unioned over the upstream subgraph. Whether the IDs name real nodes is
-inka's business; this adapter only checks that they are strings.
+inka's business; this adapter only checks that ``assumes`` is a list of
+strings and that ``inka`` holds nothing else.
+
+Rather than emit evidence that says less than it seems to, the adapter
+refuses a leaf result that is neither a ``bool`` nor ``None``, malformed
+``inka`` metadata, and a project without any verification.
 """
 
 from __future__ import annotations
 
 import argparse
-import enum
 import inspect
+import reprlib
 import sys
 import typing
 from collections.abc import Mapping
@@ -43,9 +54,19 @@ METADATA_KEY = "inka"
 #: The entry of :data:`METADATA_KEY` listing assumed inka node IDs.
 ASSUMES_KEY = "assumes"
 
+#: Top-level packages whose classes are library code. Their source is not
+#: what a project's reviewers approve, and hashing it would tie every
+#: approval to the installed version of the library.
+LIBRARY_PACKAGES = frozenset({"builtins", "pydantic", "pydantic_core", "veriq"}) | sys.stdlib_module_names
+
 
 class AdapterError(Exception):
     """The veriq project cannot be turned into calc evidence."""
+
+
+def _type_name(value: object) -> str:
+    cls = type(value)
+    return cls.__qualname__ if cls.__module__ == "builtins" else f"{cls.__module__}.{cls.__qualname__}"
 
 
 # ---------------------------------------------------------------------------
@@ -62,60 +83,104 @@ def _source(obj: object, what: str) -> str:
 
 
 def _is_user_class(candidate: object) -> bool:
-    """A class the project defines, as opposed to a library or builtin one."""
-    from pydantic import BaseModel  # noqa: PLC0415
+    """A class the project answers for, as opposed to a library or builtin one.
 
+    Deliberately conservative: only :data:`LIBRARY_PACKAGES` are excluded, so
+    a class of any other third-party package stays in the hashed source.
+    """
     if not isinstance(candidate, type):
         return False
-    if issubclass(candidate, BaseModel):
-        return candidate is not BaseModel
-    if issubclass(candidate, enum.Enum):
-        return candidate.__module__ not in ("enum", "builtins")
-    return False
+    return candidate.__module__.partition(".")[0] not in LIBRARY_PACKAGES
 
 
-def _referenced_classes(annotation: object, found: dict[str, type]) -> None:
-    """Collects the user model and enum classes an annotation reaches."""
+def _class_key(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _is_type_alias(annotation: object) -> bool:
+    """A PEP 695 alias: a ``type X = ...`` statement or a ``TypeAliasType``
+    call, of ``typing`` or of the ``typing_extensions`` backport (a distinct
+    class that pydantic accepts just the same)."""
+    return type(annotation).__name__ == "TypeAliasType" and hasattr(annotation, "__value__")
+
+
+def _parametrization(cls: type) -> tuple[object, ...] | None:
+    """The origin and type arguments of a parametrized pydantic generic
+    (``Report[Unit]``), which is a class of its own without source text."""
+    metadata = getattr(cls, "__pydantic_generic_metadata__", None)
+    if not isinstance(metadata, Mapping) or metadata.get("origin") is None:
+        return None
+    return (metadata["origin"], *metadata.get("args", ()))
+
+
+def _successors(annotation: object) -> tuple[object, ...]:
+    """What an annotation leads to: the places to look for further classes."""
     from pydantic import BaseModel  # noqa: PLC0415
 
-    if _is_user_class(annotation):
-        assert isinstance(annotation, type)
-        key = f"{annotation.__module__}.{annotation.__qualname__}"
-        if key in found:
-            return
-        found[key] = annotation
-        if issubclass(annotation, BaseModel):
-            for field in annotation.model_fields.values():
-                _referenced_classes(field.annotation, found)
-        return
-    for argument in typing.get_args(annotation):
-        _referenced_classes(argument, found)
+    if _is_type_alias(annotation):
+        return (annotation.__value__,)  # type: ignore[attr-defined]
+    origin = typing.get_origin(annotation)
+    if origin is not None:
+        return (origin, *typing.get_args(annotation))
+    if isinstance(annotation, (list, tuple)):  # the parameter list of a Callable
+        return tuple(annotation)
+    if not isinstance(annotation, type):
+        return ()
+    parametrization = _parametrization(annotation)
+    if parametrization is not None:
+        return parametrization
+    if not _is_user_class(annotation):
+        return ()
+    fields = annotation.model_fields.values() if issubclass(annotation, BaseModel) else ()
+    return (*annotation.__mro__[1:], *(field.annotation for field in fields))
+
+
+def _referenced_classes(annotation: object) -> dict[str, type]:
+    """The user classes an annotation reaches, by qualified name.
+
+    Followed: type arguments, PEP 695 aliases, the bases of every user class
+    and the fields of every user model. A library class is passed through —
+    its type arguments are followed — without being collected.
+    """
+    found: dict[str, type] = {}
+    # Classes and aliases already expanded; a recursive alias or a model that
+    # refers to itself would otherwise never end. Holding the objects keeps
+    # their ids from being reused.
+    expanded: dict[int, object] = {}
+    pending: list[object] = [annotation]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, type) or _is_type_alias(current):
+            if id(current) in expanded:
+                continue
+            expanded[id(current)] = current
+        if _is_user_class(current) and _parametrization(current) is None:
+            found[_class_key(current)] = current
+        pending.extend(_successors(current))
+    return found
+
+
+def _class_sources(classes: Mapping[str, type], what: str) -> list[str]:
+    return [_source(classes[key], f"{what} {key}") for key in sorted(classes)]
 
 
 def model_source(root_model: type[BaseModel]) -> str:
     """The reviewable source of a root model: its class, then every user
-    model and enum class its fields reach, each once, in name order."""
-    found: dict[str, type] = {}
-    _referenced_classes(root_model, found)
-    root_key = f"{root_model.__module__}.{root_model.__qualname__}"
-    nested = sorted(key for key in found if key != root_key)
-    sources = [_source(root_model, f"root model {root_model.__qualname__}")]
-    sources.extend(_source(found[key], f"model class {key}") for key in nested)
-    return "\n".join(sources)
+    class its bases and fields reach, each once, in name order."""
+    root_key = _class_key(root_model)
+    nested = {key: cls for key, cls in _referenced_classes(root_model).items() if key != root_key}
+    root_source = _source(root_model, f"root model {root_model.__qualname__}")
+    return "\n".join([root_source, *_class_sources(nested, "model class")])
 
 
 def function_source(func: object, what: str) -> str:
     """The reviewable source of a calculation or verification: the function,
-    then every user model and enum class its return annotation reaches."""
-    sources = [_source(func, what)]
+    then every user class its return annotation reaches, in name order."""
     try:
         returned = typing.get_type_hints(func).get("return")  # type: ignore[arg-type]
     except (NameError, TypeError):
         returned = inspect.signature(func).return_annotation  # type: ignore[arg-type]
-    found: dict[str, type] = {}
-    _referenced_classes(returned, found)
-    sources.extend(_source(found[key], f"class {key}") for key in sorted(found))
-    return "\n".join(sources)
+    return "\n".join([_source(func, what), *_class_sources(_referenced_classes(returned), "class")])
 
 
 def definition_of(project: vq.Project, node: vq.DefinitionNode) -> Definition:
@@ -139,22 +204,42 @@ def definition_of(project: vq.Project, node: vq.DefinitionNode) -> Definition:
 # ---------------------------------------------------------------------------
 
 
+def _declared_assumptions(node: vq.DefinitionNode) -> tuple[str, ...]:
+    """The inka node IDs one definition declares.
+
+    Anything but a list of strings under the one known key is an error: a
+    misspelt key or a bare string would silently drop a dependency edge.
+    """
+    declared = node.user_metadata.get(METADATA_KEY)
+    if declared is None:
+        return ()
+    if not isinstance(declared, Mapping):
+        msg = f"metadata {METADATA_KEY!r} of {node.id} must be a mapping, got {_type_name(declared)}"
+        raise AdapterError(msg)
+    unknown = sorted(repr(key) for key in declared if key != ASSUMES_KEY)
+    if unknown:
+        msg = (
+            f"metadata {METADATA_KEY!r} of {node.id} has unknown key{'s' if len(unknown) > 1 else ''} "
+            f"{', '.join(unknown)}; only {ASSUMES_KEY!r} is recognized"
+        )
+        raise AdapterError(msg)
+    if ASSUMES_KEY not in declared:
+        return ()
+    ids = declared[ASSUMES_KEY]
+    expected = f"metadata {METADATA_KEY!r}.{ASSUMES_KEY!r} of {node.id} must be a list of inka node ids"
+    if not isinstance(ids, (list, tuple)):
+        msg = f"{expected}, got {_type_name(ids)}"
+        raise AdapterError(msg)
+    strangers = sorted({_type_name(entry) for entry in ids if not isinstance(entry, str)})
+    if strangers:
+        msg = f"{expected}, got an entry of type {', '.join(strangers)}"
+        raise AdapterError(msg)
+    return tuple(ids)
+
+
 def assumptions_of(subgraph: vq.UpstreamSubgraph) -> list[str]:
     """The inka node IDs the subgraph's definitions declare, each once, sorted."""
-    assumed: set[str] = set()
-    for node in subgraph.nodes.values():
-        declared = node.user_metadata.get(METADATA_KEY)
-        if declared is None:
-            continue
-        if not isinstance(declared, Mapping):
-            msg = f"metadata {METADATA_KEY!r} of {node.id} must be a mapping, got {type(declared).__name__}"
-            raise AdapterError(msg)
-        ids = declared.get(ASSUMES_KEY, ())
-        if isinstance(ids, str) or not all(isinstance(entry, str) for entry in ids):
-            msg = f"metadata {METADATA_KEY!r}.{ASSUMES_KEY!r} of {node.id} must be a list of inka node ids"
-            raise AdapterError(msg)
-        assumed.update(ids)
-    return sorted(assumed)
+    return sorted({assumed for node in subgraph.nodes.values() for assumed in _declared_assumptions(node)})
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +257,15 @@ def _leaf(result: vq.EvaluationResult, path: vq.ProjectPath) -> Leaf:
         return Leaf(str(path))
     if value is None:
         return Leaf(str(path))
-    return Leaf(str(path), bool(value))
+    # veriq does not hold a verification to `-> bool` at run time and judges
+    # with `is True`; coercing would report a returned 6.0 or 1 as a pass.
+    if not isinstance(value, bool):
+        msg = (
+            f"leaf {path} is {reprlib.repr(value)} of type {_type_name(value)}; "
+            "a verification result must be a bool"
+        )
+        raise AdapterError(msg)
+    return Leaf(str(path), value)
 
 
 def collect(
@@ -187,22 +280,29 @@ def collect(
     ``targets`` restricts the emitted verifications to the given
     ``Scope::?name`` paths; by default every verification is emitted.
     Returns the builder the targets were added to.
+
+    Raises :class:`AdapterError` when the project cannot be turned into
+    evidence — among others when it defines no verification at all: an
+    empty evidence file would pass for a run that verified something.
     """
     import veriq as vq  # noqa: PLC0415
+
+    if targets is None:
+        paths = sorted(
+            f"{scope_name}::?{name}"
+            for scope_name, scope in project.scopes.items()
+            for name in scope.verifications
+        )
+        if not paths:
+            msg = "the project defines no verification, so there is no calc evidence to emit"
+            raise AdapterError(msg)
+    else:
+        paths = list(targets)
 
     builder = CalcEvidenceBuilder() if builder is None else builder
     result = vq.evaluate_project(project, model_data)
     spec = vq.build_graph_spec(project)
 
-    paths = (
-        sorted(
-            f"{scope_name}::?{name}"
-            for scope_name, scope in project.scopes.items()
-            for name in scope.verifications
-        )
-        if targets is None
-        else list(targets)
-    )
     for path in paths:
         try:
             subgraph = vq.upstream_subgraph(spec, path)

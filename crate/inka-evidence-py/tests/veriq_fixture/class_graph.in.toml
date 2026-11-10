@@ -1,0 +1,16 @@
+[Bus.model]
+gain = 2.0
+
+[[Bus.model.cells]]
+chemistry = "li_ion"
+capacity_wh = 40.0
+
+[[Bus.model.cells]]
+chemistry = "li_ion"
+capacity_wh = 40.0
+
+[Bus.model.harness]
+main = 1.5
+
+[Bus.model.datasheet]
+path = "power.in.toml"
