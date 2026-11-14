@@ -1,6 +1,8 @@
 # A project in which nothing is established, one failure kind per node:
-# a missing approval, a stale approval, a decline, an expired deadline, and
-# binds blamed for missing, failing and incomplete evidence plus the calc stub.
+# a missing approval, a stale approval, a decline, an expired deadline, test
+# binds blamed for missing, failing and incomplete evidence, and calc binds
+# blamed for missing evidence, false and missing leaves, a failed validity
+# condition, an expected failure and an unestablished assumption.
 
 [project]
 name = "unestablished"
@@ -14,3 +16,4 @@ files = []
 
 [evidence]
 tests = ["evidence.json"]
+calcs = ["calc-evidence.json"]

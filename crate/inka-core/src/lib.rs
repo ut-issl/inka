@@ -2,6 +2,7 @@
 pub mod approvals;
 pub mod ast;
 mod attach;
+pub mod bind;
 pub mod calc_evidence;
 pub mod deadline;
 pub mod eval;

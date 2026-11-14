@@ -36,7 +36,14 @@ pub fn lenses(root: &Path, project: &Project, file: FileId) -> Option<Vec<CodeLe
         // judging without the records would misreport every node.
         Err(error) => return Some(vec![note(format!("approvals unreadable: {error}"))]),
     };
-    let evaluation = evaluate(&view, &project.manifest.phases, &records, &project.evidence).ok()?;
+    let evaluation = evaluate(
+        &view,
+        &project.manifest.phases,
+        &records,
+        &project.evidence,
+        &project.calc_evidence,
+    )
+    .ok()?;
     let established: HashMap<&str, bool> = evaluation
         .nodes
         .iter()

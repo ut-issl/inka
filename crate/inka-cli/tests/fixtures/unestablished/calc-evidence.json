@@ -1,0 +1,101 @@
+{
+  "v": 1,
+  "targets": [
+    {
+      "path": "Power::?verify_margin",
+      "definitions": [
+        {
+          "path": "Power::?verify_margin",
+          "kind": "verification",
+          "source": "@power.verification()\ndef verify_margin(budget: Budget) -> Table[Phase, bool]:\n    return Table({p: budget.margin_w[p] > 0 for p in Phase})\n"
+        }
+      ],
+      "assumes": [],
+      "leaves": [
+        {
+          "id": "Power::?verify_margin[daylight]",
+          "result": true
+        },
+        {
+          "id": "Power::?verify_margin[eclipse]",
+          "result": false
+        }
+      ],
+      "valid": true
+    },
+    {
+      "path": "Thermal::?verify_margin",
+      "definitions": [
+        {
+          "path": "Thermal::?verify_margin",
+          "kind": "verification",
+          "source": "@thermal.verification()\ndef verify_margin(t: Temperatures) -> bool:\n    return t.max_c < t.limit_c\n"
+        }
+      ],
+      "assumes": [],
+      "leaves": [
+        {
+          "id": "Thermal::?verify_margin"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "path": "Power::?verify_reserve",
+      "definitions": [
+        {
+          "path": "Power::?verify_reserve",
+          "kind": "verification",
+          "source": "@power.verification()\n@vq.assume(vq.Ref(\"?verify_margin\"))\ndef verify_reserve(budget: Budget) -> bool:\n    return budget.reserve_wh > 0\n"
+        }
+      ],
+      "assumes": [],
+      "leaves": [
+        {
+          "id": "Power::?verify_reserve",
+          "result": true
+        }
+      ],
+      "valid": false
+    },
+    {
+      "path": "Power::?verify_shortfall",
+      "definitions": [
+        {
+          "path": "Power::?verify_shortfall",
+          "kind": "verification",
+          "source": "@power.verification(xfail=True)\ndef verify_shortfall(budget: Budget) -> bool:\n    return budget.margin_w[Phase.ECLIPSE] > 0\n"
+        }
+      ],
+      "assumes": [],
+      "leaves": [
+        {
+          "id": "Power::?verify_shortfall",
+          "result": false
+        }
+      ],
+      "valid": true,
+      "xfail": true
+    },
+    {
+      "path": "Power::?verify_eclipse",
+      "definitions": [
+        {
+          "path": "Power::?verify_eclipse",
+          "kind": "verification",
+          "source": "@power.verification(metadata={\"inka\": {\"assumes\": [\"leaf\"]}})\ndef verify_eclipse(budget: Budget) -> bool:\n    return budget.eclipse_margin_w > 0\n"
+        }
+      ],
+      "assumes": [
+        "leaf"
+      ],
+      "leaves": [
+        {
+          "id": "Power::?verify_eclipse",
+          "result": true
+        }
+      ],
+      "valid": true
+    }
+  ]
+}

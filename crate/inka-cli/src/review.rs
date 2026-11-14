@@ -18,6 +18,8 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use inka_core::approvals::{self, APPROVALS_DIR};
+use inka_core::bind;
+use inka_core::calc_evidence::CalcEvidenceSet;
 use inka_core::evidence::EvidenceSet;
 use inka_core::hash::{LocalView, ViewHash};
 use inka_core::record::{Record, RecordFields, Target, Timestamp};
@@ -99,6 +101,7 @@ pub fn run(
     let Some(ProjectView {
         manifest,
         evidence,
+        calc_evidence,
         view,
     }) = load_project_view(project_dir, err, color)?
     else {
@@ -117,7 +120,11 @@ pub fn run(
 
     match &request.action {
         Action::Single { target, decision } => {
-            let answer = single(&context, &view, &evidence, target, decision, &mut session);
+            let imported = Imported {
+                tests: &evidence,
+                calcs: &calc_evidence,
+            };
+            let answer = single(&context, &view, imported, target, decision, &mut session);
             match answer {
                 Ok(line) => {
                     writeln!(out, "{line}")?;
@@ -127,21 +134,30 @@ pub fn run(
             }
         }
         Action::List => {
-            let queue = match derive_queue(&view, &manifest.phases, &records, &evidence) {
-                Ok(queue) => queue,
-                Err(error) => return fail(&error.to_string(), err, color),
-            };
+            let queue =
+                match derive_queue(&view, &manifest.phases, &records, &evidence, &calc_evidence) {
+                    Ok(queue) => queue,
+                    Err(error) => return fail(&error.to_string(), err, color),
+                };
             write_queue(&queue, out)?;
             Ok(Outcome::Ok)
         }
         Action::Interactive => {
-            let queue = match derive_queue(&view, &manifest.phases, &records, &evidence) {
-                Ok(queue) => queue,
-                Err(error) => return fail(&error.to_string(), err, color),
-            };
+            let queue =
+                match derive_queue(&view, &manifest.phases, &records, &evidence, &calc_evidence) {
+                    Ok(queue) => queue,
+                    Err(error) => return fail(&error.to_string(), err, color),
+                };
             interactive(&context, &view, &queue, &mut session, out, err, color)
         }
     }
+}
+
+/// The imported evidence a bind's current hash is resolved against.
+#[derive(Clone, Copy)]
+struct Imported<'a> {
+    tests: &'a EvidenceSet,
+    calcs: &'a CalcEvidenceSet,
 }
 
 /// Everything a recorded decision needs besides the decision itself.
@@ -158,7 +174,7 @@ struct RecordContext<'a> {
 fn single(
     context: &RecordContext<'_>,
     view: &ArgumentView,
-    evidence: &EvidenceSet,
+    imported: Imported<'_>,
     target: &str,
     decision: &Decision,
     session: &mut Session<'_>,
@@ -166,7 +182,7 @@ fn single(
     let Some(node) = view.node(target) else {
         return Err(format!("no block named `{target}` in the argument"));
     };
-    let current_hash = current_hash(view, node, evidence)?;
+    let current_hash = current_hash(view, node, imported)?;
     let (label, comment) = match decision {
         Decision::Approve { comment } => (ReviewLabel::Approve, comment.clone()),
         Decision::Decline { comment } => (ReviewLabel::Decline, Some(comment.clone())),
@@ -372,29 +388,29 @@ fn write_record(
 fn current_hash(
     view: &ArgumentView,
     node: &ViewNode,
-    evidence: &EvidenceSet,
+    imported: Imported<'_>,
 ) -> Result<ViewHash, String> {
-    let interface = match (node.mode, node.evidence.as_ref()) {
-        (Mode::Bind, Some(reference)) => match reference.kind {
-            EvidenceKind::Calc => {
+    let evidence = match node.mode {
+        Mode::Bind => {
+            let resolved = bind::resolve(view, node, imported.tests, imported.calcs)
+                .map_err(|error| error.to_string())?;
+            let Some(evidence) = resolved else {
+                let reference = node
+                    .evidence
+                    .as_ref()
+                    .expect("resolve reports a bind without a reference as an error");
                 return Err(format!(
-                    "`{}` is a calc bind; calc evidence is not evaluated yet",
-                    node.id
+                    "bind `{}` has no imported {} evidence for `{}`; deliver the evidence first",
+                    node.id,
+                    reference.kind.name(),
+                    reference.target
                 ));
-            }
-            EvidenceKind::Test => match evidence.get(&reference.target) {
-                Some(test) => Some(test.interface_hash),
-                None => {
-                    return Err(format!(
-                        "bind `{}` has no imported evidence for `{}`; deliver the evidence first",
-                        node.id, reference.target
-                    ));
-                }
-            },
-        },
-        _ => None,
+            };
+            Some(evidence.contract())
+        }
+        Mode::Objective | Mode::Structure | Mode::Fiat => None,
     };
-    LocalView::of_node(view, node, interface)
+    LocalView::of_node(view, node, evidence)
         .map(|local| local.view_hash())
         .map_err(|error| error.to_string())
 }
@@ -582,10 +598,13 @@ fn state_line(state: &QueueState) -> String {
 
 fn blocked_line(reason: &BlockedReason) -> String {
     match reason {
-        BlockedReason::MissingEvidence { target } => {
-            format!("no imported test evidence provides `{}`", sanitize(target))
+        BlockedReason::MissingEvidence { kind, target } => {
+            format!(
+                "no imported {} evidence provides `{}`",
+                kind.name(),
+                sanitize(target)
+            )
         }
-        BlockedReason::CalcNotEvaluated => "calc evidence is not evaluated yet".to_owned(),
         BlockedReason::UntilExpired { until } => {
             format!(
                 "approvals no longer count: the current phase is past until:{}",

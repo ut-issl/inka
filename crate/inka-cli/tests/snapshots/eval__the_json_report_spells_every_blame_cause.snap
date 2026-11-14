@@ -4,11 +4,36 @@ expression: stdout
 ---
 {
   "established": 0,
-  "total": 9,
+  "total": 14,
   "nodes": [
     {
       "id": "branch",
       "mode": "structure",
+      "established": false
+    },
+    {
+      "id": "calc_assuming",
+      "mode": "bind",
+      "established": false
+    },
+    {
+      "id": "calc_failing",
+      "mode": "bind",
+      "established": false
+    },
+    {
+      "id": "calc_incomplete",
+      "mode": "bind",
+      "established": false
+    },
+    {
+      "id": "calc_invalid",
+      "mode": "bind",
+      "established": false
+    },
+    {
+      "id": "calc_xfail",
+      "mode": "bind",
       "established": false
     },
     {
@@ -59,6 +84,79 @@ expression: stdout
       "reasons": [
         {
           "cause": "missing_approval"
+        }
+      ]
+    },
+    {
+      "node": "calc_assuming",
+      "mode": "bind",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        },
+        {
+          "cause": "assumption_not_established",
+          "node": "leaf"
+        }
+      ]
+    },
+    {
+      "node": "calc_failing",
+      "mode": "bind",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        },
+        {
+          "cause": "leaves_failed",
+          "leaves": [
+            "Power::?verify_margin[eclipse]"
+          ]
+        }
+      ]
+    },
+    {
+      "node": "calc_incomplete",
+      "mode": "bind",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        },
+        {
+          "cause": "leaves_missing",
+          "leaves": [
+            "Thermal::?verify_margin"
+          ]
+        }
+      ]
+    },
+    {
+      "node": "calc_invalid",
+      "mode": "bind",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        },
+        {
+          "cause": "evidence_invalid"
+        }
+      ]
+    },
+    {
+      "node": "calc_xfail",
+      "mode": "bind",
+      "reasons": [
+        {
+          "cause": "missing_approval"
+        },
+        {
+          "cause": "leaves_failed",
+          "leaves": [
+            "Power::?verify_shortfall"
+          ]
+        },
+        {
+          "cause": "expected_failure"
         }
       ]
     },
@@ -115,7 +213,9 @@ expression: stdout
       "mode": "bind",
       "reasons": [
         {
-          "cause": "calc_not_evaluated"
+          "cause": "missing_evidence",
+          "kind": "calc",
+          "target": "AOCS::?verify_detumble"
         }
       ]
     },
@@ -150,6 +250,7 @@ expression: stdout
       "reasons": [
         {
           "cause": "missing_evidence",
+          "kind": "test",
           "target": "tests/hash_props.rs"
         }
       ]

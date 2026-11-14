@@ -9,6 +9,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use inka_core::calc_evidence::CalcEvidenceSet;
 use inka_core::eval::{BlameReason, Evaluation, evaluate};
 use inka_core::evidence::{self, EvidenceSet};
 use inka_core::hash::LocalView;
@@ -119,7 +120,14 @@ fn approval_for(body: &str, cases: &[&str]) -> Record {
 }
 
 fn run(records: &[Record], evidence: &EvidenceSet) -> Evaluation {
-    evaluate(&bind_view(), &phases(), records, evidence).expect("evaluation runs")
+    evaluate(
+        &bind_view(),
+        &phases(),
+        records,
+        evidence,
+        &CalcEvidenceSet::default(),
+    )
+    .expect("evaluation runs")
 }
 
 fn bind_reasons(evaluation: &Evaluation) -> Vec<BlameReason> {
@@ -293,24 +301,39 @@ fn an_absent_test_id_is_missing_evidence_not_an_input_error() {
     assert_eq!(
         bind_reasons(&evaluation),
         [BlameReason::MissingEvidence {
+            kind: EvidenceKind::Test,
             target: TEST_ID.to_owned()
         }]
     );
 }
 
 #[test]
-fn a_calc_bind_stays_unevaluated() {
+fn a_calc_bind_without_imported_evidence_is_missing_evidence_of_its_own_kind() {
+    // The calc rows of the table live in `eval_calc_evidence.rs`; this pins
+    // that the missing-evidence outcome names the scheme that was looked up.
     let mut view = bind_view();
     view.nodes[0].evidence = Some(Evidence {
         kind: EvidenceKind::Calc,
-        target: "aocs.verify_detumble".to_owned(),
+        target: "AOCS::?verify_detumble".to_owned(),
     });
 
-    let evaluation =
-        evaluate(&view, &phases(), &[], &EvidenceSet::default()).expect("evaluation runs");
+    let evaluation = evaluate(
+        &view,
+        &phases(),
+        &[],
+        &EvidenceSet::default(),
+        &CalcEvidenceSet::default(),
+    )
+    .expect("evaluation runs");
 
     assert!(!bind_established(&evaluation));
-    assert_eq!(bind_reasons(&evaluation), [BlameReason::CalcNotEvaluated]);
+    assert_eq!(
+        bind_reasons(&evaluation),
+        [BlameReason::MissingEvidence {
+            kind: EvidenceKind::Calc,
+            target: "AOCS::?verify_detumble".to_owned()
+        }]
+    );
 }
 
 #[test]
@@ -331,7 +354,14 @@ fn the_same_body_under_a_different_test_id_stales_the_approval() {
     });
     let records = [approval_for(BODY_A, &["default"])];
 
-    let evaluation = evaluate(&view, &phases(), &records, &evidence).expect("evaluation runs");
+    let evaluation = evaluate(
+        &view,
+        &phases(),
+        &records,
+        &evidence,
+        &CalcEvidenceSet::default(),
+    )
+    .expect("evaluation runs");
 
     assert!(!bind_established(&evaluation));
     assert_eq!(
