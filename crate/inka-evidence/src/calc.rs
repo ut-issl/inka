@@ -108,6 +108,18 @@ pub enum DefinitionKind {
     Verification,
 }
 
+impl DefinitionKind {
+    /// The kind's one spelling: the JSON value and the word a reviewer sees.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            DefinitionKind::Model => "model",
+            DefinitionKind::Calculation => "calculation",
+            DefinitionKind::Verification => "verification",
+        }
+    }
+}
+
 /// One required leaf of a target and its observed result.
 ///
 /// `result` is `None` when the leaf was declared but no result was reported.

@@ -150,13 +150,17 @@ fiat <id> {
 - フィールド: `v`(=1)、`target`(`"<kind>:<id>"`。kind ∈ objective | structure |
   bind | fiat)、`view_hash`
   (`"sha256:<hex>"`)、`label`(approve | decline)、`comment`(decline では必須)、
-  `approver`、`key_id`、`timestamp`(RFC3339 UTC。監査用のみ — eval は読まない)、
+  `approver`、`key_id`、`timestamp`(RFC3339 UTC。監査用のみ — eval は読まない。`inka review` は、
+  diff の基準にするスナップショットを選ぶために bind の承認を並べる用途でのみ使う)、
   `phase`(承認時点の現在フェーズ)、`until`(承認者側留保)、`policy_hash`、`sig`
   (予約。署名導入まで空)。
 - 署名対象の正規化バイト列: `sig` を除くキー昇順 compact JSON。省略可フィールドは
   `null` として出す。
 - jsonl は追記専用、承認者ごとに1ファイル(`approvals/<name>.jsonl`)。不正行は
   ファイル名+行番号付きで大きく失敗。未知フィールドは拒否。
+- `approvals/snapshots/<hex>.json`: calc の bind の承認時に提示した内容。承認した
+  ビューハッシュで内容アドレスされる。`review` が書いて diff の基準に使う提示の補助で、
+  `eval` は決して読まない([calc 証拠](calc-evidence.md#承認スナップショットと-diff)を参照)。
 
 ## 評価の意味論
 
