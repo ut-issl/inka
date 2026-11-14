@@ -251,7 +251,7 @@ jobs:
       - name: Install Tombi
         uses: tombi-toml/setup-tombi@8ddc6b91b6fa3ad0ce192a68b409930851e4886c # v1.11.2
         with:
-          version: '1.1.2'
+          version: '1.11.2'
 
       - name: Lint TOML
         if: github.event_name != 'pull_request'

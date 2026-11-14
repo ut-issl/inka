@@ -22,7 +22,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStrings: [
         'github\\.com/rhysd/actionlint/cmd/actionlint@(?<currentDigest>[a-f0-9]{40}) # (?<currentValue>v[^\\s]+)',
@@ -35,7 +35,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStrings: [
         'renovate@(?<currentValue>\\S+)',
@@ -47,7 +47,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStrings: [
         'markdownlint-cli2@(?<currentValue>\\S+)',
@@ -59,7 +59,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStringsStrategy: 'recursive',
       matchStrings: [
@@ -72,7 +72,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStrings: [
         'json5@(?<currentValue>\\S+)',
@@ -84,7 +84,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStringsStrategy: 'recursive',
       matchStrings: [
@@ -97,7 +97,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStrings: [
         'yamllint==(?<currentValue>[^"\\s]+)',
@@ -109,7 +109,7 @@
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/^\\.github/workflows/ci\\.ya?ml$/',
+        '/^\\.github/workflows/.*\\.ya?ml$/',
       ],
       matchStringsStrategy: 'recursive',
       matchStrings: [
