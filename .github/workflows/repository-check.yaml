@@ -163,7 +163,7 @@ jobs:
 
       - name: Lint Markdown
         if: github.event_name != 'pull_request'
-        run: npx --yes markdownlint-cli2@0.23.0 .
+        run: npx --yes markdownlint-cli2@0.24.0 .
 
       - name: Set up reviewdog
         if: github.event_name == 'pull_request'
@@ -177,7 +177,7 @@ jobs:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           markdownlint_rc=0
-          npx --yes markdownlint-cli2@0.23.0 . > /tmp/markdownlint-report.txt 2>&1 || markdownlint_rc=$?
+          npx --yes markdownlint-cli2@0.24.0 . > /tmp/markdownlint-report.txt 2>&1 || markdownlint_rc=$?
           reviewdog_rc=0
           reviewdog < /tmp/markdownlint-report.txt \
               -efm="%f:%l:%c %m" \
