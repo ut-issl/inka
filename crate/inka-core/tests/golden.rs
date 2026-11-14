@@ -41,6 +41,10 @@ struct Vector {
     children: Vec<Child>,
     /// The evidence interface hash; bind vectors only.
     interface_hash: Option<String>,
+    /// The rendered descriptions of the nodes the evidence assumes, in
+    /// declaration order; bind vectors only.
+    #[serde(default)]
+    assumptions: Vec<String>,
     #[serde(default)]
     annotations: Annotations,
     #[serde(default)]
@@ -180,7 +184,12 @@ fn local_view<'a>(
                 .expect("a bind vector records an interface hash")
                 .parse()
                 .expect("a recorded interface hash should be a `sha256:<hex>` digest");
-            LocalView::bind(&vector.description, deadline, interface)
+            LocalView::bind(
+                &vector.description,
+                deadline,
+                interface,
+                vector.assumptions.iter().map(String::as_str),
+            )
         }
     };
     local.with_comments(comments)

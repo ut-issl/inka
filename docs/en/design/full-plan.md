@@ -41,12 +41,16 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    with an opt-in `closure-fresh` policy predicate for selective strictness.
    Signed CI attestations (OIDC/Sigstore) attach through the signature
    machinery.
-7. **veriq integration.** A Python-side export (graph, statements, `assumes`
-   references, contract hashes from normalized ASTs); the shared-assumption
-   registry; identity-based aggregation of the total assumption set through
-   interfaces; the bind hash's assumption slot filled; assumption-set diffs
-   presented at bind approval. Rust never parses Python — the JSON adapter is
-   the entire seam.
+7. **Calc evidence (veriq integration).** A `calc:` evidence kind for
+   calculation graphs, veriq first ([calc evidence](calc-evidence.md)): a
+   Python-side adapter exports each verification's definition-level upstream
+   subgraph as reviewable raw source, the argument nodes it assumes (declared
+   in node metadata, unioned over the subgraph) and its leaf results; inka
+   hashes the sources CRLF→LF only; the argument itself is the assumption
+   registry; the bind hash's assumption slot holds the assumed nodes'
+   descriptions; assumptions are implicit dependencies of the bind;
+   assumption-set diffs are presented at bind approval. Rust never parses
+   Python — the JSON adapter is the entire seam.
 8. **LLM lint.** A version-controlled prompt template; local-view-only review
    ("does the parent follow from the children?", "what presupposes knowledge
    outside the view?"); `llm:<model>` attestations recording template hash and

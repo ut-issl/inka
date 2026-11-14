@@ -1,0 +1,12 @@
+# Non-ASCII source text is hashed as delivered: no NFC composition, no
+# case folding. The decomposed "é" (e + combining acute) is written as TOML
+# escapes so an editor cannot compose it.
+comment = "source bytes are content: a decomposed character is not composed"
+target = "Thermal::?vérifier_marge"
+leaves = ["Thermal::?vérifier_marge"]
+interface_hash = "sha256:a40b0b48a7f22320b1f5737c5ba8a8be506604f2745ba6289538a742f8b91479"
+
+[[definitions]]
+path = "Thermal::?vérifier_marge"
+source = "@thermal.verification()\ndef vérifier_marge(t: Température) -> bool:\n    # marge — 余裕\n    return t.marge_k > 0\n"
+normalized_source = "@thermal.verification()\ndef vérifier_marge(t: Température) -> bool:\n    # marge — 余裕\n    return t.marge_k > 0\n"

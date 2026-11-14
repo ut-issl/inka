@@ -100,7 +100,8 @@ Required case IDs are sorted bytewise: reordering `executions` is not an
 edit. Outcomes do not enter the hash.
 
 The bind view hash keeps its frozen v1 layout: the proposition description and
-annotations, the raw interface digest, and the currently empty assumption list.
+annotations, the raw interface digest, and the assumption list, which is empty
+for a test bind (only [calc evidence](calc-evidence.md) fills it).
 Run IDs, outcomes and environment metadata do not enter the approval contract.
 
 Changing the contract body, the test-id or the required execution set requires
@@ -190,7 +191,7 @@ Requires a capsula with `capsula pull` (newer than release 0.14.0).
 
    ```toml
    [evidence]
-   files = ["evidence/test-evidence.json"]
+   tests = ["evidence/test-evidence.json"]
    ```
 
 2. Check that the delivered file belongs to the pulled run:
