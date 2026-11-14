@@ -60,11 +60,11 @@ enum PromoteMode {
     Bind,
 }
 
-/// Which evidence scheme a `test:` / `veriq:` property names.
+/// Which evidence scheme a `test:` / `calc:` property names.
 #[derive(Debug, Clone, Copy)]
 enum SourceScheme {
     Test,
-    Veriq,
+    Calc,
 }
 
 /// Properties collected from a block body before mode-specific assembly.
@@ -355,7 +355,17 @@ impl<'a> Parser<'a> {
         let anchor = match name.as_str() {
             "children" => self.parse_children(raw, name_span),
             "test" => self.parse_source(raw, name_span, SourceScheme::Test),
-            "veriq" => self.parse_source(raw, name_span, SourceScheme::Veriq),
+            "calc" => self.parse_source(raw, name_span, SourceScheme::Calc),
+            "veriq" => {
+                // `calc:`'s name before the rename. Say so, and still read the
+                // reference so the bind is not also blamed for lacking one.
+                self.error(
+                    name_span,
+                    "`veriq:` is now `calc:`, and its value is the target's path in the producer's \
+                     graph, e.g. `calc: \"Power::?verify_margin\"`",
+                );
+                self.parse_source(raw, name_span, SourceScheme::Calc)
+            }
             "until" => self.parse_until(raw, name_span),
             "promote" => self.parse_promote(raw, name_span),
             _ => {
@@ -439,9 +449,20 @@ impl<'a> Parser<'a> {
             self.skip_to_entry_boundary();
             return None;
         };
+        if matches!(scheme, SourceScheme::Calc)
+            && (value.value.is_empty() || value.value.chars().any(char::is_whitespace))
+        {
+            // The value is a path in the producer's calculation graph; `check`
+            // interprets nothing else about it, but a blank or spaced one can
+            // never name a target.
+            self.error(
+                value.span,
+                "a `calc:` reference is a path in the producer's graph: non-empty, with no whitespace",
+            );
+        }
         let source = match scheme {
             SourceScheme::Test => SourceRef::Test(value.value),
-            SourceScheme::Veriq => SourceRef::Veriq(value.value),
+            SourceScheme::Calc => SourceRef::Calc(value.value),
         };
         let spanned = Spanned {
             span: join(name_span, value.span),
@@ -451,7 +472,7 @@ impl<'a> Parser<'a> {
         if raw.source.is_some() {
             self.error(
                 name_span,
-                "duplicate source reference; a bind takes exactly one of `test:` or `veriq:`",
+                "duplicate source reference; a bind takes exactly one of `test:` or `calc:`",
             );
             return None;
         }
@@ -639,7 +660,7 @@ impl<'a> Parser<'a> {
         if parts.source.is_none() {
             self.error(
                 parts.id.span,
-                "a bind requires exactly one of `test:` or `veriq:`",
+                "a bind requires exactly one of `test:` or `calc:`",
             );
         }
         Some(Block::Bind(BindBlock {
@@ -988,9 +1009,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_bind_with_veriq_source() {
+    fn parses_bind_with_calc_source() {
         let parse = parse_str(
-            "bind detumble_ok {\n```\nDetumble claim\n```\nveriq: \"aocs.verify_detumble\"\n}\n",
+            "bind detumble_ok {\n```\nDetumble claim\n```\ncalc: \"AOCS::?verify_detumble\"\n}\n",
         );
 
         assert!(parse.errors.is_empty(), "{:?}", messages(&parse));
@@ -999,7 +1020,7 @@ mod tests {
         };
         assert_eq!(
             block.source.value,
-            SourceRef::Veriq("aocs.verify_detumble".to_owned())
+            SourceRef::Calc("AOCS::?verify_detumble".to_owned())
         );
     }
 
@@ -1122,9 +1143,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_bind_with_both_ci_and_veriq() {
+    fn rejects_bind_with_both_test_and_calc() {
         let parse = parse_str(
-            "bind twice {\n```\nClaim\n```\ntest: \"tests/a.rs\"\nveriq: \"m.check\"\n}\n",
+            "bind twice {\n```\nClaim\n```\ntest: \"tests/a.rs\"\ncalc: \"M::?check\"\n}\n",
         );
 
         assert!(
@@ -1138,6 +1159,74 @@ mod tests {
             panic!("expected a bind block");
         };
         assert_eq!(block.source.value, SourceRef::Test("tests/a.rs".to_owned()));
+    }
+
+    #[test]
+    fn rejects_a_calc_reference_containing_whitespace() {
+        let parse = parse_str("bind spaced {\n```\nClaim\n```\ncalc: \"AOCS:: ?verify\"\n}\n");
+
+        assert!(
+            has_message(
+                &parse,
+                "a `calc:` reference is a path in the producer's graph"
+            ),
+            "{:?}",
+            messages(&parse)
+        );
+        // The reference is still recorded, so the bind is not also blamed
+        // for lacking one.
+        assert!(!has_message(&parse, "a bind requires exactly one"));
+    }
+
+    #[test]
+    fn rejects_an_empty_calc_reference() {
+        let parse = parse_str("bind blank {\n```\nClaim\n```\ncalc: \"\"\n}\n");
+
+        assert!(
+            has_message(
+                &parse,
+                "a `calc:` reference is a path in the producer's graph"
+            ),
+            "{:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn the_retired_veriq_property_is_reported_once_as_renamed() {
+        let parse = parse_str("bind old {\n```\nClaim\n```\nveriq: \"aocs.check\"\n}\n");
+
+        // One error that names the fix, not "unknown property" plus a
+        // complaint that the bind has no source.
+        assert_eq!(
+            messages(&parse).len(),
+            1,
+            "expected exactly one error: {:?}",
+            messages(&parse)
+        );
+        assert!(
+            has_message(&parse, "`veriq:` is now `calc:`"),
+            "{:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn rejects_a_calc_reference_on_a_fiat() {
+        let parse = parse_str("fiat leaf {\n```\nLeaf\n```\ncalc: \"M::?check\"\n}\n");
+
+        assert!(
+            has_message(&parse, "a fiat cannot have a source"),
+            "{:?}",
+            messages(&parse)
+        );
+    }
+
+    #[test]
+    fn a_test_reference_may_contain_whitespace() {
+        let parse = parse_str("bind spaced {\n```\nClaim\n```\ntest: \"suite a::case\"\n}\n");
+
+        assert!(messages(&parse).is_empty(), "{:?}", messages(&parse));
     }
 
     #[test]

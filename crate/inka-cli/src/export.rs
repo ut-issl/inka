@@ -167,7 +167,7 @@ fn evidence_data(evidence: &Evidence) -> EvidenceData<'_> {
         // The scheme is spelled out here rather than serialized from the enum:
         // it is part of the wire contract, not of the model's spelling.
         kind: match evidence.kind {
-            EvidenceKind::Veriq => "veriq",
+            EvidenceKind::Calc => "calc",
             EvidenceKind::Test => "test",
         },
         target: &evidence.target,
@@ -244,7 +244,7 @@ mod tests {
                     description: "checked by a solver".to_owned(),
                     tags: Vec::new(),
                     evidence: Some(Evidence {
-                        kind: EvidenceKind::Veriq,
+                        kind: EvidenceKind::Calc,
                         target: "aocs.verify_detumble".to_owned(),
                     }),
                     deadline: None,
@@ -363,7 +363,7 @@ mod tests {
         let elements = elements();
         let bind = data_of(&elements[1]);
 
-        assert_eq!(bind["evidence"]["kind"], "veriq");
+        assert_eq!(bind["evidence"]["kind"], "calc");
         assert_eq!(bind["evidence"]["target"], "aocs.verify_detumble");
     }
 

@@ -1,6 +1,6 @@
 # A project in which nothing is established, one failure kind per node:
 # a missing approval, a stale approval, a decline, an expired deadline, and
-# binds blamed for missing, failing and incomplete evidence plus the veriq stub.
+# binds blamed for missing, failing and incomplete evidence plus the calc stub.
 
 [project]
 name = "unestablished"

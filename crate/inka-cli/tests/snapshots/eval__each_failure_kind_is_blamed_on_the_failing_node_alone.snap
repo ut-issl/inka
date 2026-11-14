@@ -10,7 +10,7 @@ blame:
   bind:failing: no approval covers the current content
   bind:failing: required executions failed: default
   fiat:leaf: approvals are stale: iwata approved an earlier version
-  bind:modelled: veriq evidence is not evaluated yet
+  bind:modelled: calc evidence is not evaluated yet
   bind:partial: no approval covers the current content
   bind:partial: required executions were skipped, cancelled or missing: macos, windows
   objective:root: no approval covers the current content

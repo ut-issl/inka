@@ -50,7 +50,7 @@
     },
     {
       "name": "keyword.other.annotation.inka",
-      "match": "\\b(children|until|promote|test|veriq)(?=\\s*:)"
+      "match": "\\b(children|until|promote|test|calc)(?=\\s*:)"
     },
     {
       "name": "entity.name.tag.inka",

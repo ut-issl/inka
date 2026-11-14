@@ -850,16 +850,16 @@ objective root { // opening comment
     }
 
     #[test]
-    fn lexes_veriq_source_target() {
+    fn lexes_calc_source_target() {
         let tokens =
-            lex(r#"veriq: "aocs.verify_attitude""#).expect("a quoted veriq target should lex");
+            lex(r#"calc: "AOCS::?verify_attitude""#).expect("a quoted calc target should lex");
 
         assert_eq!(
             kinds(&tokens),
             vec![
-                &TokenKind::Ident("veriq".to_owned()),
+                &TokenKind::Ident("calc".to_owned()),
                 &TokenKind::Colon,
-                &TokenKind::StringLiteral("aocs.verify_attitude".to_owned()),
+                &TokenKind::StringLiteral("AOCS::?verify_attitude".to_owned()),
             ]
         );
     }

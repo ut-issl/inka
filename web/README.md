@@ -40,7 +40,7 @@ is validated against it before anything is drawn.
               "description": "…", "tags": ["safety"], "root": false } },
   { "data": { "id": "detumble_convergence_ok", "mode": "bind", "namespace": "safety",
               "description": "…", "tags": [], "root": false,
-              "evidence": { "kind": "veriq", "target": "aocs.verify_detumble" } } },
+              "evidence": { "kind": "calc", "target": "AOCS::?verify_detumble" } } },
   { "data": { "id": "mtq_authority_ok", "mode": "fiat", "namespace": "safety",
               "description": "…", "tags": [], "root": false,
               "deadline": { "until": "FM", "promote": "bind" },
