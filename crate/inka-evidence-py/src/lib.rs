@@ -1,7 +1,8 @@
 //! Python binding over the shared `inka-evidence` emission layer.
 //!
 //! Exposes the crate's [`inka_evidence::EvidenceBuilder`] and
-//! [`inka_evidence::Execution`] to Python test adapters as the
+//! [`inka_evidence::Execution`] to Python test adapters, and the calc
+//! evidence builder ([`inka_evidence::calc`]) to the veriq adapter, as the
 //! `inka_evidence` module. Validation and serialization stay in the Rust
 //! crate — this layer only translates types and errors, so the wire schema
 //! is never restated in Python. Even the outcome strings are converted
@@ -19,24 +20,36 @@ create_exception!(
 );
 
 /// Translates a shared-crate defect into the Python-facing exception.
-fn invalid(error: &inka_evidence::InvalidEvidence) -> PyErr {
+fn invalid(error: &impl std::fmt::Display) -> PyErr {
     InvalidEvidenceError::new_err(error.to_string())
+}
+
+/// Reads a serde-vocabulary string (an outcome, a definition kind) back
+/// through the crate, so the accepted strings cannot drift from the wire
+/// format.
+fn of_wire_str<T: serde::de::DeserializeOwned>(what: &str, text: &str) -> PyResult<T> {
+    serde_json::from_value(serde_json::Value::String(text.to_owned()))
+        .map_err(|error| InvalidEvidenceError::new_err(format!("unknown {what}: {error}")))
+}
+
+/// Writes a serde-vocabulary value back as its wire string.
+fn to_wire_string<T: serde::Serialize>(value: T) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(text)) => text,
+        _ => unreachable!("a unit enum serializes as a JSON string"),
+    }
 }
 
 /// Reads an outcome through the crate's serde vocabulary, so neither the
 /// accepted strings nor the error's expected-variant list can drift from
 /// the wire format.
 fn outcome_of_str(text: &str) -> PyResult<inka_evidence::Outcome> {
-    serde_json::from_value(serde_json::Value::String(text.to_owned()))
-        .map_err(|error| InvalidEvidenceError::new_err(format!("unknown outcome: {error}")))
+    of_wire_str("outcome", text)
 }
 
 /// Writes an outcome back through the same vocabulary.
 fn outcome_to_string(outcome: inka_evidence::Outcome) -> String {
-    match serde_json::to_value(outcome) {
-        Ok(serde_json::Value::String(text)) => text,
-        _ => unreachable!("an outcome serializes as a JSON string"),
-    }
+    to_wire_string(outcome)
 }
 
 /// One declared execution and its observed result. `outcome` is `None` when
@@ -142,6 +155,169 @@ impl EvidenceBuilder {
     }
 }
 
+/// One definition of a target's upstream subgraph: its path in the
+/// producer's graph, its kind (`model` / `calculation` / `verification`) and
+/// its reviewable source.
+#[pyclass(frozen, module = "inka_evidence")]
+struct Definition {
+    inner: inka_evidence::calc::Definition,
+}
+
+#[pymethods]
+impl Definition {
+    #[new]
+    fn new(path: String, kind: &str, source: String) -> PyResult<Self> {
+        let kind = of_wire_str("definition kind", kind)?;
+        Ok(Self {
+            inner: inka_evidence::calc::Definition::new(path, kind, source),
+        })
+    }
+
+    #[getter]
+    fn path(&self) -> &str {
+        &self.inner.path
+    }
+
+    #[getter]
+    fn kind(&self) -> String {
+        to_wire_string(self.inner.kind)
+    }
+
+    #[getter]
+    fn source(&self) -> &str {
+        &self.inner.source
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Definition({:?}, {:?}, {:?})",
+            self.inner.path,
+            to_wire_string(self.inner.kind),
+            self.inner.source
+        )
+    }
+}
+
+/// One required leaf of a target and its result. `result` is `None` when
+/// the leaf was declared but no result was reported.
+#[pyclass(frozen, module = "inka_evidence")]
+struct Leaf {
+    inner: inka_evidence::calc::Leaf,
+}
+
+#[pymethods]
+impl Leaf {
+    #[new]
+    #[pyo3(signature = (id, result=None))]
+    fn new(id: String, result: Option<bool>) -> Self {
+        Self {
+            inner: inka_evidence::calc::Leaf::new(id, result),
+        }
+    }
+
+    #[getter]
+    fn id(&self) -> &str {
+        &self.inner.id
+    }
+
+    #[getter]
+    fn result(&self) -> Option<bool> {
+        self.inner.result
+    }
+
+    fn __repr__(&self) -> String {
+        match self.inner.result {
+            Some(result) => format!(
+                "Leaf({:?}, {})",
+                self.inner.id,
+                if result { "True" } else { "False" }
+            ),
+            None => format!("Leaf({:?})", self.inner.id),
+        }
+    }
+}
+
+/// Assembles one calc evidence v1 file, validating as it goes. Invalid
+/// input raises `InvalidEvidenceError` and leaves the builder unchanged, so
+/// whatever `finish` returns is guaranteed to load.
+#[pyclass(module = "inka_evidence")]
+#[derive(Default)]
+struct CalcEvidenceBuilder {
+    inner: inka_evidence::calc::CalcEvidenceBuilder,
+}
+
+#[pymethods]
+impl CalcEvidenceBuilder {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// Records one descriptive provenance entry, replacing an earlier value
+    /// under the same key. Rejects a blank key or value.
+    fn provenance(&mut self, key: &str, value: &str) -> PyResult<()> {
+        self.inner
+            .provenance(key, value)
+            .map_err(|error| invalid(&error))
+    }
+
+    /// Fills `capsula_run_id` from the `CAPSULA_RUN_ID` environment variable
+    /// that `capsula run` exports, when it is set and not already recorded.
+    fn capsula_env(&mut self) {
+        self.inner.capsula_env();
+    }
+
+    /// Fills `capsula_run_id` with `run_id`, unless it is `None` or blank or
+    /// an explicit provenance entry already claimed the key.
+    #[pyo3(signature = (run_id))]
+    fn capsula_run_id(&mut self, run_id: Option<String>) {
+        self.inner.capsula_run_id(run_id);
+    }
+
+    /// Records one target: its path, the definitions of its upstream
+    /// subgraph (itself included), the inka node IDs it assumes, its
+    /// required leaves, the producer's validity and whether it is an
+    /// expected failure. Rejects — leaving the builder unchanged — a blank
+    /// or spaced path, a missing or duplicate definition, an empty source,
+    /// a malformed or duplicate assumption ID, a missing or duplicate leaf,
+    /// and a duplicate target path.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "pyo3 extracts function arguments as owned values"
+    )]
+    #[pyo3(signature = (path, definitions, assumes, leaves, valid, xfail=false))]
+    fn add_target(
+        &mut self,
+        path: String,
+        definitions: Vec<Py<Definition>>,
+        assumes: Vec<String>,
+        leaves: Vec<Py<Leaf>>,
+        valid: bool,
+        xfail: bool,
+    ) -> PyResult<()> {
+        let target = inka_evidence::calc::Target {
+            path,
+            definitions: definitions
+                .iter()
+                .map(|definition| definition.get().inner.clone())
+                .collect(),
+            assumes,
+            leaves: leaves.iter().map(|leaf| leaf.get().inner.clone()).collect(),
+            valid,
+            xfail,
+        };
+        self.inner
+            .add_target(target)
+            .map_err(|error| invalid(&error))
+    }
+
+    /// Serializes the file: pretty-printed v1 JSON ending in a newline,
+    /// guaranteed to be accepted by the consumer.
+    fn finish(&self) -> String {
+        self.inner.finish()
+    }
+}
+
 /// Merges per-configuration evidence file texts into one evidence file's
 /// text. Each input is `(label, text)`; a label prefixes every case id of
 /// its input as `label/case`. See the shared crate's merge module for the
@@ -176,6 +352,9 @@ fn python_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add_class::<Execution>()?;
     m.add_class::<EvidenceBuilder>()?;
+    m.add_class::<Definition>()?;
+    m.add_class::<Leaf>()?;
+    m.add_class::<CalcEvidenceBuilder>()?;
     m.add_function(wrap_pyfunction!(merge, m)?)?;
     Ok(())
 }

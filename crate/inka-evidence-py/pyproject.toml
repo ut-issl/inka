@@ -1,7 +1,7 @@
 [project]
 name = "inka-evidence"
 version = "0.0.1"
-description = "Emit inka test evidence v1 JSON from Python test adapters"
+description = "Emit inka test and calc evidence v1 JSON from Python adapters"
 requires-python = ">=3.10"
 license = "MIT OR Apache-2.0"
 

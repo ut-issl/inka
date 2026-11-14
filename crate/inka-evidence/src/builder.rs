@@ -11,18 +11,13 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 
+use crate::provenance::{self, Provenance};
 use crate::schema::{self, Execution, InvalidEvidence, Test, VERSION};
-
-/// The capsula run identifier exported to commands under `capsula run`.
-const CAPSULA_RUN_ID_VAR: &str = "CAPSULA_RUN_ID";
-
-/// The provenance key [`EvidenceBuilder::capsula_env`] fills.
-const CAPSULA_RUN_ID_KEY: &str = "capsula_run_id";
 
 /// Assembles one test evidence v1 file, validating as it goes.
 #[derive(Debug, Default)]
 pub struct EvidenceBuilder {
-    provenance: serde_json::Map<String, serde_json::Value>,
+    provenance: Provenance,
     tests: Vec<Test>,
     ids: BTreeSet<String>,
 }
@@ -33,7 +28,7 @@ pub struct EvidenceBuilder {
 struct WireFileRef<'a> {
     v: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    provenance: Option<&'a serde_json::Map<String, serde_json::Value>>,
+    provenance: Option<&'a Provenance>,
     tests: &'a [Test],
 }
 
@@ -60,31 +55,22 @@ impl EvidenceBuilder {
         value: impl Into<String>,
     ) -> Result<(), InvalidEvidence> {
         let key = key.into();
-        let value = value.into();
-        if key.trim().is_empty() || value.trim().is_empty() {
+        if !provenance::record(&mut self.provenance, &key, value.into()) {
             return Err(InvalidEvidence::BlankProvenance { key });
         }
-        self.provenance
-            .insert(key, serde_json::Value::String(value));
         Ok(())
     }
 
     /// Fills `capsula_run_id` from the `CAPSULA_RUN_ID` environment variable
     /// that `capsula run` exports, when it is set and not already recorded.
     pub fn capsula_env(&mut self) {
-        self.capsula_run_id(std::env::var(CAPSULA_RUN_ID_VAR).ok());
+        provenance::capsula_env(&mut self.provenance);
     }
 
     /// Fills `capsula_run_id` with `run_id`, unless it is absent or blank or
     /// an explicit provenance entry already claimed the key.
     pub fn capsula_run_id(&mut self, run_id: Option<String>) {
-        let Some(run_id) = run_id.filter(|id| !id.trim().is_empty()) else {
-            return;
-        };
-        if !self.provenance.contains_key(CAPSULA_RUN_ID_KEY) {
-            self.provenance
-                .insert(CAPSULA_RUN_ID_KEY.to_owned(), run_id.into());
-        }
+        provenance::capsula_run_id(&mut self.provenance, run_id);
     }
 
     /// Records one test and its declared required executions.

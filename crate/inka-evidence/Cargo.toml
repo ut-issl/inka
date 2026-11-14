@@ -3,7 +3,7 @@ name = "inka-evidence"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Test evidence v1 wire schema: shared validation, parsing and emission"
+description = "Test and calc evidence v1 wire schemas: shared validation, parsing and emission"
 license.workspace = true
 publish.workspace = true
 

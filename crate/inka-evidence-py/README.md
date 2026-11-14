@@ -1,7 +1,8 @@
 # inka-evidence (Python)
 
 The Python binding of the shared [inka test
-evidence](../../docs/en/design/test-evidence.md) emission layer, plus the
+evidence](../../docs/en/design/test-evidence.md) and [calc
+evidence](../../docs/en/design/calc-evidence.md) emission layer, plus the
 pytest adapter built on top of it. Validation and serialization live in
 the Rust crate `inka-evidence`; this package never restates the wire
 schema.
@@ -14,6 +15,28 @@ from inka_evidence import EvidenceBuilder, Execution
 builder = EvidenceBuilder()
 builder.capsula_env()
 builder.add_test("suite::case", "def test_x(): ...", [Execution("default", "pass")])
+text = builder.finish()
+```
+
+Calc evidence — a verification of a calculation graph with the reviewable
+sources of its upstream definitions, the inka nodes it assumes and its leaf
+results — goes through `CalcEvidenceBuilder`:
+
+```python
+from inka_evidence import CalcEvidenceBuilder, Definition, Leaf
+
+builder = CalcEvidenceBuilder()
+builder.capsula_env()
+builder.add_target(
+    "Power::?verify_margin",
+    [
+        Definition("Power::@budget", "calculation", "def budget(...): ..."),
+        Definition("Power::?verify_margin", "verification", "def verify_margin(...): ..."),
+    ],
+    assumes=["power::eclipse_model_valid"],
+    leaves=[Leaf("Power::?verify_margin", True)],
+    valid=True,
+)
 text = builder.finish()
 ```
 
