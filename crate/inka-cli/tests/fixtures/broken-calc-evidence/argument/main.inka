@@ -1,0 +1,12 @@
+objective root {
+    ```
+    the root claim
+    ```
+    children: leaf
+}
+
+fiat leaf {
+    ```
+    taken as given
+    ```
+}

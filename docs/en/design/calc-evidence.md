@@ -211,18 +211,36 @@ inka does with it are:
 
 Assumptions are edges of the argument graph, so inka reads the structural part
 of calc evidence — targets, definitions, assumption IDs — when it loads the
-project, not only when it evaluates. `inka check` reports as errors:
+project, not only when it evaluates. For every `calc:` bind whose target the
+loaded evidence provides, an assumption edge runs from the bind to each node
+the target assumes. An assumption ID is matched exactly against the nodes'
+fully-qualified IDs (`namespace::id`, or the bare `id` of a root-level node):
+evidence belongs to no namespace, so unlike a `children:` reference it can
+never leave the prefix out. Both kinds of edge are dependencies: they order
+evaluation, they close cycles, and a node that only an assumption reaches is
+still reached from the objective, not an orphan. They differ in that an
+assumed node is not a child: `children:` stays the declared structure, and
+the assumed node's own establishment is what the bind depends on.
+
+`inka check` reports as errors, anchored on the bind's `calc:` property:
 
 - an assumption ID that names no node of the argument;
 - a dependency cycle that passes through an assumption edge, e.g. a bind
   whose evidence assumes the bind itself or one of its ancestors. The nodes
-  on the cycle are named.
+  on the cycle are named in order, with the assumption edge drawn as `⇢`:
+  `dependency cycle through an assumption: branch → modelled ⇢ root → branch`.
+  One cycle is reported per group of mutually dependent nodes. When such a
+  group also holds a cycle of `children:` references alone, that one is
+  reported instead, in the form any `children:` cycle takes
+  (`dependency cycle: x → y → x`, anchored on its first node): it is in the
+  argument as written and stands whatever the evidence says.
 
 The leaf results, validity and `xfail` are read by evaluation only. A `calc:`
 reference whose target is absent from loaded evidence is not a check error;
 it is missing evidence, reported by `inka eval` as an unestablished bind.
 The `calc:` value itself gets a format check at check time: non-empty, a
-single line, no whitespace.
+single line, no whitespace. A configured calc evidence file that is missing
+or malformed is an input error for every command, as for test evidence.
 
 ## Content hashing and reapproval
 
@@ -357,7 +375,13 @@ tests = ["evidence/test-evidence.json"]
 calcs = ["evidence/calc-evidence.json"]
 ```
 
-`inka check` and `inka eval` then read the configured paths as usual.
+`inka check` and `inka eval` then read the configured paths as usual. A target
+path must be unique across everything `calcs` lists; a second file delivering
+a target, or one file listed twice, is an input error naming both files.
+
+`tests` was called `files` while test evidence was the only kind. A manifest
+that still says `[evidence] files` is rejected with a message naming the
+rename; there is no fallback.
 
 ## Out of scope / follow-up work
 

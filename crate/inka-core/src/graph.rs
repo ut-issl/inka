@@ -2,9 +2,15 @@
 //!
 //! Nodes are blocks and an edge points from a parent block to each child it
 //! names, so the graph is the whole argument: objectives discharged through
-//! structures down to bind and fiat leaves. petgraph's [`DiGraph`] is the
-//! underlying storage, and the structural features — topological order,
-//! cycle enumeration, reachability — lean on its algorithms.
+//! structures down to bind and fiat leaves. A second kind of edge comes from
+//! imported calc evidence: a `calc:` bind depends on every argument node its
+//! evidence assumes, so an assumption edge points from the bind to the
+//! assumed node. Both kinds are dependencies — a node is established only
+//! after what it points at — and both take part in cycle detection and
+//! reachability; only `children`/`parents` read the declared structure alone.
+//! petgraph's [`DiGraph`] is the underlying storage, and the structural
+//! features — topological order, cycle enumeration, reachability — lean on
+//! its algorithms.
 //!
 //! Node ids are assigned in sorted block-ID order, not file or declaration
 //! order, so every derived output (diagnostics, orders, snapshots) is stable
@@ -12,23 +18,25 @@
 //!
 //! Construction is two passes over the loaded blocks: registration, which
 //! reports duplicate ids, and resolution, which reports duplicate and
-//! undefined references. A built graph therefore has exactly one node per
-//! id and at most one edge per parent–child pair. Whole-graph judgements —
-//! a missing objective, cycles, reachability — live in [`Graph::validate`],
-//! which reports them as diagnostics without consuming the graph.
+//! undefined references and undefined assumptions. A built graph therefore
+//! has exactly one node per id and at most one edge per node pair.
+//! Whole-graph judgements — a missing objective, cycles, reachability — live
+//! in [`Graph::validate`], which reports them as diagnostics without
+//! consuming the graph.
 
 use std::collections::{HashMap, HashSet};
 
 use petgraph::Direction;
 use petgraph::algo::{tarjan_scc, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::Dfs;
+use petgraph::visit::{Dfs, EdgeFiltered, EdgeRef};
 
-use crate::ast::Block;
+use crate::ast::{Block, SourceRef};
+use crate::calc_evidence::CalcEvidenceSet;
 use crate::deadline;
 use crate::interpolate::RenderedDescription;
 use crate::project::Project;
-use crate::source::{Diagnostics, Error, Warning};
+use crate::source::{Diagnostics, Error, Span, Warning};
 
 /// Identity of a node in the argument graph.
 ///
@@ -50,31 +58,79 @@ impl NodeId {
     }
 }
 
+/// Why one node depends on another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dependency {
+    /// The parent names the node in its `children:` list.
+    Child,
+    /// The bind's calc evidence assumes the node.
+    Assumption,
+}
+
+impl Dependency {
+    /// The arrow a rendered cycle draws for this edge: a child edge is a
+    /// plain arrow, an assumption edge a dashed one.
+    const fn arrow(self) -> &'static str {
+        match self {
+            Dependency::Child => "→",
+            Dependency::Assumption => "⇢",
+        }
+    }
+}
+
 /// The argumentation graph of one loaded project.
 ///
 /// Borrows the project's blocks rather than cloning them: the graph is a
 /// structural view, and the [`Project`] stays the owner of the argument.
 #[derive(Debug, Clone)]
 pub struct Graph<'p> {
-    /// Parent → child edges; node weights are the blocks themselves, added
-    /// in sorted block-ID order so [`NodeId`]s are deterministic.
-    graph: DiGraph<&'p Block<RenderedDescription>, ()>,
+    /// Dependency edges — parent → child and bind → assumed node — tagged
+    /// with their kind; node weights are the blocks themselves, added in
+    /// sorted block-ID order so [`NodeId`]s are deterministic.
+    graph: DiGraph<&'p Block<RenderedDescription>, Dependency>,
     /// Block ID → node, for reference resolution and lookups.
     index: HashMap<&'p str, NodeId>,
 }
 
 impl<'p> Graph<'p> {
-    /// Builds the graph in two passes: register every block, then resolve
-    /// every child reference to an edge.
+    /// Builds the graph of the declared structure alone, as if no calc
+    /// evidence were imported: [`Graph::build_with`] over an empty set.
     ///
     /// # Errors
     ///
-    /// Returns every duplicate-id, duplicate-reference, and
-    /// undefined-reference diagnostic, with spans on the offending id or
-    /// reference. Both passes run to completion before returning, so one
-    /// bad id does not hide another.
+    /// As for [`Graph::build_with`].
     pub fn build(blocks: &'p [Block<RenderedDescription>]) -> Result<Self, Vec<Error>> {
-        let (graph, errors) = Self::build_collecting(blocks);
+        Self::build_with(blocks, &CalcEvidenceSet::default())
+    }
+
+    /// Builds the graph of a loaded project: its blocks with the calc
+    /// evidence it imports.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Graph::build_with`].
+    pub fn of_project(project: &'p Project) -> Result<Self, Vec<Error>> {
+        Self::build_with(&project.blocks, &project.calc_evidence)
+    }
+
+    /// Builds the graph in two passes: register every block, then resolve
+    /// every child reference and every assumption of a `calc:` bind's
+    /// imported evidence to an edge.
+    ///
+    /// A `calc:` reference no loaded target answers adds no edge and is not
+    /// an error here: that is evaluation's missing evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns every duplicate-id, duplicate-reference, undefined-reference
+    /// and undefined-assumption diagnostic, with spans on the offending id,
+    /// reference or `calc:` property. Both passes run to completion before
+    /// returning, so one bad id does not hide another.
+    pub fn build_with(
+        blocks: &'p [Block<RenderedDescription>],
+        calc_evidence: &CalcEvidenceSet,
+    ) -> Result<Self, Vec<Error>> {
+        let (graph, errors) = Self::build_collecting(blocks, calc_evidence);
         if errors.is_empty() {
             Ok(graph)
         } else {
@@ -84,7 +140,10 @@ impl<'p> Graph<'p> {
 
     /// Builds the usable portion of the graph while retaining construction
     /// errors, so `inka check` can continue with shape validation.
-    fn build_collecting(blocks: &'p [Block<RenderedDescription>]) -> (Self, Vec<Error>) {
+    fn build_collecting(
+        blocks: &'p [Block<RenderedDescription>],
+        calc_evidence: &CalcEvidenceSet,
+    ) -> (Self, Vec<Error>) {
         let mut errors = Vec::new();
 
         // Registration: the first definition of an id wins its slot; every
@@ -125,11 +184,39 @@ impl<'p> Graph<'p> {
                 }
                 match index.get(child.value.as_str()) {
                     Some(child_node) => {
-                        graph.add_edge(parent, child_node.index(), ());
+                        graph.add_edge(parent, child_node.index(), Dependency::Child);
                     }
                     None => errors.push(Error::new(
                         child.span,
                         format!("undefined reference `{}`", child.value),
+                    )),
+                }
+            }
+        }
+
+        // Assumptions: a calc bind whose evidence is loaded depends on every
+        // node that evidence assumes. The wire format already rules out a
+        // repeated id within one target, so each pair gets one edge.
+        for bind in (0..graph.node_count()).map(NodeIndex::new) {
+            let Block::Bind(block) = graph[bind] else {
+                continue;
+            };
+            let SourceRef::Calc(target) = &block.source.value else {
+                continue;
+            };
+            let Some(evidence) = calc_evidence.get(target) else {
+                continue;
+            };
+            for assumed in &evidence.assumes {
+                match index.get(assumed.as_str()) {
+                    Some(node) => {
+                        graph.add_edge(bind, node.index(), Dependency::Assumption);
+                    }
+                    None => errors.push(Error::new(
+                        block.source.span,
+                        format!(
+                            "undefined assumption `{assumed}`: the calc evidence for `{target}` assumes it, but no block defines it"
+                        ),
                     )),
                 }
             }
@@ -190,19 +277,58 @@ impl<'p> Graph<'p> {
             .collect()
     }
 
-    /// Parents of a node, in sorted block-ID order.
+    /// Parents of a node — the blocks naming it in `children:` — in sorted
+    /// block-ID order. A bind assuming the node is not a parent.
     ///
     /// The reverse direction is what later passes (blame, stale propagation)
     /// walk when a change must be traced back toward the objective.
     #[must_use]
     pub fn parents(&self, node: NodeId) -> Vec<NodeId> {
-        let mut parents: Vec<NodeId> = self
+        self.neighbors_of_kind(node, Direction::Incoming, Dependency::Child)
+    }
+
+    /// The nodes a bind's imported calc evidence assumes, in sorted block-ID
+    /// order; empty for every other node and for a bind without loaded
+    /// evidence.
+    #[must_use]
+    pub fn assumptions(&self, node: NodeId) -> Vec<NodeId> {
+        self.neighbors_of_kind(node, Direction::Outgoing, Dependency::Assumption)
+    }
+
+    /// The binds whose imported calc evidence assumes `node`, in sorted
+    /// block-ID order.
+    #[must_use]
+    pub fn assumed_by(&self, node: NodeId) -> Vec<NodeId> {
+        self.neighbors_of_kind(node, Direction::Incoming, Dependency::Assumption)
+    }
+
+    fn neighbors_of_kind(
+        &self,
+        node: NodeId,
+        direction: Direction,
+        kind: Dependency,
+    ) -> Vec<NodeId> {
+        let mut neighbors: Vec<NodeId> = self
             .graph
-            .neighbors_directed(node.index(), Direction::Incoming)
+            .edges_directed(node.index(), direction)
+            .filter(|edge| *edge.weight() == kind)
+            .map(|edge| match direction {
+                Direction::Outgoing => edge.target(),
+                Direction::Incoming => edge.source(),
+            })
             .map(NodeId::from_index)
             .collect();
-        parents.sort_unstable();
-        parents
+        neighbors.sort_unstable();
+        neighbors
+    }
+
+    /// The kind of the edge from `from` to `to`, or `None` when there is
+    /// none. At most one edge joins two nodes: a bind has no children, and
+    /// only a bind has assumptions.
+    fn dependency(&self, from: NodeId, to: NodeId) -> Option<Dependency> {
+        self.graph
+            .find_edge(from.index(), to.index())
+            .map(|edge| self.graph[edge])
     }
 
     /// Every objective node, in sorted block-ID order.
@@ -226,20 +352,42 @@ impl<'p> Graph<'p> {
     /// One representative cycle per strongly connected component, so an
     /// empty result proves the graph is a DAG.
     ///
-    /// Each cycle lists its nodes in edge order starting from the component's
-    /// smallest node; the closing edge back to the start is implied.
+    /// A component that holds a cycle of `children:` references alone is
+    /// represented by one (its smallest): that cycle is in the argument as
+    /// written and stands whatever the evidence says, so it is not to be
+    /// reported as the doing of an assumption that merely shares its nodes.
+    ///
+    /// Each cycle lists its nodes in edge order starting from its smallest
+    /// node; the closing edge back to the start is implied.
     #[must_use]
     pub fn cycles(&self) -> Vec<Vec<NodeId>> {
+        let declared =
+            EdgeFiltered::from_fn(&self.graph, |edge| *edge.weight() == Dependency::Child);
+        let mut declared_cycles: Vec<Vec<NodeId>> = tarjan_scc(&declared)
+            .into_iter()
+            .filter_map(|component| self.cycle_within(&component, Some(Dependency::Child)))
+            .collect();
+        declared_cycles.sort_unstable();
+
         let mut cycles: Vec<Vec<NodeId>> = tarjan_scc(&self.graph)
             .into_iter()
-            .filter_map(|component| self.cycle_within(&component))
+            .filter_map(|component| {
+                // A cycle lies inside one component, so its first node
+                // decides which component it belongs to.
+                declared_cycles
+                    .iter()
+                    .find(|cycle| component.contains(&cycle[0].index()))
+                    .cloned()
+                    .or_else(|| self.cycle_within(&component, None))
+            })
             .collect();
         cycles.sort_unstable();
         cycles
     }
 
-    /// Every node reachable from `start` along child edges, including
-    /// `start` itself.
+    /// Every node reachable from `start` along child and assumption edges,
+    /// including `start` itself. A node only a bind's evidence assumes is
+    /// part of the argument the bind rests on, so it counts as reached.
     #[must_use]
     pub fn reachable_from(&self, start: NodeId) -> HashSet<NodeId> {
         let mut dfs = Dfs::new(&self.graph, start.index());
@@ -257,7 +405,11 @@ impl<'p> Graph<'p> {
     ///
     /// - no objective block, including an empty graph → error, unanchored
     ///   because it concerns the project as a whole
-    /// - a dependency cycle → error naming the full path
+    /// - a dependency cycle → error naming the full path, one per group of
+    ///   mutually dependent nodes, with each assumption edge drawn as `⇢` and
+    ///   the error anchored on the `calc:` reference that brought the first
+    ///   such edge in; a cycle of `children:` alone is the one named when the
+    ///   group has both kinds
     /// - a node no objective reaches → warning, in the warnings lane so it
     ///   never fails the check
     ///
@@ -276,16 +428,8 @@ impl<'p> Graph<'p> {
         }
 
         for cycle in self.cycles() {
-            let path = cycle
-                .iter()
-                .chain(cycle.first())
-                .map(|&node| self.id(node))
-                .collect::<Vec<_>>()
-                .join(" → ");
-            diagnostics.errors.push(Error::new(
-                self.block(cycle[0]).common().id.span,
-                format!("dependency cycle: {path}"),
-            ));
+            let (span, message) = self.describe_cycle(&cycle);
+            diagnostics.errors.push(Error::new(span, message));
         }
 
         if !objectives.is_empty() {
@@ -306,14 +450,61 @@ impl<'p> Graph<'p> {
         diagnostics
     }
 
+    /// Renders one cycle as `a → b ⇢ a`, with the edge kinds drawn, and
+    /// chooses where to anchor it: the `calc:` reference of the first bind
+    /// whose assumption closes an edge of the cycle, or — for a cycle of
+    /// `children:` references alone — the id of the cycle's smallest node.
+    fn describe_cycle(&self, cycle: &[NodeId]) -> (Span, String) {
+        let mut path = String::new();
+        let mut anchor = None;
+        let mut through_assumption = false;
+        for (position, &from) in cycle.iter().enumerate() {
+            let to = cycle[(position + 1) % cycle.len()];
+            let kind = self
+                .dependency(from, to)
+                .expect("consecutive cycle nodes are joined by an edge");
+            if kind == Dependency::Assumption {
+                through_assumption = true;
+                if anchor.is_none()
+                    && let Block::Bind(bind) = self.block(from)
+                {
+                    anchor = Some(bind.source.span);
+                }
+            }
+            path.push_str(self.id(from));
+            path.push(' ');
+            path.push_str(kind.arrow());
+            path.push(' ');
+        }
+        path.push_str(self.id(cycle[0]));
+        let message = if through_assumption {
+            format!("dependency cycle through an assumption: {path}")
+        } else {
+            format!("dependency cycle: {path}")
+        };
+        (
+            anchor.unwrap_or(self.block(cycle[0]).common().id.span),
+            message,
+        )
+    }
+
     /// Finds a cycle inside one strongly connected component, or `None` when
     /// the component is a single node without a self-loop.
-    fn cycle_within(&self, component: &[NodeIndex]) -> Option<Vec<NodeId>> {
+    ///
+    /// `only` narrows the edges walked to one kind; the component must then
+    /// be strongly connected by edges of that kind alone.
+    fn cycle_within(
+        &self,
+        component: &[NodeIndex],
+        only: Option<Dependency>,
+    ) -> Option<Vec<NodeId>> {
         let start = *component.iter().min()?;
         if component.len() == 1 {
+            // At most one edge joins two nodes, so this is the self-loop.
             return self
                 .graph
                 .find_edge(start, start)
+                .filter(|&edge| only.is_none_or(|kind| self.graph[edge] == kind))
                 .map(|_| vec![NodeId::from_index(start)]);
         }
 
@@ -323,7 +514,7 @@ impl<'p> Graph<'p> {
         // is examined while that node is still on the stack, so the search
         // always closes the cycle before the stack empties.
         let mut visited = HashSet::from([start]);
-        let mut stack = vec![(start, self.component_neighbors(start, &members))];
+        let mut stack = vec![(start, self.component_neighbors(start, &members, only))];
         loop {
             let Some((_, neighbors)) = stack.last_mut() else {
                 unreachable!("a multi-node strongly connected component contains a cycle");
@@ -342,7 +533,7 @@ impl<'p> Graph<'p> {
                 }
                 Some(next) => {
                     if visited.insert(next) {
-                        let next_neighbors = self.component_neighbors(next, &members);
+                        let next_neighbors = self.component_neighbors(next, &members, only);
                         stack.push((next, next_neighbors));
                     }
                 }
@@ -350,12 +541,20 @@ impl<'p> Graph<'p> {
         }
     }
 
-    /// Out-neighbors of `node` inside the component, sorted descending so
-    /// that popping from the back visits the smallest node first.
-    fn component_neighbors(&self, node: NodeIndex, members: &HashSet<NodeIndex>) -> Vec<NodeIndex> {
+    /// Out-neighbors of `node` inside the component, along edges of kind
+    /// `only` when one is given, sorted descending so that popping from the
+    /// back visits the smallest node first.
+    fn component_neighbors(
+        &self,
+        node: NodeIndex,
+        members: &HashSet<NodeIndex>,
+        only: Option<Dependency>,
+    ) -> Vec<NodeIndex> {
         let mut neighbors: Vec<NodeIndex> = self
             .graph
-            .neighbors_directed(node, Direction::Outgoing)
+            .edges_directed(node, Direction::Outgoing)
+            .filter(|edge| only.is_none_or(|kind| *edge.weight() == kind))
+            .map(|edge| edge.target())
             .filter(|neighbor| members.contains(neighbor))
             .collect();
         neighbors.sort_unstable_by(|a, b| b.cmp(a));
@@ -366,17 +565,18 @@ impl<'p> Graph<'p> {
 /// Builds the graph for a loaded project and runs every structural check.
 ///
 /// This is the graph half of `inka check`: construction problems (duplicate
-/// ids, duplicate or undefined references) and shape problems (a missing
-/// objective, cycles, unreachable nodes) come back as one [`Diagnostics`]
-/// either way, together with every `until:` naming a phase the manifest does
-/// not declare. A project with no blocks has no objective, so an empty
-/// argument is rejected here too.
+/// ids, duplicate or undefined references, an assumption naming no node) and
+/// shape problems (a missing objective, cycles — through `children:` or
+/// through an assumption — and unreachable nodes) come back as one
+/// [`Diagnostics`] either way, together with every `until:` naming a phase
+/// the manifest does not declare. A project with no blocks has no objective,
+/// so an empty argument is rejected here too.
 #[must_use]
 pub fn check(project: &Project) -> Diagnostics {
     let Diagnostics {
         mut errors,
         warnings,
-    } = check_blocks(&project.blocks);
+    } = check_structure(&project.blocks, &project.calc_evidence);
     errors.extend(deadline::check(&project.blocks, &project.manifest.phases));
     Diagnostics { errors, warnings }
 }
@@ -384,8 +584,11 @@ pub fn check(project: &Project) -> Diagnostics {
 /// Checks graph construction and shape in one pass. A partially resolved
 /// graph is sufficient for cycle and reachability analysis, so construction
 /// errors do not hide independent shape findings.
-fn check_blocks(blocks: &[Block<RenderedDescription>]) -> Diagnostics {
-    let (graph, mut errors) = Graph::build_collecting(blocks);
+fn check_structure(
+    blocks: &[Block<RenderedDescription>],
+    calc_evidence: &CalcEvidenceSet,
+) -> Diagnostics {
+    let (graph, mut errors) = Graph::build_collecting(blocks, calc_evidence);
     let Diagnostics {
         errors: shape_errors,
         warnings,
@@ -610,7 +813,7 @@ structure a {
         );
 
         // Act
-        let diagnostics = check_blocks(&blocks);
+        let diagnostics = check_structure(&blocks, &CalcEvidenceSet::default());
 
         // Assert
         let error_messages: Vec<&str> = diagnostics
@@ -938,6 +1141,302 @@ fiat orphan {
         let mut left_ids: Vec<&str> = from_left.iter().map(|&node| graph.id(node)).collect();
         left_ids.sort_unstable();
         assert_eq!(left_ids, ["leaf", "left"]);
+    }
+
+    use inka_evidence::calc::{Definition, DefinitionKind, Leaf, Target};
+
+    /// Calc evidence for one target whose upstream assumes `assumes`.
+    fn calc_evidence(target: &str, assumes: &[&str]) -> CalcEvidenceSet {
+        CalcEvidenceSet::from_targets([Target {
+            path: target.to_owned(),
+            definitions: vec![Definition::new(
+                target,
+                DefinitionKind::Verification,
+                "def verify(): ...",
+            )],
+            assumes: assumes.iter().map(|&id| id.to_owned()).collect(),
+            leaves: vec![Leaf::new(target, Some(true))],
+            valid: true,
+            xfail: false,
+        }])
+        .expect("one target is a valid set")
+    }
+
+    const TARGET: &str = "AOCS::?verify_detumble";
+
+    /// An objective over a calc bind and a fiat the bind's evidence may assume.
+    const BIND_AND_FIAT: &str = "\
+objective root {
+  ```
+  root
+  ```
+  children: modelled, assumed
+}
+bind modelled {
+  ```
+  the controller detumbles
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+fiat assumed {
+  ```
+  the disturbance model envelopes reality
+  ```
+}
+";
+
+    #[test]
+    fn resolves_the_assumptions_of_loaded_calc_evidence_to_edges() {
+        // Arrange
+        let blocks = blocks(BIND_AND_FIAT);
+        let evidence = calc_evidence(TARGET, &["assumed"]);
+
+        // Act
+        let graph = Graph::build_with(&blocks, &evidence).expect("graph should build");
+
+        // Assert: the bind depends on the assumed node, the assumed node is
+        // not thereby a child of the bind, and the order respects the edge.
+        let modelled = graph.node("modelled").expect("modelled should exist");
+        let assumed = graph.node("assumed").expect("assumed should exist");
+        assert_eq!(ids(&graph, &graph.assumptions(modelled)), ["assumed"]);
+        assert_eq!(ids(&graph, &graph.assumed_by(assumed)), ["modelled"]);
+        assert_eq!(ids(&graph, &graph.parents(assumed)), ["root"]);
+        assert_eq!(graph.children(modelled), []);
+        let order = graph
+            .topological_order()
+            .expect("an assumption edge keeps the graph a DAG");
+        let position = |node| order.iter().position(|&entry| entry == node);
+        assert!(position(modelled) < position(assumed));
+        assert!(graph.validate().is_empty());
+    }
+
+    #[test]
+    fn a_calc_reference_no_loaded_target_answers_adds_no_edge_and_no_error() {
+        // Arrange: evidence for a different verification.
+        let blocks = blocks(BIND_AND_FIAT);
+        let evidence = calc_evidence("AOCS::?verify_other", &["assumed"]);
+
+        // Act
+        let graph = Graph::build_with(&blocks, &evidence).expect("missing evidence is eval's");
+
+        // Assert
+        let modelled = graph.node("modelled").expect("modelled should exist");
+        assert_eq!(graph.assumptions(modelled), []);
+        assert_eq!(
+            Graph::build(&blocks)
+                .expect("builds without evidence")
+                .len(),
+            graph.len()
+        );
+    }
+
+    #[test]
+    fn reports_an_undefined_assumption_at_the_calc_reference() {
+        // Arrange
+        let blocks = blocks(BIND_AND_FIAT);
+        let evidence = calc_evidence(TARGET, &["assumed", "ghost"]);
+
+        // Act
+        let errors = Graph::build_with(&blocks, &evidence).expect_err("ghost is not a block");
+
+        // Assert: anchored on the `calc:` property that brought the edge in.
+        assert_eq!(errors.len(), 1);
+        assert_eq!(
+            errors[0].message,
+            "undefined assumption `ghost`: the calc evidence for `AOCS::?verify_detumble` assumes it, but no block defines it"
+        );
+        let Block::Bind(bind) = &blocks[1] else {
+            panic!("the second block is the bind");
+        };
+        assert_eq!(errors[0].span, Some(bind.source.span));
+    }
+
+    #[test]
+    fn a_bind_assuming_itself_is_a_cycle_through_an_assumption() {
+        // Arrange
+        let blocks = blocks(BIND_AND_FIAT);
+        let evidence = calc_evidence(TARGET, &["modelled"]);
+        let graph = Graph::build_with(&blocks, &evidence).expect("a self-loop still builds");
+
+        // Act
+        let diagnostics = graph.validate();
+
+        // Assert
+        assert_eq!(graph.topological_order(), None);
+        assert_eq!(diagnostics.errors.len(), 1);
+        assert_eq!(
+            diagnostics.errors[0].message,
+            "dependency cycle through an assumption: modelled ⇢ modelled"
+        );
+        let Block::Bind(bind) = &blocks[1] else {
+            panic!("the second block is the bind");
+        };
+        assert_eq!(diagnostics.errors[0].span, Some(bind.source.span));
+    }
+
+    #[test]
+    fn a_bind_assuming_an_ancestor_is_a_cycle_through_an_assumption() {
+        // Arrange: root → branch → modelled, and modelled's evidence assumes root.
+        let blocks = blocks(
+            "\
+objective root {
+  ```
+  root
+  ```
+  children: branch
+}
+structure branch {
+  ```
+  branch
+  ```
+  children: modelled
+}
+bind modelled {
+  ```
+  modelled
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+",
+        );
+        let evidence = calc_evidence(TARGET, &["root"]);
+
+        // Act
+        let diagnostics = check_structure(&blocks, &evidence);
+
+        // Assert: child edges draw as `→`, the assumption edge as `⇢`.
+        let messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(
+            messages,
+            ["dependency cycle through an assumption: branch → modelled ⇢ root → branch"]
+        );
+    }
+
+    #[test]
+    fn a_cycle_of_children_alone_is_named_even_when_an_assumption_closes_another() {
+        // Arrange: `x ↔ y` is a cycle of the argument as written. The
+        // evidence adds a second way round (`m ⇢ a`) through the same nodes,
+        // and a search from the smallest node meets that one first.
+        let blocks = blocks(
+            "\
+objective a {
+  ```
+  a
+  ```
+  children: x
+}
+structure x {
+  ```
+  x
+  ```
+  children: y
+}
+structure y {
+  ```
+  y
+  ```
+  children: x, m
+}
+bind m {
+  ```
+  m
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+",
+        );
+        let evidence = calc_evidence(TARGET, &["a"]);
+
+        // Act
+        let diagnostics = check_structure(&blocks, &evidence);
+
+        // Assert: one error for the component, and it is the cycle no
+        // evidence can take away, anchored in the argument and not on `calc:`.
+        let messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(messages, ["dependency cycle: x → y → x"]);
+        assert_eq!(diagnostics.errors[0].span, Some(blocks[1].common().id.span));
+    }
+
+    #[test]
+    fn a_self_referencing_child_is_named_before_a_cycle_through_an_assumption() {
+        // Arrange: `s` lists itself, and sits on a cycle the evidence closes.
+        let blocks = blocks(
+            "\
+objective a {
+  ```
+  a
+  ```
+  children: s
+}
+structure s {
+  ```
+  s
+  ```
+  children: s, m
+}
+bind m {
+  ```
+  m
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+",
+        );
+        let evidence = calc_evidence(TARGET, &["a"]);
+
+        // Act
+        let diagnostics = check_structure(&blocks, &evidence);
+
+        // Assert
+        let messages: Vec<&str> = diagnostics
+            .errors
+            .iter()
+            .map(|error| error.message.as_str())
+            .collect();
+        assert_eq!(messages, ["dependency cycle: s → s"]);
+    }
+
+    #[test]
+    fn a_node_only_an_assumption_reaches_is_not_an_orphan() {
+        // Arrange: `assumed` is no block's child; only the bind's evidence
+        // depends on it.
+        let blocks = blocks(
+            "\
+objective root {
+  ```
+  root
+  ```
+  children: modelled
+}
+bind modelled {
+  ```
+  modelled
+  ```
+  calc: \"AOCS::?verify_detumble\"
+}
+fiat assumed {
+  ```
+  assumed
+  ```
+}
+",
+        );
+
+        // Act
+        let without = check_structure(&blocks, &CalcEvidenceSet::default());
+        let with = check_structure(&blocks, &calc_evidence(TARGET, &["assumed"]));
+
+        // Assert: the warning exists exactly while nothing depends on the node.
+        assert_eq!(without.warnings.len(), 1);
+        assert!(with.is_empty(), "got {with:?}");
     }
 
     #[test]

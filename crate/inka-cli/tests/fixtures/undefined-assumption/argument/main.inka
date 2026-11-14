@@ -1,0 +1,21 @@
+objective root {
+    ```
+    the root claim
+    ```
+    children:
+        modelled,
+        disturbance_model_valid
+}
+
+bind modelled {
+    ```
+    the controller detumbles
+    ```
+    calc: "AOCS::?verify_detumble"
+}
+
+fiat disturbance_model_valid {
+    ```
+    the disturbance model envelopes reality
+    ```
+}

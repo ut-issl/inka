@@ -1,12 +1,21 @@
-//! The calc evidence interface hash: the consumer side of the calc evidence
-//! contract, as far as approvals are concerned.
+//! Imported calc evidence: the consumer side of the calc evidence contract.
 //!
 //! A `calc:` bind names a verification in a calculation graph (veriq is the
 //! first producer). What an approver judges is not that one function but the
 //! whole definition-level upstream subgraph behind it: every root model,
 //! calculation and verification the target depends on, as reviewable source,
-//! plus the set of leaf results the target must satisfy. This module computes
-//! the hash each bind approval is bound to, over exactly that.
+//! plus the set of leaf results the target must satisfy. The wire format and
+//! its validation live in the shared `inka-evidence` crate; this module adds
+//! what only the consumer needs: reading the files an `inka.toml`
+//! `[evidence] calcs` list names, anchoring every defect to the file that
+//! carried it, and the interface hash each bind approval is bound to.
+//!
+//! Loading happens at project load, not only in evaluation, because calc
+//! evidence carries structure: the argument nodes each target assumes become
+//! edges of the graph (see [`crate::graph`]). A configured file that is
+//! missing or malformed is a loud input error for every command, while a
+//! `calc:` reference no loaded target answers stays evaluation's per-bind
+//! "missing evidence".
 //!
 //! The producer emits raw source strings; inka never parses Python. Sources
 //! are normalized CRLF→LF only, as test evidence bodies are: comments,
@@ -30,10 +39,18 @@
 //! is a different test. The layout is frozen by the vectors under
 //! `tests/golden/hash/calc-evidence-v1/`.
 
+use std::collections::{BTreeMap, HashMap};
+use std::io;
+use std::path::{Path, PathBuf};
+
+use inka_evidence::calc::{CalcParseError, Target, VERSION};
 use sha2::{Digest, Sha256};
+
+pub use inka_evidence::calc::{DefinitionKind, InvalidCalcEvidence, Leaf};
 
 use crate::hash::{InterfaceHash, Preimage};
 use crate::normalize;
+use crate::read::ReadText;
 
 /// The domain tag framing every calc-evidence interface preimage.
 pub const DOMAIN_TAG: &str = "inka:calc-evidence:v1";
@@ -80,6 +97,232 @@ pub fn interface_hash(
     preimage.entries(&sources);
     preimage.list(&leaves);
     InterfaceHash::from_bytes(Sha256::digest(preimage.finish()).into())
+}
+
+/// One target's imported evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalcTarget {
+    /// The definition-level upstream subgraph, the target included, in
+    /// delivery order.
+    pub definitions: Vec<DefinitionSource>,
+    /// The inka node IDs the subgraph assumes, each once, as delivered.
+    pub assumes: Vec<String>,
+    /// The required leaves with their observed results, in delivery order.
+    pub leaves: Vec<Leaf>,
+    /// Whether the producer's own validity conditions held.
+    pub valid: bool,
+    /// Whether the producer marks the target as an expected failure.
+    pub xfail: bool,
+    /// The hash the bind approval is bound to.
+    pub interface_hash: InterfaceHash,
+}
+
+/// One definition as delivered: its path, kind and reviewable source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefinitionSource {
+    /// The definition's path in the producer's graph.
+    pub path: String,
+    /// What the definition is; presentation metadata, not hashed.
+    pub kind: DefinitionKind,
+    /// The reviewable source, CRLF/LF as delivered.
+    pub source: String,
+}
+
+/// Every target loaded from the configured calc evidence files, keyed by
+/// target path.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CalcEvidenceSet {
+    targets: BTreeMap<String, CalcTarget>,
+}
+
+impl CalcEvidenceSet {
+    /// Builds a set from already-parsed targets, hashing each one.
+    ///
+    /// This is what [`load_files`] does once the files are read; it is
+    /// public so a caller holding targets from elsewhere — a test, an
+    /// in-memory producer — gets the same set a file would give.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidCalcEvidence::DuplicateTarget`] when two targets
+    /// share a path: a routing conflict, not a merge.
+    pub fn from_targets(
+        targets: impl IntoIterator<Item = Target>,
+    ) -> Result<Self, InvalidCalcEvidence> {
+        let mut set = Self::default();
+        for target in targets {
+            set.insert(target)?;
+        }
+        Ok(set)
+    }
+
+    fn insert(&mut self, target: Target) -> Result<(), InvalidCalcEvidence> {
+        if self.targets.contains_key(&target.path) {
+            return Err(InvalidCalcEvidence::DuplicateTarget {
+                target: target.path,
+            });
+        }
+        let definitions: Vec<Definition<'_>> = target
+            .definitions
+            .iter()
+            .map(|definition| Definition {
+                path: &definition.path,
+                source: &definition.source,
+            })
+            .collect();
+        let leaf_ids: Vec<&str> = target.leaves.iter().map(|leaf| leaf.id.as_str()).collect();
+        let interface_hash = interface_hash(&target.path, &definitions, &leaf_ids);
+        self.targets.insert(
+            target.path,
+            CalcTarget {
+                definitions: target
+                    .definitions
+                    .into_iter()
+                    .map(|definition| DefinitionSource {
+                        path: definition.path,
+                        kind: definition.kind,
+                        source: definition.source,
+                    })
+                    .collect(),
+                assumes: target.assumes,
+                leaves: target.leaves,
+                valid: target.valid,
+                xfail: target.xfail,
+                interface_hash,
+            },
+        );
+        Ok(())
+    }
+
+    /// The evidence for one target path, or `None` when the loaded evidence
+    /// does not mention it — evaluation's "missing evidence".
+    #[must_use]
+    pub fn get(&self, path: &str) -> Option<&CalcTarget> {
+        self.targets.get(path)
+    }
+
+    /// Every loaded target, ordered by path.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &CalcTarget)> {
+        self.targets
+            .iter()
+            .map(|(path, target)| (path.as_str(), target))
+    }
+
+    /// Whether no target was loaded.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty()
+    }
+}
+
+/// A reason loading the configured calc evidence failed.
+///
+/// Every variant is a CLI input error: the configured delivery premise does
+/// not hold. None of them is the per-bind "missing evidence" outcome.
+#[derive(Debug, thiserror::Error)]
+pub enum CalcEvidenceError {
+    #[error("cannot read calc evidence file `{}`: {source}", path.display())]
+    Unreadable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error(
+        "calc evidence file `{}` is not valid v{VERSION} JSON: {source}",
+        path.display()
+    )]
+    Malformed {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error(
+        "calc evidence file `{}` has version {found}; this build reads v{VERSION}",
+        path.display()
+    )]
+    UnsupportedVersion { path: PathBuf, found: u64 },
+    #[error("invalid calc evidence in `{}`: {reason}", path.display())]
+    Invalid {
+        path: PathBuf,
+        #[source]
+        reason: InvalidCalcEvidence,
+    },
+    /// Two entries of `[evidence] calcs` — two files, or one file listed
+    /// twice — deliver the same target. Neither file is defective alone.
+    #[error(
+        "calc evidence file `{}` delivers target `{target}`, which `{}` already delivered; \
+         a target path must be unique across `[evidence] calcs`",
+        path.display(),
+        first.display()
+    )]
+    DuplicateTarget {
+        path: PathBuf,
+        first: PathBuf,
+        target: String,
+    },
+}
+
+impl CalcEvidenceError {
+    /// Anchors a path-free parse defect to the file that carried it.
+    fn of_file(error: CalcParseError, path: PathBuf) -> Self {
+        match error {
+            CalcParseError::Json(source) => Self::Malformed { path, source },
+            CalcParseError::UnsupportedVersion { found } => {
+                Self::UnsupportedVersion { path, found }
+            }
+            CalcParseError::Invalid(reason) => Self::Invalid { path, reason },
+        }
+    }
+}
+
+/// Reads and validates every configured calc evidence file into one set.
+///
+/// `files` are manifest-relative paths, joined onto `base_dir` the same way
+/// `values.files` are. Target paths must be unique across the whole set.
+///
+/// # Errors
+///
+/// Returns a [`CalcEvidenceError`] when a file cannot be read, is not valid
+/// v1 JSON, declares a version other than 1, or fails a semantic check of the
+/// shared crate ([`InvalidCalcEvidence`]) — including a target path repeated
+/// within one file — or when a later entry of `files` delivers a target an
+/// earlier one already did ([`CalcEvidenceError::DuplicateTarget`]).
+pub fn load_files(
+    base_dir: &Path,
+    files: &[PathBuf],
+    reader: &dyn ReadText,
+) -> Result<CalcEvidenceSet, CalcEvidenceError> {
+    let mut set = CalcEvidenceSet::default();
+    let mut delivered_by: HashMap<String, PathBuf> = HashMap::new();
+    for relative in files {
+        let path = base_dir.join(relative);
+        let text = reader
+            .read_text(&path)
+            .map_err(|source| CalcEvidenceError::Unreadable {
+                path: path.clone(),
+                source,
+            })?;
+        let targets = inka_evidence::calc::parse(&text)
+            .map_err(|error| CalcEvidenceError::of_file(error, path.clone()))?;
+        for target in targets {
+            // `parse` already refused a repeat within the file, so a target
+            // seen before came from an earlier entry of the list.
+            if let Some(first) = delivered_by.get(&target.path) {
+                return Err(CalcEvidenceError::DuplicateTarget {
+                    path,
+                    first: first.clone(),
+                    target: target.path,
+                });
+            }
+            delivered_by.insert(target.path.clone(), path.clone());
+            set.insert(target)
+                .map_err(|reason| CalcEvidenceError::Invalid {
+                    path: path.clone(),
+                    reason,
+                })?;
+        }
+    }
+    Ok(set)
 }
 
 #[cfg(test)]

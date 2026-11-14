@@ -198,6 +198,18 @@ fn an_invalid_evidence_file_fails_before_any_verdict() {
         .stderr(predicate::str::contains("test evidence"));
 }
 
+#[test]
+fn an_invalid_calc_evidence_file_fails_before_any_verdict() {
+    inka()
+        .current_dir(local_fixture("broken-calc-evidence"))
+        .args(["eval", "."])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("calc evidence"));
+}
+
 /// The contract fixtures of the evidence-established project.
 const EVIDENCE_TEST_ID: &str = "tests/clean.rs::holds";
 const EVIDENCE_BODY: &str = "#[test]\nfn holds() {}\n";
@@ -214,7 +226,7 @@ fn evidence_project(name: &str) -> PathBuf {
     std::fs::write(
         dir.join("inka.toml"),
         "[project]\nname = \"evidence-clean\"\n\n[phases]\norder = [\"M1\"]\ncurrent = \"M1\"\n\n\
-         [values]\nfiles = []\n\n[evidence]\nfiles = [\"evidence.json\"]\n",
+         [values]\nfiles = []\n\n[evidence]\ntests = [\"evidence.json\"]\n",
     )
     .expect("the manifest should be writable");
     std::fs::write(

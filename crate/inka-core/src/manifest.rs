@@ -22,7 +22,7 @@ pub struct Manifest {
     pub project: ProjectSection,
     pub phases: PhasesSection,
     pub values: ValuesSection,
-    /// Absent when the project imports no test evidence.
+    /// Absent when the project imports no evidence.
     #[serde(default)]
     pub evidence: Option<EvidenceSection>,
 }
@@ -65,16 +65,22 @@ pub struct ValuesSection {
     pub files: Vec<PathBuf>,
 }
 
-/// The optional `[evidence]` section: test evidence JSON files to import.
+/// The optional `[evidence]` section: the evidence JSON files to import, test
+/// evidence under `tests` and calc evidence under `calcs`.
 ///
 /// Paths are relative to the manifest's directory, like `values.files`, and
 /// joining them is the loader's job. The delivery machinery (capsula) is
 /// responsible for the files being present and current; the manifest only
-/// names where they are expected.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+/// names where they are expected. Either list may be left out.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceSection {
-    pub files: Vec<PathBuf>,
+    /// Test evidence files (`schemas/test-evidence-v1.schema.json`).
+    #[serde(default)]
+    pub tests: Vec<PathBuf>,
+    /// Calc evidence files (`schemas/calc-evidence-v1.schema.json`).
+    #[serde(default)]
+    pub calcs: Vec<PathBuf>,
 }
 
 /// A reason an `inka.toml` file was rejected.
@@ -92,6 +98,11 @@ pub enum ManifestError {
     DuplicatePhase { name: String },
     #[error("phases.current `{name}` is not listed in phases.order")]
     CurrentPhaseNotInOrder { name: String },
+    #[error(
+        "`[evidence] files` is now `[evidence] tests`; rename the key \
+         (calc evidence files go under `[evidence] calcs`)"
+    )]
+    RetiredEvidenceFiles,
 }
 
 /// Parses and validates the text of an `inka.toml` file.
@@ -101,11 +112,30 @@ pub enum ManifestError {
 /// Returns a [`ManifestError`] when the TOML is malformed, contains unknown
 /// keys, has an empty or blank `project.name`, has an empty `phases.order` or
 /// a blank phase name in it, repeats a phase in `phases.order`, or names a
-/// `phases.current` that `phases.order` does not contain.
+/// `phases.current` that `phases.order` does not contain. A manifest still
+/// using `[evidence] files` is told the key's new name instead of "unknown".
 pub fn parse_manifest(text: &str) -> Result<Manifest, ManifestError> {
-    let manifest: Manifest = toml::from_str(text)?;
+    let manifest: Manifest = toml::from_str(text).map_err(|error| {
+        if names_retired_evidence_files(text) {
+            ManifestError::RetiredEvidenceFiles
+        } else {
+            ManifestError::Toml(error)
+        }
+    })?;
     validate(&manifest)?;
     Ok(manifest)
+}
+
+/// Whether `text` has an `[evidence] files` key: what `[evidence] tests` was
+/// called while test evidence was the only kind. Asked only after the strict
+/// read has failed, to say what to rename rather than "unknown field".
+fn names_retired_evidence_files(text: &str) -> bool {
+    toml::from_str::<toml::Table>(text).is_ok_and(|manifest| {
+        manifest
+            .get("evidence")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|evidence| evidence.contains_key("files"))
+    })
 }
 
 fn validate(manifest: &Manifest) -> Result<(), ManifestError> {

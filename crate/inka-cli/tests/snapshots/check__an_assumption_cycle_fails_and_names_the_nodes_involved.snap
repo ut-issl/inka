@@ -1,0 +1,11 @@
+---
+source: crate/inka-cli/tests/check.rs
+expression: stderr
+---
+Error: dependency cycle through an assumption: branch → modelled ⇢ root → branch
+    ╭─[ ./argument/main.inka:19:5 ]
+    │
+ 19 │     calc: "AOCS::?verify_detumble"
+    │     ───────────────┬──────────────  
+    │                    ╰──────────────── dependency cycle through an assumption: branch → modelled ⇢ root → branch
+────╯

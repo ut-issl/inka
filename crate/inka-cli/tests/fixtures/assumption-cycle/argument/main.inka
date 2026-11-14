@@ -1,0 +1,20 @@
+objective root {
+    ```
+    the root claim
+    ```
+    children: branch
+}
+
+structure branch {
+    ```
+    the subsystem works
+    ```
+    children: modelled
+}
+
+bind modelled {
+    ```
+    the controller detumbles
+    ```
+    calc: "AOCS::?verify_detumble"
+}
