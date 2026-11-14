@@ -1,0 +1,10 @@
+[Power.model.generation_w]
+daylight = 120.0
+eclipse = 0.0
+
+[Power.model.consumption_w]
+daylight = 80.0
+eclipse = 40.0
+
+[Power.model.battery]
+capacity_wh = 200.0

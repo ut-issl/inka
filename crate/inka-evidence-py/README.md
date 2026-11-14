@@ -40,6 +40,52 @@ builder.add_target(
 text = builder.finish()
 ```
 
+## veriq adapter
+
+With the `veriq` extra (`inka-evidence[veriq]`, Python 3.14), the
+`inka-evidence-veriq` script evaluates a veriq project and emits one calc
+evidence target per verification: the sources of its definition-level
+upstream subgraph (root model, calculations, verifications), the inka node
+IDs the subgraph declares under `metadata={"inka": {"assumes": [...]}}`,
+and its leaf results, validity and `xfail`. The extra pins veriq to a git
+commit, because no released veriq has the API the adapter uses yet.
+
+The source of a definition is its own text followed by every project class
+it reaches — through the root model's fields or a function's return
+annotation, type arguments, PEP 695 aliases and base classes — each once,
+in name order. Classes of veriq, pydantic and the standard library are left
+out, so upgrading those leaves approvals alone; a class of any other
+package counts as project code and is part of the source, and so does a
+class of a project module that shares a standard library module's name. An
+enum that `@vq.with_range` generated has no text of its own and is emitted
+as the list of its members.
+
+Helper functions and module constants that a definition merely calls or
+reads are in no source. Editing one can change a result without changing
+what was approved, so logic that must be approved again when it changes
+belongs in a veriq calculation.
+
+```console
+$ inka-evidence-veriq path/to/project.py --input project.in.toml \
+    --output calc-evidence.json \
+    --provenance source_revision=$(git rev-parse HEAD)
+```
+
+The project argument and `--input` default to `[tool.veriq].project` and
+`.input` of the nearest `pyproject.toml`; `--target Scope::?name`
+(repeatable) restricts the emitted verifications.
+Inside `capsula run`, `capsula_run_id` is filled from the environment.
+
+The run fails, writing nothing, rather than emit evidence that says less
+than it seems to:
+
+- a leaf result must be a `bool` (or `None`, which is emitted as a leaf
+  without a result) — veriq does not hold a verification to its `-> bool`
+  annotation at run time, and a returned `6.0` is not a pass;
+- `assumes` must be a list of strings and is the only key under `inka`, so
+  a misspelt key cannot silently drop a dependency;
+- a project that defines no verification is an error, not an empty file.
+
 ## pytest adapter
 
 Installing the package registers a pytest plugin (entry point

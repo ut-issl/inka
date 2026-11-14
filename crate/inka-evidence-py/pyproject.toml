@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 
 [project.scripts]
 inka-evidence-merge = "inka_evidence.merge_cli:main"
+inka-evidence-veriq = "inka_evidence.veriq:main"
 
 # Registers the evidence plugin with every pytest in the environment; it
 # stays inert unless --inka-evidence is passed.
@@ -19,11 +20,21 @@ inka_evidence = "inka_evidence.pytest_plugin"
 pytest = [
   "pytest>=8",
 ]
+# The veriq adapter (`inka-evidence-veriq`) needs veriq, which requires
+# Python 3.14; the package itself stays importable on older interpreters.
+# Pinned to the head of the unmerged node-metadata stack
+# (ut-issl/veriq#362–#373): no released veriq has the API the adapter
+# uses. Switch both pins to a released version once veriq ships it.
+veriq = [
+  "veriq @ git+https://github.com/ut-issl/veriq@659ce8abb997f72c4127b5b9cf814ebb933ce236 ; python_version >= '3.14'",
+]
 
 [dependency-groups]
 dev = [
   "jsonschema>=4",
   "pytest>=8",
+  # Resolved through [tool.uv.sources], to the same commit as the extra.
+  "veriq; python_version >= '3.14'",
 ]
 
 [build-system]
@@ -36,3 +47,8 @@ build-backend = "maturin"
 # under python/.
 module-name = "inka_evidence._native"
 python-source = "python"
+
+# uv resolves veriq from here for the dev group and the extra alike; keep
+# the commit identical to the one the `veriq` extra names.
+[tool.uv.sources]
+veriq = { git = "https://github.com/ut-issl/veriq", rev = "659ce8abb997f72c4127b5b9cf814ebb933ce236" }
