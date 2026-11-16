@@ -3,9 +3,8 @@
 # Run it with workflow_dispatch from the Actions tab:
 #
 # * `mode: dry-run` (the default) runs every check, builds every release
-#   asset and lists them in the run summary, packages the crates as
-#   `cargo publish` would, from any branch, and creates
-#   nothing. A tag that already exists or a missing CHANGELOG section is a
+#   asset and lists them in the run summary, and runs `cargo publish` with
+#   `--dry-run`, from any branch, and creates nothing. A tag that already exists or a missing CHANGELOG section is a
 #   warning, so the build can be rehearsed on a branch that is not yet a
 #   release.
 # * `mode: release` (from main only) releases the version in Cargo.toml as
@@ -447,10 +446,12 @@ jobs:
           if-no-files-found: error
 
   crates:
-    name: Package the crates
-    # Rehearses `cargo publish` in both modes: a dry run packages and
-    # verifies every crate exactly as publish-crates-io would, and a release
-    # creates nothing until this has passed.
+    name: Dry-run the crates.io publish
+    # Rehearses publish-crates-io in both modes with the same command and
+    # --dry-run: every crate is packaged and verified in publish order, and
+    # only the upload is skipped (so neither the Trusted Publishing exchange
+    # nor crates.io's own checks are rehearsed). A release creates nothing
+    # until this has passed.
     needs: web
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -486,11 +487,11 @@ jobs:
             exit 1
           fi
 
-      - name: Package and verify the crates
+      - name: Publish the crates without uploading them
         # See publish-crates-io for why --allow-dirty is needed.
         env:
           INKA_WEB_ASSETS: require
-        run: cargo package --workspace --locked --allow-dirty
+        run: cargo publish --workspace --locked --allow-dirty --dry-run
 
   assemble:
     name: Assemble the release assets

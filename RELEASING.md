@@ -105,11 +105,11 @@ On a new branch from `main`:
 ### 2. Optional: dry run
 
 In the Actions tab, run the `Release` workflow with `mode` left at its default `dry-run`. A dry run can start from any
-branch. It runs the checks of a release, builds every asset exactly as a release would, packages and verifies the
-crates as `cargo publish` would, and lists the assets with their sizes in the run summary, but creates and publishes
-nothing. An existing tag or a missing CHANGELOG section is reported
-as a warning instead of failing, so the build can be rehearsed on a branch whose version is already released. Each
-asset can be downloaded from the run as a workflow artifact.
+branch. It runs the checks of a release, builds every asset exactly as a release would, runs `cargo publish --dry-run`
+on the crates (everything but the upload), and lists the assets with their sizes in the run summary, but creates and
+publishes nothing. An existing tag or a missing CHANGELOG section is reported as a warning instead of failing, so the
+build can be rehearsed on a branch whose version is already released. Each asset can be downloaded from the run as a
+workflow artifact.
 
 ### 3. Run the release
 
