@@ -161,6 +161,9 @@ jobs:
           target: ${{ matrix.target }}
           cache: false
           rustflags: ""
+          # The action denies warnings by default; the cross linker of the
+          # manylinux aarch64 image emits harmless notes that would fail it.
+          build-warnings: warn
 
       - name: Install the musl linker
         if: ${{ endsWith(matrix.target, '-musl') }}
@@ -292,6 +295,9 @@ jobs:
           target: ${{ matrix.target }}
           cache: false
           rustflags: ""
+          # The action denies warnings by default; the cross linker of the
+          # manylinux aarch64 image emits harmless notes that would fail it.
+          build-warnings: warn
 
       - name: Copy the license texts into the package
         shell: bash
@@ -330,6 +336,9 @@ jobs:
         with:
           cache: false
           rustflags: ""
+          # The action denies warnings by default; the cross linker of the
+          # manylinux aarch64 image emits harmless notes that would fail it.
+          build-warnings: warn
 
       - name: Copy the license texts into the package
         run: cp LICENSE-MIT LICENSE-APACHE crate/inka-evidence-py/
@@ -367,6 +376,9 @@ jobs:
         with:
           cache: false
           rustflags: ""
+          # The action denies warnings by default; the cross linker of the
+          # manylinux aarch64 image emits harmless notes that would fail it.
+          build-warnings: warn
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -536,6 +548,9 @@ jobs:
         with:
           cache: false
           rustflags: ""
+          # The action denies warnings by default; the cross linker of the
+          # manylinux aarch64 image emits harmless notes that would fail it.
+          build-warnings: warn
 
       - name: Authenticate with crates.io
         id: auth
