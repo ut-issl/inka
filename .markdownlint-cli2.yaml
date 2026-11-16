@@ -4,3 +4,6 @@ gitignore: true
 config:
   MD013:
     line_length: 120
+  # Each CHANGELOG release repeats subheadings such as "Command line"; only flag duplicates under the same parent.
+  MD024:
+    siblings_only: true
