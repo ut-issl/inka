@@ -1,0 +1,14 @@
+# A bind whose evidence assumes two nodes of the argument. The assumption slot
+# holds the assumed nodes' normalized descriptions sorted bytewise: they are
+# listed here out of order and one carries fence indentation, freezing both
+# the normalization and the sorting step. Which nodes they came from is not
+# content.
+kind = "bind"
+description = "the power margin stays positive in every mission phase"
+normalized = "the power margin stays positive in every mission phase"
+interface_hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+assumptions = [
+  "    The eclipse model envelopes the actual eclipse durations in the target orbit  \n",
+  "The consumption table covers every mode the flight software can enter",
+]
+view_hash = "sha256:d4ace400d3df1e66d9b2aeb7692d2b2dae71dd5b0be8d781773d51898b4b588a"

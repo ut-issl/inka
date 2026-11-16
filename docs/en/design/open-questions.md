@@ -29,8 +29,6 @@ settle each. Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/
 - **bind description vs. statement duplication.** The description (human-side
   contract) tends to restate what the evidence claims. By design both are
   presented at approval; recorded as a writing-experience observation to watch.
-- **veriq contract-hash scope.** How much of a Python function's context enters
-  its contract hash. Settled by the veriq integration.
 - **Environment-node granularity.** External libraries are currently imagined
   as a single lockfile-hashed environment node; whether finer granularity is
   needed is open.
@@ -41,8 +39,9 @@ settle each. Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/
 - **graphcal as an input.** Whether [graphcal](https://graphcal.org/docs/) — a
   unit-aware, DAG-based reactive calculation language (`.gcl`) — can be chosen
   as an input to inka is an option under consideration. Nothing is decided:
-  neither adoption nor the integration shape (an evidence provider alongside
-  `veriq:` / `test:`, a source of shared values, or something else). If inka's
+  neither adoption nor the integration shape (a second producer of
+  [calc evidence](calc-evidence.md), a source of shared values, or something
+  else). If inka's
   operating discipline needs capabilities on the graphcal side (e.g. stable
   interface hashes or a machine-readable export), proposing them upstream as
   graphcal PRs is part of the option space.

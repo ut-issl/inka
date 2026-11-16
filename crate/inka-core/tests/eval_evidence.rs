@@ -101,7 +101,7 @@ fn phases() -> PhasesSection {
 /// approves the reviewed contract.
 fn approval_for(body: &str, cases: &[&str]) -> Record {
     let interface = evidence::interface_hash(TEST_ID, body, cases);
-    let view_hash = LocalView::bind(DESCRIPTION, None, interface).view_hash();
+    let view_hash = LocalView::bind(DESCRIPTION, None, interface, []).view_hash();
     Record::approve(
         RecordFields {
             target: Target::new(Mode::Bind, BIND_ID).expect("a valid target"),

@@ -32,10 +32,13 @@ PoC の上に積む機能領域。以下の並びは**依存関係にもとづ�
    有効内容の変化を eval の warning として表面化し、opt-in の `closure-fresh`
    ポリシー述語で選択的に厳格化。署名付き CI attestation(OIDC/Sigstore)は署名機構に
    接続する。
-7. **veriq 連携。** Python 側 export(グラフ、言明、`assumes` 参照、正規化 AST の
-   契約ハッシュ)、共有仮定レジストリ、界面を貫通する総仮定集合の同一性ベース集約、
-   bind ハッシュの仮定スロットの充填、bind 承認時の仮定集合 diff の提示。Rust は
-   Python を決してパースしない — JSON アダプタが継ぎ目のすべて。
+7. **calc 証拠(veriq 連携)。** 計算グラフ向けの evidence 種別 `calc:`、まず veriq
+   ([calc 証拠](calc-evidence.md)): Python 側アダプタが各検証の定義粒度の上流部分グラフを
+   確認可能な生ソースとして export し、仮定する論証ノード(ノードのメタデータで宣言、
+   部分グラフ全体で和集合)とリーフ結果を添える。inka はソースを CRLF→LF のみでハッシュ
+   する。論証そのものが仮定レジストリ。bind ハッシュの仮定スロットは仮定ノードの
+   description を保持する。仮定は bind の暗黙の依存。bind 承認時に仮定集合 diff を提示。
+   Rust は Python を決してパースしない — JSON アダプタが継ぎ目のすべて。
 8. **LLM lint。** バージョン管理されたプロンプトテンプレート、局所ビューのみの
    レビュー(「親は子から導けるか」「ビュー外の知識を前提とする語はないか」)、
    テンプレートハッシュとモデル ID を記録する `llm:<model>` attestation、理由を

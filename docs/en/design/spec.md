@@ -1,7 +1,8 @@
 # inka — Decided Specification
 
-Test evidence uses `test:`. The [test evidence contracts](test-evidence.md) define the responsibility
-boundary and the evidence JSON semantics.
+Test evidence uses `test:`; calc evidence (calculation graphs such as veriq's) uses `calc:`. The
+[test evidence contracts](test-evidence.md) and the [calc evidence contracts](calc-evidence.md) define the
+responsibility boundaries and the evidence JSON semantics.
 
 Everything on this page is settled. Hash and record layouts become frozen the
 moment their golden vectors land (append-only from then on; incompatible
@@ -26,6 +27,11 @@ bind <id> {
     test: "<test-id>"
 }
 
+bind <id> {
+    ```...```
+    calc: "<Scope>::?<verification>"
+}
+
 fiat <id> {
     ```...```
     // Short rationale for the deadline.
@@ -45,7 +51,7 @@ itself accepts any layout.
 - Exactly one fenced description per block. Fence info strings are accepted and
   reserved. Inside fences: natural language only; outside: keywords only.
 - Mode-required properties, enforced at parse time: `structure`/`objective` →
-  `children:` required; `bind` → exactly one of `test:` / `veriq:` required;
+  `children:` required; `bind` → exactly one of `test:` / `calc:` required;
   `fiat` → neither allowed.
 - Annotations form a group anchored on `until:` — `promote:` may only appear
   together with `until:`. `until: <phase>` may appear on any block; `check`
@@ -54,11 +60,12 @@ itself accepts any layout.
   expiry): on fiat the target is `structure` or `bind`; on the objective it is
   `structure` only. structure and bind take no `promote:` — announcing a mode
   change there is not supported. The rationale for a deadline is written as a
-  [comment](#comments) on `until:`. The `test:` and `veriq:` properties take a
+  [comment](#comments) on `until:`. The `test:` and `calc:` properties take a
   double-quoted, single-line string value with no escape sequences — the only
-  quoted values in the language. A `test:` / `veriq:` value is the opaque
-  evidence target, which `check` does not interpret. Descriptions never use
-  quotes.
+  quoted values in the language. A `test:` / `calc:` value is the opaque
+  evidence target, which `check` does not interpret: a test-id, or the target
+  path in the producer's calculation graph (for veriq, `Scope::?name`).
+  Descriptions never use quotes.
 - `//` line comments are part of the syntax tree; see [Comments](#comments).
 - No escape for `{$` — only the exact pattern `{$identifier}` is interpolation;
   everything else is literal.
@@ -68,10 +75,15 @@ itself accepts any layout.
 - Namespaces: `::` separator, assigned by directory under `argument/`
   (`argument/power/x.inka` → `power::<id>`); root-level files are unnamespaced;
   same-namespace references may omit the prefix; `::` cannot be written inside
-  an ID; policy selectors use the same notation (`power::*`); `veriq:`
-  references keep Python's dotted `module.function` names.
-- `test:` / `veriq:` references get a format check only at `check` time;
-  existence and pass/fail are eval's job.
+  an ID; policy selectors use the same notation (`power::*`); `calc:`
+  references are producer paths, not inka IDs, and are never namespaced by
+  inka.
+- `test:` / `calc:` references get a format check only at `check` time;
+  existence and pass/fail are eval's job. Calc evidence also carries
+  structure: the argument nodes it assumes. That part is read at load time,
+  so `check` reports an assumption ID that names no node, and a dependency
+  cycle through an assumption edge, as errors (see
+  [calc evidence](calc-evidence.md#load-time-structure)).
 
 ## Comments
 
@@ -81,7 +93,7 @@ comments — are contract content that enters the view hash. A comment is never
 a syntax error: every `//` outside a fence attaches to exactly one place.
 
 - **Anchors.** A comment attaches to a block, to one property of a block
-  (`children`, `test`, `veriq`, `until`, `promote`), to one entry of a
+  (`children`, `test`, `calc`, `until`, `promote`), to one entry of a
   `children:` list, or to the file. The description fence is not an anchor.
 - **Text.** A comment runs from `//` to the end of the line. Its text drops the
   `//`, then one following space if present, then trailing whitespace, and is
@@ -112,7 +124,9 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
 ## Project layout
 
 - `inka.toml`: `[project] name`; `[phases] order` (total order) + `current`
-  (validated against order); `[values] files`. Unknown keys are rejected.
+  (validated against order); `[values] files`; `[evidence] tests` / `calcs`
+  (test and calc evidence JSON files, paths relative to the manifest).
+  Unknown keys are rejected.
 - The argument is read by convention: every `*.inka` under `argument/`.
 - Values files are flat TOML maps; keys match the identifier grammar, so every
   key is referenceable as `{$key}`. A string value is taken verbatim; any
@@ -131,7 +145,7 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
   (e.g. `["promote:bind", "until:M3"]`).
 - Comment canonical form: one `anchor:text` string per anchor of the node that
   carries a comment, sorted bytewise, where the anchor is `block` or the
-  property name (`children` / `test` / `veriq` / `until` / `promote`) and the
+  property name (`children` / `test` / `calc` / `until` / `promote`) and the
   text is the merged comment text (e.g. `["block:shared with momentum_ok",
   "until:awaiting the mass-properties test"]`). Child-entry comments are not
   in this list; they travel with the child entry.
@@ -146,9 +160,13 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
     by description, then by comment, bytewise)
   - fiat = tag ‖ desc ‖ annotations ‖ comments
   - bind = tag ‖ desc ‖ annotations ‖ comments ‖ interface_hash (raw 32 bytes)
-    ‖ assumption list (empty until assumption aggregation lands; the slot
-    exists so filling it later is not a layout change)
-- Excluded from hashes: IDs, tags, file comments, `test:` / `veriq:` reference
+    ‖ assumption list (the normalized descriptions of the nodes the evidence
+    assumes, sorted bytewise; empty for a test bind)
+- Interface hashes have their own domain tags: `inka:test-evidence:v1`
+  ([test evidence](test-evidence.md#content-hashing-and-reapproval)) and
+  `inka:calc-evidence:v1`
+  ([calc evidence](calc-evidence.md#content-hashing-and-reapproval)).
+- Excluded from hashes: IDs, tags, file comments, `test:` / `calc:` reference
   strings. Included: deadline annotations and every other comment.
   Interpolation happens before normalization and hashing — hashes never see
   placeholders.
@@ -178,12 +196,13 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
   demands fresh approval.
 - established: fiat = satisfied fiat approval; structure = satisfied structure
   approval ∧ all children established; bind = satisfied bind approval ∧
-  evidence match; objective = satisfied objective approval ∧ all children
+  evidence match ∧ all assumed nodes established (a test bind assumes
+  nothing); objective = satisfied objective approval ∧ all children
   established (each root's wording is agreed inside inka like any other
   contract).
 - blame lists only nodes whose failure cause is their own (missing / stale /
-  declined / expired / evidence mismatch), not nodes failing solely through
-  their children.
+  declined / expired / evidence mismatch / unestablished assumption), not
+  nodes failing solely through their children.
 
 ## Test evidence provider
 
@@ -192,6 +211,15 @@ repository executes tests and emits evidence JSON, capsula stores and delivers i
 the evidence JSON at a configured path offline. Worktree file matching and mandatory environment
 hashes are not adopted. The evidence JSON carries the reviewable contract body and the corresponding
 execution results, and follows `schemas/test-evidence-v1.schema.json`.
+
+## Calc evidence provider
+
+The [calc evidence contracts](calc-evidence.md) define the responsibility boundary for evidence drawn
+from a calculation graph (veriq first): the source repository evaluates the graph and an adapter emits
+evidence JSON, capsula stores and delivers it, and inka evaluates it offline. Per target the JSON carries
+the reviewable sources of the whole definition-level upstream subgraph, the argument nodes it assumes, the
+required leaf results and the producer's validity, and follows `schemas/calc-evidence-v1.schema.json`.
+Rust never parses Python — the JSON is the entire seam.
 
 ## Repository conventions
 

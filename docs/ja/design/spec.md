@@ -1,6 +1,7 @@
 # inka — 確定仕様
 
-テスト証拠は `test:` で参照する。[テスト証拠の契約](test-evidence.md)が責務分担と証拠jsonの意味論を定義する。
+テスト証拠は `test:`、calc 証拠(veriq などの計算グラフ)は `calc:` で参照する。[テスト証拠の契約](test-evidence.md)と
+[calc 証拠の契約](calc-evidence.md)が責務分担と証拠jsonの意味論を定義する。
 
 このページの内容はすべて確定済み。ハッシュとレコードのレイアウトは、ゴールデンベクタが
 入った時点で凍結される(以後追記専用。非互換の変更は v2 として並存)。
@@ -25,6 +26,11 @@ bind <id> {
     test: "<test-id>"
 }
 
+bind <id> {
+    ```...```
+    calc: "<Scope>::?<verification>"
+}
+
 fiat <id> {
     ```...```
     // 期限の短い理由。
@@ -42,16 +48,17 @@ fiat <id> {
 - ブロックにつきフェンス付き description をちょうど1つ。インフォ文字列は受理して予約。
   フェンス内=自然言語のみ、フェンス外=キーワードのみ。
 - モード別必須プロパティ(パース時に強制): `structure`/`objective` → `children:`
-  必須、`bind` → `test:` か `veriq:` を厳密に1つ必須、`fiat` → どちらも不可。
+  必須、`bind` → `test:` か `calc:` を厳密に1つ必須、`fiat` → どちらも不可。
 - 注釈は `until:` をアンカーとするグループ — `promote:` は `until:` がある場合に
   のみ書ける。`until: <phase>` は全ブロックに書ける。`phases.order` にないフェーズを
   `until:` に書くと check がエラーにする。`promote:` は後継モードの宣言で任意
   (`promote:` なしの `until:` は単純な期限切れ): fiat では `structure` | `bind`、
   objective では `structure` のみ。structure と bind に `promote:` は書けない —
   モード変更の予告は想定しない。期限の理由は `until:` へのコメント(後述「コメント」節)として
-  書く。`test:`・`veriq:` プロパティは二重引用符の1行文字列値でエスケープなし —
-  言語中で唯一の引用符値。`test:` / `veriq:` の値は不透明な evidence ターゲットで、
-  check は中身を解釈しない。description は引用符を使わない。
+  書く。`test:`・`calc:` プロパティは二重引用符の1行文字列値でエスケープなし —
+  言語中で唯一の引用符値。`test:` / `calc:` の値は不透明な evidence ターゲット —
+  test-id、または producer の計算グラフにおけるターゲットパス(veriq では `Scope::?name`)—
+  で、check は中身を解釈しない。description は引用符を使わない。
 - `//` 行コメントは構文木の一部。後述「コメント」節を参照。
 - `{$` のエスケープは無い — 正確なパターン `{$識別子}` のみが補間で、それ以外は
   文字通り。
@@ -61,8 +68,12 @@ fiat <id> {
 - 名前空間: 区切りは `::`、`argument/` 配下のディレクトリから自動付与
   (`argument/power/x.inka` → `power::<id>`)。直下のファイルは名前空間なし。
   同一名前空間内の参照は接頭辞省略可。ID の中に `::` は書けない。ポリシーセレクタも
-  同記法(`power::*`)。`veriq:` 参照は Python の `module.function` 名のまま。
-- `test:` / `veriq:` 参照は check では形式検査のみ。実在と pass/fail は eval の仕事。
+  同記法(`power::*`)。`calc:` 参照は producer のパスであって inka の ID ではなく、inka が
+  名前空間を付けることはない。
+- `test:` / `calc:` 参照は check では形式検査のみ。実在と pass/fail は eval の仕事。
+  calc 証拠は構造 — 仮定する論証ノード — も運ぶ。その部分は読み込み時に読むので、check は
+  どのノードも指さない仮定 ID と、仮定の辺を通る依存の循環をエラーとして報告する
+  ([calc 証拠](calc-evidence.md#読み込み時の構造)を参照)。
 
 ## コメント
 
@@ -71,7 +82,7 @@ fiat <id> {
 なることはない: フェンス外の `//` はすべて、ちょうど1か所に付着する。
 
 - **付着先(アンカー)。** コメントはブロック、ブロックのプロパティ1つ(`children`・`test`・
-  `veriq`・`until`・`promote`)、`children:` リストの要素1つ、またはファイルに付着する。
+  `calc`・`until`・`promote`)、`children:` リストの要素1つ、またはファイルに付着する。
   description のフェンスはアンカーではない。
 - **本文。** コメントは `//` から行末まで。本文は `//` を除き、続く空白があれば1つ除き、
   行末空白を除いて NFC 正規化したもの。フェンス内の `//` は description の本文でありコメントではない。
@@ -96,7 +107,8 @@ fiat <id> {
 ## プロジェクト構成
 
 - `inka.toml`: `[project] name`、`[phases] order`(全順序)+ `current`(order に
-  対して検証)、`[values] files`。未知キーは拒否。
+  対して検証)、`[values] files`、`[evidence] tests` / `calcs`(テスト証拠・calc 証拠の
+  json ファイル。パスはマニフェストからの相対)。未知キーは拒否。
 - 論証は規約読み込み: `argument/` 配下のすべての `*.inka`。
 - values ファイルはフラットな TOML マップ。キーは識別子文法に一致し、必ず `{$key}` で
   参照できる。文字列値はそのまま、それ以外の TOML 値 — 数値・真偽値・配列・テーブル
@@ -111,7 +123,7 @@ fiat <id> {
 - 注釈の正規形: キーでソートした `key:value` 文字列列(例 `["promote:bind", "until:M3"]`)。
 - コメントの正規形: ノードのアンカーのうちコメントを持つものごとに1つの `anchor:text` 文字列を
   バイト列順にソートした列。anchor は `block` またはプロパティ名(`children` / `test` /
-  `veriq` / `until` / `promote`)、text は連結後のコメント本文(例
+  `calc` / `until` / `promote`)、text は連結後のコメント本文(例
   `["block:shared with momentum_ok", "until:awaiting the mass-properties test"]`)。
   子要素へのコメントはこの列に入らず、子要素と一緒に運ばれる。
 - 子要素: 子の正規化済み description と、その子要素へのコメント(無ければ空)を、それぞれ
@@ -125,8 +137,12 @@ fiat <id> {
     バイト列順でソート)
   - fiat = tag ‖ desc ‖ annotations ‖ comments
   - bind = tag ‖ desc ‖ annotations ‖ comments ‖ interface_hash(生32バイト)‖ 仮定リスト
-    (仮定集約が入るまでは空。席があるので後から埋めてもレイアウト変更にならない)
-- ハッシュ非包含: ID、タグ、ファイルコメント、`test:` / `veriq:` の参照文字列。包含: 期限注釈と
+    (証拠が仮定するノードの正規化済み description をバイト列順にソートしたもの。test の bind
+    では空)
+- インターフェースハッシュは独自のドメインタグを持つ: `inka:test-evidence:v1`
+  ([テスト証拠](test-evidence.md#内容のハッシュと再承認))と `inka:calc-evidence:v1`
+  ([calc 証拠](calc-evidence.md#内容のハッシュと再承認))。
+- ハッシュ非包含: ID、タグ、ファイルコメント、`test:` / `calc:` の参照文字列。包含: 期限注釈と
   それ以外のすべてのコメント。値展開は正規化・ハッシュの前段 — ハッシュはプレースホルダを見ない。
 
 ## 承認レコード(v1)
@@ -151,10 +167,11 @@ fiat <id> {
   カウントしない。`until:` は全員が承認した「未来へ先置きされた decline」であり、
   解除は注釈の編集=契約変更+再承認のみ。
 - established: fiat = 有効な fiat 承認 / structure = 有効な structure 承認 ∧ 全子
-  established / bind = 有効な bind 承認 ∧ 証拠の照合 / objective = 有効な objective
+  established / bind = 有効な bind 承認 ∧ 証拠の照合 ∧ 仮定する全ノード established
+  (test の bind は何も仮定しない)/ objective = 有効な objective
   承認 ∧ 全子 established(各ルートの文言も他の契約と同様に inka の中で合意される)。
 - blame は原因が自分自身にあるノードだけを列挙(不足・stale・decline・失効・証拠
-  不一致)。子経由でのみ未確立のノードは出さない。
+  不一致・仮定の未確立)。子経由でのみ未確立のノードは出さない。
 
 ## テスト証拠provider
 
@@ -162,6 +179,14 @@ fiat <id> {
 capsulaが保存と配送を担い、inkaは設定されたパスの証拠jsonをオフラインで評価する。
 worktreeのファイル照合や環境hashの必須化は採用しない。証拠jsonは確認可能な契約本文と対応する実行結果を運び、
 `schemas/test-evidence-v1.schema.json` に従う。
+
+## calc 証拠provider
+
+[calc 証拠の契約](calc-evidence.md)が、計算グラフ(まず veriq)から得る証拠の責務分担を定義する。ソースレポジトリが
+グラフを評価してアダプターが証拠jsonを出力し、capsulaが保存と配送を担い、inkaはオフラインで評価する。証拠jsonは
+ターゲットごとに、定義粒度の上流部分グラフ全体の確認可能なソース、仮定する論証ノード、必要リーフ結果、producer の
+妥当性を運び、`schemas/calc-evidence-v1.schema.json` に従う。Rust は Python を決してパースしない — json が継ぎ目の
+すべて。
 
 ## リポジトリ規約
 

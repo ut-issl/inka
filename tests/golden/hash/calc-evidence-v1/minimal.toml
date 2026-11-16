@@ -1,0 +1,11 @@
+# The smallest interface: a verification with no upstream definitions beyond
+# itself, and a single scalar leaf named by the target path.
+comment = "freezes field order: tag, target path, definition entries, sorted leaf ids"
+target = "Power::?verify_margin"
+leaves = ["Power::?verify_margin"]
+interface_hash = "sha256:a544bc93eab4b1a3ce5b2b91a7b9f8904506104f00bd3db1e48d5197b02d5846"
+
+[[definitions]]
+path = "Power::?verify_margin"
+source = "@power.verification()\ndef verify_margin(budget: PowerBudget) -> bool:\n    return budget.margin_w > 0\n"
+normalized_source = "@power.verification()\ndef verify_margin(budget: PowerBudget) -> bool:\n    return budget.margin_w > 0\n"

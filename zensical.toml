@@ -22,6 +22,7 @@ nav = [
     { "PoC Plan" = "design/poc-plan.md" },
     { "Full Plan" = "design/full-plan.md" },
     { "Test Evidence" = "design/test-evidence.md" },
+    { "Calc Evidence" = "design/calc-evidence.md" },
     { "Open Questions" = "design/open-questions.md" },
   ] },
 ]

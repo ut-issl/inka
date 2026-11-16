@@ -22,6 +22,7 @@ nav = [
     { "PoC 実装方針" = "design/poc-plan.md" },
     { "全体実装方針" = "design/full-plan.md" },
     { "テスト証拠" = "design/test-evidence.md" },
+    { "calc 証拠" = "design/calc-evidence.md" },
     { "未決事項" = "design/open-questions.md" },
   ] },
 ]

@@ -59,7 +59,7 @@ structure single {
   entries of a multi-line `children:` list at level 2.
 - **Block header.** `<mode> <id> #tag ... {` with single spaces; tags keep their
   source order.
-- **Block body.** The description, then `children:` / `test:` / `veriq:`, then
+- **Block body.** The description, then `children:` / `test:` / `calc:`, then
   `until:`, then `promote:`. One property per line, written `key: value`. No
   blank lines inside a block.
 - **Description.** The fences sit at level 1. The opening fence keeps its
