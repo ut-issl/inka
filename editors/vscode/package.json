@@ -3,15 +3,24 @@
   "displayName": "inka",
   "description": "Language support for the inka argumentation DSL",
   "version": "0.0.1",
-  "private": true,
   "license": "MIT OR Apache-2.0",
   "publisher": "ut-issl",
   "repository": {
     "type": "git",
     "url": "https://github.com/ut-issl/inka"
   },
+  "homepage": "https://github.com/ut-issl/inka/tree/main/editors/vscode#readme",
+  "bugs": {
+    "url": "https://github.com/ut-issl/inka/issues"
+  },
+  "keywords": [
+    "inka",
+    "argumentation",
+    "assurance",
+    "lsp"
+  ],
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.146.0"
   },
   "categories": [
     "Programming Languages"
@@ -100,16 +109,18 @@
       "properties": {
         "inka.serverPath": {
           "type": "string",
-          "default": "inka-lsp",
+          "default": "",
           "scope": "machine-overridable",
-          "markdownDescription": "Command used to launch the inka language server. Build it with `cargo build -p inka-lsp` or install it on `PATH`; otherwise set an absolute path (`${workspaceFolder}` is not expanded in settings)."
+          "markdownDescription": "Command used to launch the inka language server. Leave it empty to run the `inka-lsp` bundled with this extension, or `inka-lsp` on `PATH` when the extension carries none. Otherwise set an absolute path (`${workspaceFolder}` is not expanded in settings) to a server you built with `cargo build -p inka-lsp`."
         }
       }
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p .",
-    "check": "tsc -p . --noEmit"
+    "check": "tsc -p . --noEmit",
+    "package": "vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^11.0.0"
@@ -117,6 +128,8 @@
   "devDependencies": {
     "@types/node": "26.6.6",
     "@types/vscode": "1.146.0",
+    "@vscode/vsce": "4.1.1",
+    "ovsx": "1.4.0",
     "typescript": "7.0.2"
   }
 }

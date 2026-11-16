@@ -1,10 +1,20 @@
 # inka-evidence (Python)
 
 The Python binding of the shared [inka test
-evidence](../../docs/en/design/test-evidence.md) emission layer, plus the
+evidence](https://github.com/ut-issl/inka/blob/main/docs/en/design/test-evidence.md) emission layer, plus the
 pytest adapter built on top of it. Validation and serialization live in
 the Rust crate `inka-evidence`; this package never restates the wire
 schema.
+
+## Install
+
+```console
+pip install inka-evidence
+```
+
+Wheels for Linux, macOS and Windows (CPython 3.10 and later, abi3) and an
+sdist are on [PyPI](https://pypi.org/project/inka-evidence/) and attached to
+every [GitHub Release](https://github.com/ut-issl/inka/releases).
 
 ## Emission API
 

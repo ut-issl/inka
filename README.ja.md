@@ -3,6 +3,28 @@
 説明付きの承認プロセスによって論証化の構造化をするツール
 テキストベースかつLSP対応(予定)で、反復的な開発に適した設計
 
+## インストール
+
+各 [GitHub Release](https://github.com/ut-issl/inka/releases) は，すべてのパッケージを同じバージョンで，x86_64 と aarch64 の
+Linux，x86_64 と aarch64 の macOS，x86_64 の Windows 向けに配布します。
+
+- **コマンドライン。** リリースから `inka-v<version>-<target>.tar.gz`(Windows は `.zip`)をダウンロードし，`inka`，
+  `inka-lsp`，`inka-evidence-rust`，`inka-evidence-merge` を `PATH` に置きます。Rust ツールチェインがあれば，
+  `cargo binstall inka-cli` が同じアーカイブを取得し，`cargo install --locked inka-cli`(または `inka-lsp`，
+  `inka-evidence-rust`)が [crates.io](https://crates.io/crates/inka-cli) からビルドします。
+- **VS Code。** [Marketplace](https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode) または
+  [Open VSX](https://open-vsx.org/extension/ut-issl/inka-vscode) から `ut-issl.inka-vscode` をインストールします。
+  `inka-lsp` を同梱しています。リリースには *Install from VSIX…* 用の `.vsix` も添付されています。
+- **グラフビューア。** `inka serve` はビューアのバンドルを `web/dist` に探します。チェックアウトの外では，リリースの
+  `inka-web-v<version>.tar.gz` を展開し，そのディレクトリを `--assets` で渡します。
+- **テストエビデンスのアダプタ。** `pip install inka-evidence`(pytest，[PyPI](https://pypi.org/project/inka-evidence/))と
+  `npm install --save-dev @ut-issl/inka-evidence`(Vitest，[npm](https://www.npmjs.com/package/@ut-issl/inka-evidence))。
+  Rust のアダプタ `inka-evidence-rust` はコマンドラインのアーカイブに入っています。
+
+リリースの `SHA256SUMS` にすべての成果物が載り，各成果物には GitHub のビルド来歴の attestation が付きます
+(`gh attestation verify <file> --repo ut-issl/inka`)。リリースの作り方は [RELEASING.ja.md](RELEASING.ja.md) を参照して
+ください。
+
 ## QuickStart
 
 inka のプロジェクトは，`inka.toml` と `argument/` 以下の `*.inka` を持つディレクトリです。

@@ -1,2 +1,7 @@
 node_modules/
 out/
+# The language server a release packages into the .vsix
+server/
+# Copied from the repository root when packaging
+LICENSE-MIT
+LICENSE-APACHE

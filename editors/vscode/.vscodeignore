@@ -1,0 +1,8 @@
+.vscode/**
+.gitignore
+src/**
+tsconfig.json
+package-lock.json
+**/*.map
+**/*.ts
+!**/*.d.ts

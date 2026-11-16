@@ -2,8 +2,27 @@
 name = "inka-evidence"
 version = "0.0.1"
 description = "Emit inka test evidence v1 JSON from Python test adapters"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT OR Apache-2.0"
+# The texts live at the repository root; the release workflow copies them
+# here before building, so wheels and sdists carry them.
+license-files = ["LICENSE-APACHE", "LICENSE-MIT"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: Pytest",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Rust",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Changelog = "https://github.com/ut-issl/inka/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/ut-issl/inka/tree/main/crate/inka-evidence-py#readme"
+Issues = "https://github.com/ut-issl/inka/issues"
+Repository = "https://github.com/ut-issl/inka"
 
 [project.scripts]
 inka-evidence-merge = "inka_evidence.merge_cli:main"

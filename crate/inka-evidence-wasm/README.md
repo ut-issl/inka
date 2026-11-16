@@ -1,10 +1,21 @@
 # @ut-issl/inka-evidence
 
 The JavaScript/TypeScript binding of the shared [inka test
-evidence](../../docs/en/design/test-evidence.md) emission layer (a wasm
+evidence](https://github.com/ut-issl/inka/blob/main/docs/en/design/test-evidence.md) emission layer (a wasm
 build of the Rust crate `inka-evidence`), plus the Vitest adapter built on
 top of it. Validation and serialization live in the Rust crate; this
 package never restates the wire schema.
+
+## Install
+
+```console
+npm install --save-dev @ut-issl/inka-evidence
+```
+
+The package is on [npm](https://www.npmjs.com/package/@ut-issl/inka-evidence)
+and its tarball is attached to every
+[GitHub Release](https://github.com/ut-issl/inka/releases). It ships the
+wasm module, so no Rust toolchain is needed.
 
 ## Emission API
 
