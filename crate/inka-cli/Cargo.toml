@@ -6,6 +6,9 @@ rust-version.workspace = true
 description = "Command-line interface for inka"
 repository.workspace = true
 license.workspace = true
+# The viewer bundle is built, not committed, so the package must name it
+# explicitly for `cargo publish` to carry it (see build.rs).
+include = ["build.rs", "src/**", "web-dist/**"]
 
 # `cargo binstall` fetches the prebuilt archive of a GitHub Release instead
 # of compiling; every binary of the workspace travels in the same archive.

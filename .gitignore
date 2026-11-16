@@ -141,6 +141,9 @@ crate/inka-evidence-py/python/inka_evidence/*.so
 # Build artifacts
 /target
 
+# The viewer bundle `npm run build` in web/ writes for build.rs to embed
+crate/inka-cli/web-dist/
+
 # Build artifacts of the adapter's fixture crates, which are standalone
 # workspaces with their own target directories
 crate/inka-evidence-rust/tests/fixtures/*/target/

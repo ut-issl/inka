@@ -115,7 +115,8 @@ pub enum Command {
         /// Port to listen on; 0 lets the operating system choose one.
         #[arg(long, default_value_t = 8080)]
         port: u16,
-        /// Directory holding the built viewer bundle; defaults to `web/dist`.
+        /// Directory holding a built viewer bundle to serve instead of the one
+        /// embedded in this binary.
         #[arg(long)]
         assets: Option<PathBuf>,
     },

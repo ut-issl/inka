@@ -143,14 +143,20 @@ fn refuses_a_request_that_would_write() {
 }
 
 #[test]
-fn says_what_to_do_when_the_viewer_bundle_is_not_built() {
-    // The tests run from the crate directory, where no bundle exists.
+fn serves_the_viewer_or_says_how_to_get_one() {
+    // The bundle is embedded at build time when `web-dist/` exists (CI builds
+    // the Rust crates without it), so either answer is the right one as long
+    // as the server never leaves a visitor with a blank page.
     let server = Server::start("aocs");
 
     let (status, body) = server.get("/");
 
-    assert!(status.contains("503 Service Unavailable"), "{status}");
-    assert!(body.contains("npm run build"));
+    if status.contains("200 OK") {
+        assert!(body.to_ascii_lowercase().contains("<html"), "{body}");
+    } else {
+        assert!(status.contains("503 Service Unavailable"), "{status}");
+        assert!(body.contains("npm run build"), "{body}");
+    }
 }
 
 #[test]

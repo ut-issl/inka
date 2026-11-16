@@ -21,7 +21,8 @@ This document describes how to cut an inka release ([日本語](RELEASING.ja.md)
 
 A release is the tag `v<version>` and a [GitHub Release](https://github.com/ut-issl/inka/releases) on it, with these
 assets attached (each with a build provenance attestation, and all listed in `SHA256SUMS`). The binaries are
-`inka`, `inka-lsp`, `inka-evidence-rust` and `inka-evidence-merge`.
+`inka` (with the graph viewer built in, so `inka serve` needs nothing else), `inka-lsp`, `inka-evidence-rust` and
+`inka-evidence-merge`.
 
 | Asset | Contents |
 | --- | --- |
@@ -29,7 +30,6 @@ assets attached (each with a build provenance attestation, and all listed in `SH
 | `inka-vscode-v<version>-<platform>.vsix` | the VS Code extension with `inka-lsp` bundled, one per platform |
 | `inka_evidence-<version>-*.whl`, `inka_evidence-<version>.tar.gz` | the Python package `inka-evidence` and its sdist |
 | `inka-project-inka-evidence-<version>.tgz` | the npm package `@inka-project/inka-evidence` |
-| `inka-web-v<version>.tar.gz` | the graph viewer bundle for `inka serve --assets` |
 
 The platforms are x86_64 and aarch64 Linux (static musl binaries), x86_64 and aarch64 macOS, and x86_64 Windows.
 
