@@ -1,7 +1,7 @@
 # inka
 
 説明付きの承認プロセスによって論証化の構造化をするツール
-テキストベースかつLSP対応(予定)で、反復的な開発に適した設計
+テキストベースかつLSP対応で、反復的な開発に適した設計
 
 ## インストール
 
@@ -63,8 +63,9 @@ cargo install --locked --path crate/inka-cli
 inka export tests/fixtures/aocs > aocs.elements.json
 ```
 
-各ノードは id・discharge モード・namespace・展開済みの description・タグ・証拠ターゲット・期限を
-持ち，各辺は親から 1 つの子を指します。出力は決定的なので，実行ごとの差分がきれいに取れます。
+各ノードは id・discharge モード・namespace・展開済みの description・タグ・objective の根かどうか・
+証拠ターゲット・期限・付随するコメントを持ち，各辺は親から 1 つの子を指して，その子の項目に付いた
+コメントを持ちます。出力は決定的なので，実行ごとの差分がきれいに取れます。
 `check` を通らない論証は何も書き出しません。
 
 ### 3. グラフビューアをビルドする
@@ -115,6 +116,43 @@ inka init my-argument --phases BBM,EM,FM
 ディレクトリがなければ作成します。プロジェクト名は既定でディレクトリ名(`--name` で上書き)，
 `--phases` の先頭が現在のフェーズになります(既定は `M0` のみ)。`init` はファイルを追加するだけで，
 作成するファイルのどれかが既にあれば何も書かずに失敗します。
+
+### 6. 評価して承認する
+
+`check` が問うのは論証が正しい形をしているかで，`eval` が問うのはそれが今成り立っているかです。
+成立しているノードの数と，成立していない各ノードについてその理由を報告します。すべてのノードが成立
+しているときだけ終了コード 0 で終わり，`--json` を付けると同じ結果を他のツール向けに書き出します。
+
+```console
+inka eval my-argument
+```
+
+作ったばかりのプロジェクトは，まだ誰も承認していないので何も成立していません。`review` は判断を
+待っている対象を示し，それに対する判断を記録します。
+
+```console
+inka review --path my-argument --as alice --list
+inka review --path my-argument --as alice premise --approve
+inka review --path my-argument --as alice goal --decline --comment "state a real objective"
+```
+
+`--list` も対象も指定しなければ，`review` は待ち行列を対話的に順に巡ります。判断はすべて
+`approvals/<approver>.jsonl` に追記され，書き換えられることはありません。承認はそのとき示された内容に
+対するものなので，ブロックを編集するとその承認は古くなり，そのブロックの契約に依拠する親の承認も
+古くなります。承認が古くなったブロックは待ち行列に戻ります。
+
+### 7. 整形して編集する
+
+`fmt` はすべての論証ファイルを正準のレイアウトに書き換えます。`fmt --check` は変更されるファイルを
+列挙し，1 つでもあれば失敗するので CI に向いています。
+
+```console
+inka fmt my-argument
+```
+
+編集には [VS Code 拡張](editors/vscode/README.md) が `inka-lsp` を動かします。入力に追従する診断，
+ホバー，定義へ移動，参照の検索，リネーム，インレイヒント，承認状態のコードレンズ，そして `inka fmt`
+と全く同じ出力の整形を提供します。
 
 ### 次に読むもの
 

@@ -14,7 +14,7 @@
 
 ## 基盤
 
-- ビューアは共有の論証ビュー(Markdown レポートと同じ read-only 投影)を、`inka export`
+- ビューアは共有の論証ビュー(他のすべての出力と同じ read-only 投影)を、`inka export`
   の cytoscape `elements` JSON として描画する。論証をパースも変更もしない。
 - 厳密に read-only: UI 内のどこも、論証・承認・その他の状態を変える操作へリンクせず、
   発火もさせない。

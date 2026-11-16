@@ -65,7 +65,8 @@ no `{$var}` reaches the viewer.
 
 ### Delivery
 
-`inka serve` may deliver the payload either way; the viewer prefers the first:
+The viewer accepts the payload either way and prefers the first; `inka serve`
+uses the second, so the served bundle stays byte-for-byte what was built:
 
 1. **injected** into the served HTML, saving a round trip:
    `<script type="application/json" id="inka-elements">[ … ]</script>`;

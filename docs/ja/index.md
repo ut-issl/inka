@@ -11,8 +11,11 @@ inka は、設計論証を構造化されたレビュー可能なテキストと
 
 * [コンセプト](design/concept.md)
 * [確定仕様](design/spec.md)
+* [フォーマット](design/formatting.md)
 * [PoC 実装方針](design/poc-plan.md)
 * [全体実装方針](design/full-plan.md)
+* [テスト証拠](design/test-evidence.md)
+* [Web UI](design/web-ui.md)
 * [未決事項](design/open-questions.md)
 
 ## リンク
