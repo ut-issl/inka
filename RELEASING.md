@@ -40,7 +40,7 @@ The same assets are then published to the registries, each from its own GitHub e
 | [crates.io](https://crates.io) | `inka-core`, `inka-evidence`, `inka-cli`, `inka-lsp`, `inka-evidence-rust` | `crates-io` | Trusted Publishing (OIDC) |
 | [PyPI](https://pypi.org) | `inka-evidence` | `pypi` | Trusted Publishing (OIDC) |
 | [npm](https://www.npmjs.com) | `@ut-issl/inka-evidence` | `npm` | Trusted Publishing (OIDC) |
-| [VS Code Marketplace](https://marketplace.visualstudio.com) | `ut-issl.inka-vscode` | `vscode-marketplace` | `VSCE_PAT` secret |
+| [VS Code Marketplace](https://marketplace.visualstudio.com) | `ut-issl.inka-vscode` | `vscode-marketplace` | Trusted Publishing (OIDC) |
 | [Open VSX](https://open-vsx.org) | `ut-issl.inka-vscode` | `open-vsx` | `OVSX_PAT` secret |
 
 The binding crates `inka-evidence-py` and `inka-evidence-wasm` are not published to crates.io (`publish = false`);
@@ -66,9 +66,10 @@ while the rest of the release goes through; see [Fixing a release](#fixing-a-rel
    the scope), because a trusted publisher can only be configured on an existing package. Then, in the package's
    Settings, add a Trusted Publisher for `ut-issl/inka`, workflow `release.yaml`, environment `npm`.
 5. **VS Code Marketplace.** Create the publisher `ut-issl` in the
-   [Marketplace publisher management](https://marketplace.visualstudio.com/manage), then create an Azure DevOps
-   Personal Access Token with the *Marketplace (Manage)* scope and store it as the secret `VSCE_PAT` of the
-   `vscode-marketplace` environment. Tokens expire; renew them before they do.
+   [Marketplace publisher management](https://marketplace.visualstudio.com/manage) (a personal Microsoft account
+   suffices; no Azure DevOps organization or token is needed). On the publisher's *Trusted Publishing* tab, create a
+   policy with repository owner `ut-issl`, repository `inka`, workflow `release.yaml`, environment
+   `vscode-marketplace`. Add other maintainers under *Members*, so the publisher does not rest on one account.
 6. **Open VSX.** Sign in to [open-vsx.org](https://open-vsx.org) with GitHub and create the namespace `ut-issl`, claiming
    its ownership through the [publisher agreement](https://github.com/EclipseFdn/open-vsx.org/wiki/Namespace-Access).
    Then create an access token and store it as the secret `OVSX_PAT` of the `open-vsx` environment.
@@ -130,7 +131,7 @@ A published tag is never moved. If a release turns out to be broken, fix the pro
 release. Edit the notes of an existing GitHub Release on GitHub directly when only the text is wrong, and update the
 matching `CHANGELOG` sections in a pull request.
 
-If a registry job failed (a trusted publisher not yet configured, an expired token, a registry outage), fix the cause
-and use *Re-run failed jobs* on the same workflow run: the GitHub Release and the other registries are left as they
-are, and the failed job publishes the assets that run built. Publishing to a registry cannot be undone, so never re-run
+If a registry job failed (a trusted publisher not yet configured, an expired Open VSX token, a registry outage), fix
+the cause and use *Re-run failed jobs* on the same workflow run: the GitHub Release and the other registries are left
+as they are, and the failed job publishes the assets that run built. Publishing to a registry cannot be undone, so never re-run
 the whole workflow for a version that is already out.

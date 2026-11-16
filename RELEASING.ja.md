@@ -41,7 +41,7 @@
 | [crates.io](https://crates.io) | `inka-core`，`inka-evidence`，`inka-cli`，`inka-lsp`，`inka-evidence-rust` | `crates-io` | Trusted Publishing(OIDC) |
 | [PyPI](https://pypi.org) | `inka-evidence` | `pypi` | Trusted Publishing(OIDC) |
 | [npm](https://www.npmjs.com) | `@ut-issl/inka-evidence` | `npm` | Trusted Publishing(OIDC) |
-| [VS Code Marketplace](https://marketplace.visualstudio.com) | `ut-issl.inka-vscode` | `vscode-marketplace` | secret `VSCE_PAT` |
+| [VS Code Marketplace](https://marketplace.visualstudio.com) | `ut-issl.inka-vscode` | `vscode-marketplace` | Trusted Publishing(OIDC) |
 | [Open VSX](https://open-vsx.org) | `ut-issl.inka-vscode` | `open-vsx` | secret `OVSX_PAT` |
 
 バインディングのクレート `inka-evidence-py` と `inka-evidence-wasm` は crates.io には公開しません(`publish = false`)。
@@ -67,8 +67,10 @@
    存在するパッケージにしか設定できないためです。その後，パッケージの Settings で `ut-issl/inka`，ワークフロー
    `release.yaml`，environment `npm` の Trusted Publisher を追加します。
 5. **VS Code Marketplace。** [Marketplace の publisher 管理](https://marketplace.visualstudio.com/manage) で publisher
-   `ut-issl` を作り，*Marketplace (Manage)* スコープの Azure DevOps Personal Access Token を作って，`vscode-marketplace`
-   environment の secret `VSCE_PAT` に保存します。トークンには期限があるので，切れる前に更新してください。
+   `ut-issl` を作ります(個人の Microsoft アカウントで十分で，Azure DevOps の組織やトークンは不要です)。publisher の
+   *Trusted Publishing* タブで，Repository owner `ut-issl`，Repository `inka`，Workflow `release.yaml`，Environment
+   `vscode-marketplace` のポリシーを作ります。publisher が 1 つのアカウントに依らないよう，*Members* に他の保守者も
+   加えてください。
 6. **Open VSX。** [open-vsx.org](https://open-vsx.org) に GitHub でサインインし，namespace `ut-issl` を作って
    [publisher agreement](https://github.com/EclipseFdn/open-vsx.org/wiki/Namespace-Access) に従って所有権を申請し，
    アクセストークンを作って `open-vsx` environment の secret `OVSX_PAT` に保存します。
@@ -128,7 +130,7 @@ GitHub Release ができた後，各レジストリの job が並行して走り
 文面だけが間違っているときは GitHub 上で GitHub Release の本文を直接編集し，対応する `CHANGELOG` の節はプルリクエストで
 直します。
 
-レジストリの job が失敗したとき(Trusted Publisher が未設定，トークンの期限切れ，レジストリの障害など)は，原因を直してから
+レジストリの job が失敗したとき(Trusted Publisher が未設定，Open VSX のトークンの期限切れ，レジストリの障害など)は，原因を直してから
 同じ実行で *Re-run failed jobs* を使います。GitHub Release と他のレジストリはそのまま残り，失敗した job だけがその実行で
 ビルドした成果物を公開します。レジストリへの公開は取り消せないので，公開済みのバージョンに対してワークフロー全体を再実行
 してはいけません。
