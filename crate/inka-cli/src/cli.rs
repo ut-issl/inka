@@ -23,6 +23,20 @@ pub struct Cli {
 /// A top-level `inka` subcommand.
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Create a new project: a manifest, a values file, and a starter
+    /// argument that `inka check` accepts as it stands.
+    Init {
+        /// Directory to initialise, created if missing; defaults to the
+        /// current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// The project name; defaults to the directory's name.
+        #[arg(long, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+        name: Option<String>,
+        /// The phases in order, comma-separated; the first is the current one.
+        #[arg(long, value_delimiter = ',', num_args = 1.., default_value = "M0")]
+        phases: Vec<String>,
+    },
     /// Load a project and report every structural problem in its argument.
     Check {
         /// Project directory holding `inka.toml`; defaults to the current

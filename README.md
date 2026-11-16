@@ -99,6 +99,21 @@ not published to the network), and `--assets <DIR>` if the bundle is somewhere o
 `web/dist`. Without a bundle the server still answers `GET /elements.json`, which is the same JSON
 step 2 writes.
 
+### 5. Start your own project
+
+`init` lays out a new project: an `inka.toml`, an empty `values.toml`, and a starter argument in
+`argument/objective.inka` — an objective resting on one fiat, which `check` and `fmt --check` accept
+as it stands.
+
+```console
+inka init my-argument --phases BBM,EM,FM
+```
+
+The directory is created if it is missing. The name defaults to the directory's name (`--name`
+overrides it), and the first of `--phases` becomes the current phase (`M0` alone by default).
+`init` only ever adds files: it fails without writing anything when any file it would create already
+exists.
+
 ### Next
 
 - [`docs/`](docs/en/index.md) — the concept, the specification, and the design of each output

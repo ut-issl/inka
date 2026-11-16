@@ -5,6 +5,7 @@ mod cli;
 mod eval;
 mod export;
 mod fmt;
+mod init;
 mod load;
 mod render;
 mod review;
@@ -37,6 +38,10 @@ fn run(cli: Cli) -> io::Result<Outcome> {
     let no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
     let color_choice = cli.color;
     match cli.command {
+        Command::Init { path, name, phases } => {
+            let color = color_choice.resolve(no_color, io::stderr().is_terminal());
+            run_init(&path, &init::Options { name, phases }, color)
+        }
         Command::Check { path } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());
             // ariadne emits a report as many small writes and stderr is
@@ -135,4 +140,14 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             Ok(outcome)
         }
     }
+}
+
+/// Runs `inka init`, listing the created paths on standard output.
+fn run_init(path: &std::path::Path, options: &init::Options, color: bool) -> io::Result<Outcome> {
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let mut err = io::BufWriter::new(io::stderr().lock());
+    let outcome = init::run(path, options, &mut out, &mut err, color)?;
+    err.flush()?;
+    out.flush()?;
+    Ok(outcome)
 }
