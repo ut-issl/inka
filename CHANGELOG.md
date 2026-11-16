@@ -5,6 +5,15 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.5
+
+This release changes nothing in inka itself and fixes how the release workflow publishes the crates.
+
+### Distribution
+
+- The crates are published to crates.io, which v0.0.4 failed to do, so `cargo install inka-cli` embeds the viewer.
+- A dry run of the release workflow rehearses the crates.io publish with `cargo publish --dry-run`.
+
 ## v0.0.4
 
 This release builds the graph viewer into `inka`, so `inka serve` works without downloading anything else.
@@ -19,6 +28,7 @@ This release builds the graph viewer into `inka`, so `inka serve` works without 
 
 - The web viewer bundle `inka-web-<version>.tar.gz` is no longer attached to the GitHub Release.
 - The npm package is staged on npm by the release workflow and made public when a maintainer approves it.
+- The crates were not published to crates.io; v0.0.5 publishes them.
 
 ## v0.0.3
 

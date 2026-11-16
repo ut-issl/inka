@@ -5,6 +5,15 @@ inka のリリースノートです([English](CHANGELOG.md))。
 GitHub Release では改行がそのまま残るので，1 文ごとに改行してください。
 リリースの手順は [RELEASING.ja.md](RELEASING.ja.md) を参照してください。
 
+## v0.0.5
+
+inka 自体には変更がなく，リリースワークフローによるクレートの公開を直すリリースです。
+
+### 配布
+
+- v0.0.4 では公開に失敗したクレートを crates.io に公開するので，`cargo install inka-cli` でもビューアが組み込まれます。
+- リリースワークフローの dry run で，crates.io への公開を `cargo publish --dry-run` で予行するようになりました。
+
 ## v0.0.4
 
 グラフビューアを `inka` に組み込み，ほかに何もダウンロードせずに `inka serve` を使えるようにするリリースです。
@@ -19,6 +28,7 @@ GitHub Release では改行がそのまま残るので，1 文ごとに改行し
 
 - web ビューアのバンドル `inka-web-<version>.tar.gz` は GitHub Release に添付しなくなりました。
 - npm パッケージは，リリースワークフローが npm にステージし，メンテナが承認した時点で公開されます。
+- クレートは crates.io に公開されませんでした。v0.0.5 で公開します。
 
 ## v0.0.3
 
