@@ -40,7 +40,7 @@
 | --- | --- | --- | --- |
 | [crates.io](https://crates.io) | `inka-core`，`inka-evidence`，`inka-cli`，`inka-lsp`，`inka-evidence-rust` | `crates-io` | Trusted Publishing(OIDC) |
 | [PyPI](https://pypi.org) | `inka-evidence` | `pypi` | Trusted Publishing(OIDC) |
-| [npm](https://www.npmjs.com) | `@inka-project/inka-evidence` | `npm` | Trusted Publishing(OIDC) |
+| [npm](https://www.npmjs.com) | `@inka-project/inka-evidence` | `npm` | Trusted Publishing(OIDC)，ステージ公開 |
 | [VS Code Marketplace](https://marketplace.visualstudio.com) | `inka-project.inka-vscode` | `vscode-marketplace` | Trusted Publishing(OIDC) |
 | [Open VSX](https://open-vsx.org) | `inka-project.inka-vscode` | `open-vsx` | secret `OVSX_PAT` |
 
@@ -69,7 +69,9 @@ GitHub organization から独立させています。Trusted Publisher はリポ
 4. **npm。** `inka-project` organization がなければ作ります。`@inka-project/inka-evidence` の最初のバージョンは手動で公開する必要が
    あります(GitHub Release の tarball を，そのスコープにパッケージを作れるアカウントで `npm publish`)。Trusted Publisher は
    存在するパッケージにしか設定できないためです。その後，パッケージの Settings で `ut-issl/inka`，ワークフロー
-   `release.yaml`，environment `npm` の Trusted Publisher を追加します。
+   `release.yaml`，environment `npm` の Trusted Publisher を追加します。許可する操作は `npm stage publish` だけにします。
+   ワークフローは各バージョンをステージするだけで，公開は保守者が行う(手順の 4)ので，自動化だけで公開されることは
+   ありません。*Publishing access* は「2 要素認証を必須にし，トークンを禁止する」設定にします。
 5. **VS Code Marketplace。** [Marketplace の publisher 管理](https://marketplace.visualstudio.com/manage) で publisher
    `inka-project` を作ります(個人の Microsoft アカウントで十分で，Azure DevOps の組織やトークンは不要です)。publisher の
    *Trusted Publishing* タブで，Repository owner `ut-issl`，Repository `inka`，Workflow `release.yaml`，Environment
@@ -127,6 +129,17 @@ GitHub Release ができた後，各レジストリの job が並行して走り
 [GitHub Release](https://github.com/ut-issl/inka/releases) のタイトルが `v<version>` で，本文が `CHANGELOG.md` の
 内容になっており，上の表の成果物がすべて添付され，最新リリース(Latest)になっていることを確認します。続いて，各レジストリ
 にそのバージョンが現れていることを確認します。
+
+npm ではバージョンはステージされただけで，まだ公開されていません。npm アカウントに 2FA を設定した保守者が，npmjs.com の
+パッケージページの *Staged packages* タブか，ログイン済みのマシンから承認します。
+
+```console
+npm stage list @inka-project/inka-evidence
+npm stage view <stage-id>       # tarball を確かめるなら `npm stage download <stage-id>`
+npm stage approve <stage-id>    # 取り下げるなら `npm stage reject <stage-id>`
+```
+
+承認するまで `npm install @inka-project/inka-evidence@<version>` は解決しません。
 
 ## リリースを直すとき
 

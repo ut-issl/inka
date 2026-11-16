@@ -14,6 +14,8 @@
 #   publishes the packages to crates.io, PyPI, npm, the VS Code Marketplace
 #   and Open VSX. The GitHub Release exists before any registry is touched,
 #   so a registry that refuses can be retried with "Re-run failed jobs".
+#   On npm the version is only staged: a maintainer approves it with 2FA
+#   (RELEASING.md), which is what makes it installable.
 #
 # Release assets (<v> is the version, <target> a Rust target triple):
 #
@@ -593,7 +595,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   publish-npm:
-    name: Publish to npm
+    name: Stage on npm
     needs: [plan, release]
     if: ${{ inputs.mode == 'release' }}
     runs-on: ubuntu-latest
@@ -607,7 +609,7 @@ jobs:
 
     steps:
       - name: Set up Node.js
-        # npm 11.5 or later publishes with the OIDC token of this job.
+        # npm 11.15 or later stages with the OIDC token of this job.
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
@@ -618,12 +620,14 @@ jobs:
           name: release-asset-npm
           path: package
 
-      - name: Publish the package
-        # The explicit ./ keeps npm from reading `package/<name>.tgz` as a
-        # GitHub `owner/repo` shorthand.
+      - name: Stage the package
+        # Staged, not published: the trusted publisher is allowed `npm stage
+        # publish` only, and a maintainer approves the staged version with
+        # 2FA. The explicit ./ keeps npm from reading `package/<name>.tgz` as
+        # a GitHub `owner/repo` shorthand.
         run: |
           npm --version
-          npm publish ./package/*.tgz --access public
+          npm stage publish ./package/*.tgz --access public
 
   publish-vscode-marketplace:
     name: Publish to the VS Code Marketplace
