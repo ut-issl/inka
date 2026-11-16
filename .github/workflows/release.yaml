@@ -619,9 +619,11 @@ jobs:
           path: package
 
       - name: Publish the package
+        # The explicit ./ keeps npm from reading `package/<name>.tgz` as a
+        # GitHub `owner/repo` shorthand.
         run: |
           npm --version
-          npm publish package/*.tgz --access public
+          npm publish ./package/*.tgz --access public
 
   publish-vscode-marketplace:
     name: Publish to the VS Code Marketplace
@@ -696,6 +698,12 @@ jobs:
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         working-directory: editors/vscode
+        # Without a token ovsx prompts for one and the job hangs until the
+        # prompt is force-closed, so an absent secret fails up front instead.
         run: |
+          if [ -z "${OVSX_PAT}" ]; then
+            echo "::error title=Open VSX::The OVSX_PAT secret of the open-vsx environment is not set; see RELEASING.md."
+            exit 1
+          fi
           npm ci
           npx ovsx publish --skip-duplicate --packagePath ../../vsix/*.vsix
