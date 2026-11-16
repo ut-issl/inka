@@ -5,6 +5,31 @@ inka のリリースノートです([English](CHANGELOG.md))。
 GitHub Release では改行がそのまま残るので，1 文ごとに改行してください。
 リリースの手順は [RELEASING.ja.md](RELEASING.ja.md) を参照してください。
 
+## v0.0.2
+
+`inka init` を追加し，初めて各パッケージをレジストリに公開するリリースです。
+
+### コマンドライン(`inka`)
+
+- `inka init [PATH]` は新しいプロジェクトの雛形として，`inka.toml`，空の `values.toml`，最初の論証を書き出します。
+- 書き出したプロジェクトは，そのまま `inka check` と `inka fmt --check` を通ります。
+- プロジェクト名の既定はディレクトリ名で，`--name` で変えられます。
+- `--phases` は `phases.order` を設定し，その最初の項目が `phases.current` になります(既定は `M0`)。
+- `inka init` はファイルを追加するだけで，既存のプロジェクトを上書きすることはありません。
+
+### 配布
+
+- GitHub Release に，x86_64 と aarch64 の Linux(musl)，x86_64 と aarch64 の macOS，x86_64 の Windows 向けのビルド済みバイナリを添付するようになりました。
+- プラットフォームごとの VS Code 拡張，Python の wheel と sdist，npm パッケージ，`inka serve --assets` 用の web ビューアのバンドルも添付します。
+- すべての成果物にビルド来歴の attestation が付き，`SHA256SUMS` に載ります。
+- クレートを crates.io に，`inka-evidence` を PyPI に，`@inka-project/inka-evidence` を npm に公開します。
+- VS Code 拡張を `inka-project.inka-vscode` として VS Code Marketplace と Open VSX に公開します。
+- VS Code 拡張は `inka-lsp` を同梱し，`PATH` 上のものより先にそれを使います。
+
+### 互換性を壊す変更
+
+- npm パッケージの名前を `@ut-issl/inka-evidence` から `@inka-project/inka-evidence` に変えました。
+
 ## v0.0.1
 
 inka の最初のリリースです。inka は，設計の論証を構造化された査読可能な主張として書くためのテキスト DSL です。
