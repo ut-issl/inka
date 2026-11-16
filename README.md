@@ -63,8 +63,9 @@ the built-in UI is never the only way to read an argument.
 inka export tests/fixtures/aocs > aocs.elements.json
 ```
 
-Each node carries its id, discharge mode, namespace, interpolated description, tags, evidence
-target and deadline; each edge points from a parent to one child. The output is deterministic, so
+Each node carries its id, discharge mode, namespace, interpolated description, tags, whether it is
+an objective root, evidence target, deadline and attached comments; each edge points from a parent
+to one child and carries that child entry's comment. The output is deterministic, so
 it diffs cleanly between runs. An argument that fails `check` exports nothing.
 
 ### 3. Build the graph viewer
@@ -117,6 +118,43 @@ The directory is created if it is missing. The name defaults to the directory's 
 overrides it), and the first of `--phases` becomes the current phase (`M0` alone by default).
 `init` only ever adds files: it fails without writing anything when any file it would create already
 exists.
+
+### 6. Evaluate and approve
+
+`check` asks whether the argument is well-formed; `eval` asks whether it currently holds. It
+reports how many nodes are established and, for each one that is not, why not. It exits 0 only when
+every node is established, and `--json` writes the same result for other tools.
+
+```console
+inka eval my-argument
+```
+
+A fresh project establishes nothing, because no one has approved it yet. `review` shows the targets
+waiting for a decision and records decisions on them:
+
+```console
+inka review --path my-argument --as alice --list
+inka review --path my-argument --as alice premise --approve
+inka review --path my-argument --as alice goal --decline --comment "state a real objective"
+```
+
+Without `--list` or a target, `review` walks the queue interactively. Every decision is appended to
+`approvals/<approver>.jsonl` and nothing is ever rewritten. An approval covers the content it was
+given for, so editing a block makes its approval stale, and its parents' too, since they rest on its
+contract. Each block with a stale approval goes back in the queue.
+
+### 7. Format and edit
+
+`fmt` rewrites every argument file in the canonical layout, and `fmt --check` lists the files it
+would change and fails if there is one, which suits CI.
+
+```console
+inka fmt my-argument
+```
+
+For editing, the [VS Code extension](editors/vscode/README.md) runs `inka-lsp`. It gives diagnostics
+as you type, hover, go to definition, find references, rename, inlay hints, approval code lenses,
+and formatting with exactly the output of `inka fmt`.
 
 ### Next
 

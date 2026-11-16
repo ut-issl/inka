@@ -15,8 +15,8 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
 
 ## Foundation
 
-- The viewer renders the shared argument view — the same read-only projection the
-  Markdown report uses — as cytoscape `elements` JSON from `inka export`. It never
+- The viewer renders the shared argument view — the same read-only projection every
+  other output is built on — as cytoscape `elements` JSON from `inka export`. It never
   parses or mutates the argument.
 - It is strictly read-only: nothing in the UI links to, or triggers, an action
   that changes the argument, approvals, or any other state.

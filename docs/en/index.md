@@ -11,8 +11,11 @@ inka is a DSL for writing design arguments as structured, reviewable text.
 
 * [Concept](design/concept.md)
 * [Specification](design/spec.md)
+* [Formatting](design/formatting.md)
 * [PoC Plan](design/poc-plan.md)
 * [Full Plan](design/full-plan.md)
+* [Test Evidence](design/test-evidence.md)
+* [Web UI](design/web-ui.md)
 * [Open Questions](design/open-questions.md)
 
 ## Links
