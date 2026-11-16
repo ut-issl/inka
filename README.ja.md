@@ -98,6 +98,20 @@ inka serve tests/fixtures/aocs
 公開しない)，`--assets <DIR>`(バンドルが `web/dist` 以外にある場合)。バンドルが無くても
 `GET /elements.json` は応答し，これは手順 2 と同じ JSON です。
 
+### 5. 自分のプロジェクトを始める
+
+`init` は新しいプロジェクトの雛形を作ります。`inka.toml`，空の `values.toml`，そして
+`argument/objective.inka` の最初の論証(fiat を 1 つ子に持つ objective)で，そのままで `check` と
+`fmt --check` を通ります。
+
+```console
+inka init my-argument --phases BBM,EM,FM
+```
+
+ディレクトリがなければ作成します。プロジェクト名は既定でディレクトリ名(`--name` で上書き)，
+`--phases` の先頭が現在のフェーズになります(既定は `M0` のみ)。`init` はファイルを追加するだけで，
+作成するファイルのどれかが既にあれば何も書かずに失敗します。
+
 ### 次に読むもの
 
 - [`docs/`](docs/ja/index.md) — 概念，仕様，各出力の設計
