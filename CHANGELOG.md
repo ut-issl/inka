@@ -5,6 +5,15 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.3
+
+This release changes nothing in inka itself and fixes how the release workflow publishes the packages.
+
+### Distribution
+
+- The npm package `@inka-project/inka-evidence` is published to npm, which v0.0.2 failed to do.
+- Publishing to Open VSX now fails at once with an error when the `OVSX_PAT` secret is not set, instead of waiting for a token prompt.
+
 ## v0.0.2
 
 This release adds `inka init` and is the first to publish the packages to their registries.
