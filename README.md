@@ -11,14 +11,14 @@ aarch64 Linux, x86_64 and aarch64 macOS, and x86_64 Windows.
   `inka-lsp`, `inka-evidence-rust` and `inka-evidence-merge` on your `PATH`. With a Rust toolchain,
   `cargo binstall inka-cli` fetches the same archive, and `cargo install --locked inka-cli` (or `inka-lsp`,
   `inka-evidence-rust`) builds from [crates.io](https://crates.io/crates/inka-cli).
-- **VS Code.** Install `ut-issl.inka-vscode` from the
-  [Marketplace](https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode) or
-  [Open VSX](https://open-vsx.org/extension/ut-issl/inka-vscode); it bundles `inka-lsp`. The release also carries the
+- **VS Code.** Install `inka-project.inka-vscode` from the
+  [Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode) or
+  [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode); it bundles `inka-lsp`. The release also carries the
   `.vsix` for *Install from VSIX…*.
 - **Graph viewer.** `inka serve` looks for the viewer bundle in `web/dist`; outside a checkout, extract
   `inka-web-v<version>.tar.gz` from the release and pass the directory with `--assets`.
 - **Test evidence adapters.** `pip install inka-evidence` (pytest, [PyPI](https://pypi.org/project/inka-evidence/)) and
-  `npm install --save-dev @ut-issl/inka-evidence` (Vitest, [npm](https://www.npmjs.com/package/@ut-issl/inka-evidence));
+  `npm install --save-dev @inka-project/inka-evidence` (Vitest, [npm](https://www.npmjs.com/package/@inka-project/inka-evidence));
   the Rust adapter `inka-evidence-rust` is in the command-line archive.
 
 `SHA256SUMS` on the release lists every asset, and each asset carries a GitHub build provenance attestation

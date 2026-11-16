@@ -1,4 +1,4 @@
-# @ut-issl/inka-evidence
+# @inka-project/inka-evidence
 
 The JavaScript/TypeScript binding of the shared [inka test
 evidence](https://github.com/ut-issl/inka/blob/main/docs/en/design/test-evidence.md) emission layer (a wasm
@@ -9,10 +9,10 @@ package never restates the wire schema.
 ## Install
 
 ```console
-npm install --save-dev @ut-issl/inka-evidence
+npm install --save-dev @inka-project/inka-evidence
 ```
 
-The package is on [npm](https://www.npmjs.com/package/@ut-issl/inka-evidence)
+The package is on [npm](https://www.npmjs.com/package/@inka-project/inka-evidence)
 and its tarball is attached to every
 [GitHub Release](https://github.com/ut-issl/inka/releases). It ships the
 wasm module, so no Rust toolchain is needed.
@@ -20,7 +20,7 @@ wasm module, so no Rust toolchain is needed.
 ## Emission API
 
 ```js
-const { EvidenceBuilder } = require("@ut-issl/inka-evidence");
+const { EvidenceBuilder } = require("@inka-project/inka-evidence");
 
 const builder = new EvidenceBuilder();
 builder.capsulaRunId(process.env.CAPSULA_RUN_ID);
@@ -32,7 +32,7 @@ const text = builder.finish();
 
 ## Vitest adapter
 
-A custom reporter exported as `@ut-issl/inka-evidence/vitest`. Task
+A custom reporter exported as `@inka-project/inka-evidence/vitest`. Task
 locations must be enabled so contract bodies can be sliced from source:
 
 ```ts
@@ -42,7 +42,7 @@ export default defineConfig({
     reporters: [
       ["default"],
       [
-        "@ut-issl/inka-evidence/vitest",
+        "@inka-project/inka-evidence/vitest",
         { output: "evidence.json", provenance: { source_revision: "..." } },
       ],
     ],

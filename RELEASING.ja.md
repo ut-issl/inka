@@ -28,7 +28,7 @@
 | `inka-v<version>-<target>.tar.gz`(Windows は `.zip`) | 1 プラットフォーム分の 4 つのバイナリ |
 | `inka-vscode-v<version>-<platform>.vsix` | `inka-lsp` を同梱した VS Code 拡張。プラットフォームごとに 1 つ |
 | `inka_evidence-<version>-*.whl`，`inka_evidence-<version>.tar.gz` | Python パッケージ `inka-evidence` とその sdist |
-| `ut-issl-inka-evidence-<version>.tgz` | npm パッケージ `@ut-issl/inka-evidence` |
+| `inka-project-inka-evidence-<version>.tgz` | npm パッケージ `@inka-project/inka-evidence` |
 | `inka-web-v<version>.tar.gz` | `inka serve --assets` に渡すグラフビューアのバンドル |
 
 プラットフォームは x86_64 と aarch64 の Linux(musl の静的バイナリ)，x86_64 と aarch64 の macOS，x86_64 の Windows
@@ -40,12 +40,16 @@
 | --- | --- | --- | --- |
 | [crates.io](https://crates.io) | `inka-core`，`inka-evidence`，`inka-cli`，`inka-lsp`，`inka-evidence-rust` | `crates-io` | Trusted Publishing(OIDC) |
 | [PyPI](https://pypi.org) | `inka-evidence` | `pypi` | Trusted Publishing(OIDC) |
-| [npm](https://www.npmjs.com) | `@ut-issl/inka-evidence` | `npm` | Trusted Publishing(OIDC) |
-| [VS Code Marketplace](https://marketplace.visualstudio.com) | `ut-issl.inka-vscode` | `vscode-marketplace` | Trusted Publishing(OIDC) |
-| [Open VSX](https://open-vsx.org) | `ut-issl.inka-vscode` | `open-vsx` | secret `OVSX_PAT` |
+| [npm](https://www.npmjs.com) | `@inka-project/inka-evidence` | `npm` | Trusted Publishing(OIDC) |
+| [VS Code Marketplace](https://marketplace.visualstudio.com) | `inka-project.inka-vscode` | `vscode-marketplace` | Trusted Publishing(OIDC) |
+| [Open VSX](https://open-vsx.org) | `inka-project.inka-vscode` | `open-vsx` | secret `OVSX_PAT` |
 
 バインディングのクレート `inka-evidence-py` と `inka-evidence-wasm` は crates.io には公開しません(`publish = false`)。
 これらは Python パッケージと npm パッケージとして利用者に届きます。
+
+公開名(npm のスコープ，Marketplace の publisher，Open VSX の namespace としての `inka-project`)は，意図的にリポジトリの
+GitHub organization から独立させています。Trusted Publisher はリポジトリに結び付いているので，リポジトリを移すときは
+それらを更新するだけで，パッケージ名を変える必要はありません。
 
 ## 初回だけの準備
 
@@ -62,16 +66,16 @@
    依らないよう，organization の GitHub team を owner に加えることを検討してください。
 3. **PyPI。** プロジェクト `inka-evidence` の *pending* Trusted Publisher(owner `ut-issl`，repository `inka`，workflow
    `release.yaml`，environment `pypi`)を追加します。最初のリリースがプロジェクトを作ります。
-4. **npm。** `ut-issl` organization がなければ作ります。`@ut-issl/inka-evidence` の最初のバージョンは手動で公開する必要が
+4. **npm。** `inka-project` organization がなければ作ります。`@inka-project/inka-evidence` の最初のバージョンは手動で公開する必要が
    あります(GitHub Release の tarball を，そのスコープにパッケージを作れるアカウントで `npm publish`)。Trusted Publisher は
    存在するパッケージにしか設定できないためです。その後，パッケージの Settings で `ut-issl/inka`，ワークフロー
    `release.yaml`，environment `npm` の Trusted Publisher を追加します。
 5. **VS Code Marketplace。** [Marketplace の publisher 管理](https://marketplace.visualstudio.com/manage) で publisher
-   `ut-issl` を作ります(個人の Microsoft アカウントで十分で，Azure DevOps の組織やトークンは不要です)。publisher の
+   `inka-project` を作ります(個人の Microsoft アカウントで十分で，Azure DevOps の組織やトークンは不要です)。publisher の
    *Trusted Publishing* タブで，Repository owner `ut-issl`，Repository `inka`，Workflow `release.yaml`，Environment
    `vscode-marketplace` のポリシーを作ります。publisher が 1 つのアカウントに依らないよう，*Members* に他の保守者も
    加えてください。
-6. **Open VSX。** [open-vsx.org](https://open-vsx.org) に GitHub でサインインし，namespace `ut-issl` を作って
+6. **Open VSX。** [open-vsx.org](https://open-vsx.org) に GitHub でサインインし，namespace `inka-project` を作って
    [publisher agreement](https://github.com/EclipseFdn/open-vsx.org/wiki/Namespace-Access) に従って所有権を申請し，
    アクセストークンを作って `open-vsx` environment の secret `OVSX_PAT` に保存します。
 

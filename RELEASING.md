@@ -28,7 +28,7 @@ assets attached (each with a build provenance attestation, and all listed in `SH
 | `inka-v<version>-<target>.tar.gz` (`.zip` on Windows) | the four binaries for one platform |
 | `inka-vscode-v<version>-<platform>.vsix` | the VS Code extension with `inka-lsp` bundled, one per platform |
 | `inka_evidence-<version>-*.whl`, `inka_evidence-<version>.tar.gz` | the Python package `inka-evidence` and its sdist |
-| `ut-issl-inka-evidence-<version>.tgz` | the npm package `@ut-issl/inka-evidence` |
+| `inka-project-inka-evidence-<version>.tgz` | the npm package `@inka-project/inka-evidence` |
 | `inka-web-v<version>.tar.gz` | the graph viewer bundle for `inka serve --assets` |
 
 The platforms are x86_64 and aarch64 Linux (static musl binaries), x86_64 and aarch64 macOS, and x86_64 Windows.
@@ -39,12 +39,16 @@ The same assets are then published to the registries, each from its own GitHub e
 | --- | --- | --- | --- |
 | [crates.io](https://crates.io) | `inka-core`, `inka-evidence`, `inka-cli`, `inka-lsp`, `inka-evidence-rust` | `crates-io` | Trusted Publishing (OIDC) |
 | [PyPI](https://pypi.org) | `inka-evidence` | `pypi` | Trusted Publishing (OIDC) |
-| [npm](https://www.npmjs.com) | `@ut-issl/inka-evidence` | `npm` | Trusted Publishing (OIDC) |
-| [VS Code Marketplace](https://marketplace.visualstudio.com) | `ut-issl.inka-vscode` | `vscode-marketplace` | Trusted Publishing (OIDC) |
-| [Open VSX](https://open-vsx.org) | `ut-issl.inka-vscode` | `open-vsx` | `OVSX_PAT` secret |
+| [npm](https://www.npmjs.com) | `@inka-project/inka-evidence` | `npm` | Trusted Publishing (OIDC) |
+| [VS Code Marketplace](https://marketplace.visualstudio.com) | `inka-project.inka-vscode` | `vscode-marketplace` | Trusted Publishing (OIDC) |
+| [Open VSX](https://open-vsx.org) | `inka-project.inka-vscode` | `open-vsx` | `OVSX_PAT` secret |
 
 The binding crates `inka-evidence-py` and `inka-evidence-wasm` are not published to crates.io (`publish = false`);
 they reach users as the Python and npm packages.
+
+The published names (`inka-project` as the npm scope, the Marketplace publisher and the Open VSX namespace) are
+deliberately independent of the repository's GitHub organization: the trusted publishers are bound to the repository,
+so moving the repository means updating them, never renaming a package.
 
 ## One-time setup
 
@@ -61,16 +65,17 @@ while the rest of the release goes through; see [Fixing a release](#fixing-a-rel
    `crates-io`. Consider adding a GitHub team of the organization as an owner, so ownership does not rest on one person.
 3. **PyPI.** Add a *pending* Trusted Publisher for the project `inka-evidence` (owner `ut-issl`, repository `inka`,
    workflow `release.yaml`, environment `pypi`). The first release creates the project.
-4. **npm.** Create the `ut-issl` organization if it does not exist. The first version of `@ut-issl/inka-evidence` must be
-   published by hand (`npm publish` of the tarball from the GitHub Release, with an account that may create packages in
-   the scope), because a trusted publisher can only be configured on an existing package. Then, in the package's
-   Settings, add a Trusted Publisher for `ut-issl/inka`, workflow `release.yaml`, environment `npm`.
-5. **VS Code Marketplace.** Create the publisher `ut-issl` in the
+4. **npm.** Create the `inka-project` organization if it does not exist. The first version of
+   `@inka-project/inka-evidence` must be published by hand (`npm publish` of the tarball from the GitHub Release, with
+   an account that may create packages in the scope), because a trusted publisher can only be configured on an
+   existing package. Then, in the package's Settings, add a Trusted Publisher for `ut-issl/inka`, workflow
+   `release.yaml`, environment `npm`.
+5. **VS Code Marketplace.** Create the publisher `inka-project` in the
    [Marketplace publisher management](https://marketplace.visualstudio.com/manage) (a personal Microsoft account
    suffices; no Azure DevOps organization or token is needed). On the publisher's *Trusted Publishing* tab, create a
    policy with repository owner `ut-issl`, repository `inka`, workflow `release.yaml`, environment
    `vscode-marketplace`. Add other maintainers under *Members*, so the publisher does not rest on one account.
-6. **Open VSX.** Sign in to [open-vsx.org](https://open-vsx.org) with GitHub and create the namespace `ut-issl`, claiming
+6. **Open VSX.** Sign in to [open-vsx.org](https://open-vsx.org) with GitHub and create the namespace `inka-project`, claiming
    its ownership through the [publisher agreement](https://github.com/EclipseFdn/open-vsx.org/wiki/Namespace-Access).
    Then create an access token and store it as the secret `OVSX_PAT` of the `open-vsx` environment.
 

@@ -1,4 +1,4 @@
-// Behavioral tests for the `@ut-issl/inka-evidence` wasm binding.
+// Behavioral tests for the `@inka-project/inka-evidence` wasm binding.
 //
 // The binding wraps the Rust `inka-evidence` crate, so these tests pin the
 // contract adapters rely on — the v1 envelope, the add-time rejections and

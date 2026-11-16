@@ -21,7 +21,7 @@
 #                                         inka-evidence-merge
 #   inka-vscode-<v>-<platform>.vsix      the VS Code extension with inka-lsp
 #   inka_evidence-<v>-*.whl, .tar.gz     the Python package and its sdist
-#   ut-issl-inka-evidence-<v>.tgz        the npm package
+#   inka-project-inka-evidence-<v>.tgz        the npm package
 #   inka-web-<v>.tar.gz                  the graph viewer bundle for `inka serve`
 #   SHA256SUMS                            checksums of every asset above
 #
@@ -600,7 +600,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: npm
-      url: https://www.npmjs.com/package/@ut-issl/inka-evidence
+      url: https://www.npmjs.com/package/@inka-project/inka-evidence
     permissions:
       contents: read
       id-token: write # Trusted Publishing exchanges the OIDC token for an npm token
@@ -631,7 +631,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: vscode-marketplace
-      url: https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode
+      url: https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode
     permissions:
       contents: read
       id-token: write # Trusted Publishing exchanges the OIDC token for a Marketplace credential
@@ -670,7 +670,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: open-vsx
-      url: https://open-vsx.org/extension/ut-issl/inka-vscode
+      url: https://open-vsx.org/extension/inka-project/inka-vscode
     permissions:
       contents: read
 
