@@ -12,7 +12,7 @@ This release changes nothing in inka itself and fixes how the release workflow p
 ### Distribution
 
 - The npm package `@inka-project/inka-evidence` is published to npm, which v0.0.2 failed to do.
-- Publishing to Open VSX now fails at once with an error when the `OVSX_PAT` secret is not set, instead of waiting for a token prompt.
+- Publishing to Open VSX fails at once when the `OVSX_PAT` secret is missing, instead of waiting for a token.
 
 ## v0.0.2
 
