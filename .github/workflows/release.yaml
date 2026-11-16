@@ -519,9 +519,9 @@ jobs:
             --latest \
             assets/*
 
-  # Every registry below is published with Trusted Publishing (OIDC) or a
-  # token stored in the named environment; RELEASING.md lists the one-time
-  # setup. The jobs are independent, so one registry refusing does not hold
+  # Every registry below is published with Trusted Publishing (OIDC), except
+  # Open VSX, which takes a token stored in its environment; RELEASING.md
+  # lists the one-time setup. The jobs are independent, so one registry refusing does not hold
   # back the others, and "Re-run failed jobs" retries only what failed.
 
   publish-crates-io:
@@ -634,6 +634,7 @@ jobs:
       url: https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode
     permissions:
       contents: read
+      id-token: write # Trusted Publishing exchanges the OIDC token for a Marketplace credential
 
     steps:
       - name: Checkout the main repository
@@ -654,12 +655,12 @@ jobs:
           merge-multiple: true
 
       - name: Publish the extensions
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        # `--oidc` needs a Trusted Publishing policy on the publisher for this
+        # repository, workflow and environment; see RELEASING.md.
         working-directory: editors/vscode
         run: |
           npm ci
-          npx vsce publish --skip-duplicate --packagePath ../../vsix/*.vsix
+          npx vsce publish --oidc --skip-duplicate --packagePath ../../vsix/*.vsix
 
   publish-open-vsx:
     name: Publish to Open VSX
