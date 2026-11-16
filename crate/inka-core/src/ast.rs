@@ -256,10 +256,9 @@ pub enum ObjectivePromoteTarget {
 /// than to the AST.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceRef {
-    /// A `veriq: "<module>.<name>"` reference.
-    ///
-    /// The dotted Python name is preserved verbatim.
-    Veriq(String),
+    /// A `calc: "<path>"` reference: the target's path in the producer's
+    /// calculation graph (for veriq, `Scope::?name`), preserved verbatim.
+    Calc(String),
     /// A `test: "<test-id>"` reference, such as `test: "tests/hash_props.rs::roundtrip"`.
     Test(String),
 }
@@ -290,7 +289,7 @@ pub struct BindBlock<D = Description> {
     pub common: BlockCommon<D>,
     pub deadline: Option<Deadline>,
     pub source: Spanned<SourceRef>,
-    /// The comment attached to the `test:` / `veriq:` property.
+    /// The comment attached to the `test:` / `calc:` property.
     pub source_comment: Option<Comment>,
 }
 

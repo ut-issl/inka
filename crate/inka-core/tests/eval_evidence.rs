@@ -299,10 +299,10 @@ fn an_absent_test_id_is_missing_evidence_not_an_input_error() {
 }
 
 #[test]
-fn a_veriq_bind_stays_unevaluated() {
+fn a_calc_bind_stays_unevaluated() {
     let mut view = bind_view();
     view.nodes[0].evidence = Some(Evidence {
-        kind: EvidenceKind::Veriq,
+        kind: EvidenceKind::Calc,
         target: "aocs.verify_detumble".to_owned(),
     });
 
@@ -310,7 +310,7 @@ fn a_veriq_bind_stays_unevaluated() {
         evaluate(&view, &phases(), &[], &EvidenceSet::default()).expect("evaluation runs");
 
     assert!(!bind_established(&evaluation));
-    assert_eq!(bind_reasons(&evaluation), [BlameReason::VeriqNotEvaluated]);
+    assert_eq!(bind_reasons(&evaluation), [BlameReason::CalcNotEvaluated]);
 }
 
 #[test]

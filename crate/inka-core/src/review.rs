@@ -13,7 +13,7 @@
 //!
 //! Some unestablished targets cannot be acted on from the queue at all: a bind
 //! whose evidence has not been delivered has no interface hash and therefore
-//! no current view hash to approve, a veriq bind is not evaluated yet, and a
+//! no current view hash to approve, a calc bind is not evaluated yet, and a
 //! node whose `until:` has expired would not be helped by a new approval.
 //! These are reported separately as blocked, never silently dropped.
 
@@ -64,8 +64,8 @@ pub enum BlockedReason {
         /// The `test:` reference no loaded evidence provides.
         target: String,
     },
-    /// veriq evidence is not evaluated yet.
-    VeriqNotEvaluated,
+    /// calc evidence is not evaluated yet.
+    CalcNotEvaluated,
     /// The node's `until:` has expired; no new approval would count.
     UntilExpired {
         /// The phase the node was approved toward.
@@ -182,7 +182,7 @@ fn interface_hash(node: &ViewNode, evidence: &EvidenceSet) -> Result<Resolution,
         .into());
     };
     Ok(match reference.kind {
-        EvidenceKind::Veriq => Resolution::Blocked(BlockedReason::VeriqNotEvaluated),
+        EvidenceKind::Calc => Resolution::Blocked(BlockedReason::CalcNotEvaluated),
         EvidenceKind::Test => match evidence.get(&reference.target) {
             Some(test) => Resolution::Hashable(Some(test.interface_hash)),
             None => Resolution::Blocked(BlockedReason::MissingEvidence {
@@ -438,11 +438,11 @@ mod tests {
     }
 
     #[test]
-    fn a_veriq_bind_is_blocked_as_not_evaluated() {
+    fn a_calc_bind_is_blocked_as_not_evaluated() {
         // Arrange
         let mut nodes = vec![node("calc", Mode::Bind, "verified by calc", &[])];
         nodes[0].evidence = Some(Evidence {
-            kind: EvidenceKind::Veriq,
+            kind: EvidenceKind::Calc,
             target: "calc/margin".to_owned(),
         });
         let view = view(nodes);
@@ -457,7 +457,7 @@ mod tests {
             [BlockedItem {
                 id: "calc".to_owned(),
                 mode: Mode::Bind,
-                reason: BlockedReason::VeriqNotEvaluated,
+                reason: BlockedReason::CalcNotEvaluated,
             }]
         );
     }

@@ -61,8 +61,8 @@ describe('the aocs export specifically', () => {
 
   test('carries the evidence target and the deadline the argument declares', () => {
     expect(nodeOf(view, 'detumble_convergence_ok').evidence).toEqual({
-      kind: 'veriq',
-      target: 'aocs.verify_detumble',
+      kind: 'calc',
+      target: 'AOCS::?verify_detumble',
     })
     expect(nodeOf(view, 'mass_properties_valid').deadline).toMatchObject({
       until: 'FM',

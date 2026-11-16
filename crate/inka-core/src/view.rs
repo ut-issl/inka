@@ -67,7 +67,7 @@ impl Mode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EvidenceKind {
-    Veriq,
+    Calc,
     Test,
 }
 
@@ -96,7 +96,7 @@ pub struct Deadline {
 pub enum Property {
     Children,
     Test,
-    Veriq,
+    Calc,
     Until,
     Promote,
 }
@@ -108,7 +108,7 @@ impl Property {
         match self {
             Property::Children => "children",
             Property::Test => "test",
-            Property::Veriq => "veriq",
+            Property::Calc => "calc",
             Property::Until => "until",
             Property::Promote => "promote",
         }
@@ -257,7 +257,7 @@ fn comments_of(block: &Block<RenderedDescription>) -> NodeComments {
         Block::Bind(bind) => {
             let property = match bind.source.value {
                 SourceRef::Test(_) => Property::Test,
-                SourceRef::Veriq(_) => Property::Veriq,
+                SourceRef::Calc(_) => Property::Calc,
             };
             put(property, bind.source_comment.as_ref());
         }
@@ -307,8 +307,8 @@ fn evidence_of(block: &Block<RenderedDescription>) -> Option<Evidence> {
         return None;
     };
     Some(match &bind.source.value {
-        SourceRef::Veriq(target) => Evidence {
-            kind: EvidenceKind::Veriq,
+        SourceRef::Calc(target) => Evidence {
+            kind: EvidenceKind::Calc,
             target: target.clone(),
         },
         SourceRef::Test(target) => Evidence {
@@ -549,7 +549,7 @@ bind verified {
   ```
   checked by a solver
   ```
-  veriq: \"aocs.verify_detumble\"
+  calc: \"AOCS::?verify_detumble\"
 }
 fiat asserted {
   ```
@@ -562,8 +562,8 @@ fiat asserted {
         assert_eq!(
             view.node("verified").and_then(|node| node.evidence.clone()),
             Some(Evidence {
-                kind: EvidenceKind::Veriq,
-                target: "aocs.verify_detumble".to_owned(),
+                kind: EvidenceKind::Calc,
+                target: "AOCS::?verify_detumble".to_owned(),
             })
         );
         // Only a bind block discharges against evidence.
@@ -640,7 +640,7 @@ bind a {
   ```
   checked in CI
   ```
-  veriq: \"m.f\" // the shipped check
+  calc: \"M::?f\" // the shipped check
 }
 fiat b {
   ```
@@ -666,7 +666,7 @@ fiat b {
         let bind = view.node("a").expect("a is projected");
         assert_eq!(
             bind.comments.properties,
-            BTreeMap::from([(Property::Veriq, "the shipped check".to_owned())])
+            BTreeMap::from([(Property::Calc, "the shipped check".to_owned())])
         );
         assert_eq!(
             view.node("b").map(|node| &node.comments),

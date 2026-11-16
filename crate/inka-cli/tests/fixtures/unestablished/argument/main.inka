@@ -57,7 +57,7 @@ bind modelled {
     ```
     the controller detumbles
     ```
-    veriq: "aocs.verify_detumble"
+    calc: "AOCS::?verify_detumble"
 }
 
 fiat declined_leaf {

@@ -214,7 +214,7 @@ impl Printer {
             self.comment(1, comment);
             let (key, reference) = match source {
                 SourceRef::Test(reference) => ("test", reference),
-                SourceRef::Veriq(reference) => ("veriq", reference),
+                SourceRef::Calc(reference) => ("calc", reference),
             };
             self.line(1, &format!("{key}: \"{reference}\""));
         }

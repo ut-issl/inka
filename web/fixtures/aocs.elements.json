@@ -8,8 +8,8 @@
       "tags": [],
       "root": false,
       "evidence": {
-        "kind": "veriq",
-        "target": "aocs.verify_momentum_budget"
+        "kind": "calc",
+        "target": "AOCS::?verify_momentum_budget"
       },
       "comments": {
         "block": "actuator_authority_ok is a shared node: also referenced from momentum_ok\n(momentum.inka)."
@@ -35,8 +35,8 @@
       "tags": [],
       "root": false,
       "evidence": {
-        "kind": "veriq",
-        "target": "aocs.verify_attitude_knowledge"
+        "kind": "calc",
+        "target": "AOCS::?verify_attitude_knowledge"
       }
     }
   },
@@ -49,8 +49,8 @@
       "tags": [],
       "root": false,
       "evidence": {
-        "kind": "veriq",
-        "target": "aocs.verify_pointing_control"
+        "kind": "calc",
+        "target": "AOCS::?verify_pointing_control"
       }
     }
   },
@@ -63,8 +63,8 @@
       "tags": [],
       "root": false,
       "evidence": {
-        "kind": "veriq",
-        "target": "aocs.verify_detumble"
+        "kind": "calc",
+        "target": "AOCS::?verify_detumble"
       }
     }
   },
@@ -201,8 +201,8 @@
       "tags": [],
       "root": false,
       "evidence": {
-        "kind": "veriq",
-        "target": "aocs.verify_sun_pointing"
+        "kind": "calc",
+        "target": "AOCS::?verify_sun_pointing"
       }
     }
   },

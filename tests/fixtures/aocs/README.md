@@ -2,7 +2,7 @@
 
 A second example argument, modelling a satellite attitude-control subsystem (AOCS).
 It deliberately exercises the DSL features the dogfood argument (inka's meta
-argument) leaves unloaded: **bind with `test:`/`veriq:`, tags, numeric value
+argument) leaves unloaded: **bind with `test:`/`calc:`, tags, numeric value
 interpolation, and DAG sharing of a bind node**.
 
 Japanese version: [README_ja.md](README_ja.md)
@@ -19,7 +19,7 @@ Japanese version: [README_ja.md](README_ja.md)
 | `argument/momentum.inka` | Branch 4: momentum management; shares `actuator_authority_ok` with pointing |
 | `argument/assumptions.inka` | Disturbance-model and mass-property assumptions (fiat), shared across branches |
 
-Features exercised: bind ×5 (veriq references), `#safety` / `#mission` tags,
+Features exercised: bind ×5 (calc references to veriq verifications), `#safety` / `#mission` tags,
 `{$var}` ×8 (numbers with units), **DAG sharing of a bind node**
 (`actuator_authority_ok` has two parents), fiat with `until: FM` /
 `promote: bind` (the EM-phase debt made explicit), and a markdown bullet-list
@@ -31,11 +31,12 @@ Settled since this example was written — now part of the decided specification
 ([docs/en/design/spec.md](../../docs/en/design/spec.md)):
 
 - **ID namespaces**: `::` separator, assigned by directory structure under
-  `argument/`; policy selectors use the same notation (`power::*`). `veriq:`
-  references keep Python's dotted `module.function` names.
+  `argument/`; policy selectors use the same notation (`power::*`). `calc:`
+  references are paths in the producer's calculation graph (veriq:
+  `Scope::?name`), never inka IDs.
 - **Tags** are free vocabulary; `check` says nothing about them (typo detection
   arrives with policy selectors in M3).
-- **Unresolvable `test:`/`veriq:` references** get a format check only at `check` time;
+- **Unresolvable `test:`/`calc:` references** get a format check only at `check` time;
   existence is eval's job.
 
 Still open / standing observations:

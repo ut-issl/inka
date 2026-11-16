@@ -59,7 +59,7 @@ fn path_defaults_to_the_current_directory() {
 fn each_failure_kind_is_blamed_on_the_failing_node_alone() {
     // Act: the fixture holds one node per failure kind — missing, stale,
     // declined, expired, and binds with missing, failing and incomplete
-    // evidence plus the veriq stub — under one unapproved objective.
+    // evidence plus the calc stub — under one unapproved objective.
     // The declined leaf also has a current approval, exercising the veto.
     let assert = inka()
         .current_dir(local_fixture("unestablished"))
@@ -117,7 +117,7 @@ fn the_json_report_matches_the_human_verdict() {
 fn the_json_report_spells_every_blame_cause() {
     // Act: the fixture exercises every blame cause the JSON contract has —
     // missing, stale, declined, expired, missing/failed/incomplete evidence,
-    // and the veriq stub.
+    // and the calc stub.
     let assert = inka()
         .current_dir(local_fixture("unestablished"))
         .args(["eval", "--json", "."])

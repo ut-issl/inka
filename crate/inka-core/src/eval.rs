@@ -25,7 +25,7 @@
 //! from the interface hash of the imported evidence its `test:` reference
 //! names, so approval staleness and evidence failure stay independent causes;
 //! a reference no loaded evidence provides is the per-bind missing-evidence
-//! cause, not an input error. veriq evidence is not evaluated yet.
+//! cause, not an input error. calc evidence is not evaluated yet.
 //!
 //! Blame lists only nodes whose failure cause is their own — a missing, stale,
 //! declined, or expired approval, or missing/failed/incomplete evidence —
@@ -228,8 +228,8 @@ pub enum BlameReason {
     EvidenceFailed { cases: Vec<String> },
     /// Required executions were skipped, cancelled or reported no result.
     EvidenceIncomplete { cases: Vec<String> },
-    /// veriq evidence is not evaluated yet.
-    VeriqNotEvaluated,
+    /// calc evidence is not evaluated yet.
+    CalcNotEvaluated,
 }
 
 impl fmt::Display for BlameReason {
@@ -257,7 +257,7 @@ impl fmt::Display for BlameReason {
                 "required executions were skipped, cancelled or missing: {}",
                 cases.join(", ")
             ),
-            BlameReason::VeriqNotEvaluated => f.write_str("veriq evidence is not evaluated yet"),
+            BlameReason::CalcNotEvaluated => f.write_str("calc evidence is not evaluated yet"),
         }
     }
 }
@@ -480,7 +480,7 @@ fn judge(
 /// hash, so no current view hash and no record-based judgement. The `until:`
 /// deadline needs no hash, so it is still judged: an expired bind is reported
 /// as both expired and missing its evidence, and an unknown `until:` phase
-/// fails loudly whether or not the evidence has been delivered. veriq
+/// fails loudly whether or not the evidence has been delivered. calc
 /// references stay unevaluated.
 fn judge_bind(
     view: &ArgumentView,
@@ -498,7 +498,7 @@ fn judge_bind(
         .into());
     };
     match reference.kind {
-        EvidenceKind::Veriq => Ok((false, vec![BlameReason::VeriqNotEvaluated])),
+        EvidenceKind::Calc => Ok((false, vec![BlameReason::CalcNotEvaluated])),
         EvidenceKind::Test => {
             let Some(test) = evidence.get(&reference.target) else {
                 let mut reasons = Vec::new();

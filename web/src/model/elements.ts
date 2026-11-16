@@ -9,7 +9,7 @@
  * ```json
  * { "data": { "id": "detumble_ok", "mode": "structure", "namespace": "safety",
  *             "description": "…", "tags": ["safety"], "root": false,
- *             "evidence": { "kind": "veriq", "target": "aocs.verify_detumble" },
+ *             "evidence": { "kind": "calc", "target": "AOCS::?verify_detumble" },
  *             "deadline": { "until": "FM", "promote": "bind" },
  *             "comments": { "block": "…", "until": "…" } } }
  * ```
@@ -39,7 +39,7 @@ export type DischargeMode = (typeof DISCHARGE_MODES)[number]
 
 /** Machine-verifiable evidence a bind block discharges against. */
 const evidenceSchema = z.object({
-  kind: z.enum(['veriq', 'test']),
+  kind: z.enum(['calc', 'test']),
   /** The reference verbatim, opaque to the viewer. */
   target: z.string().min(1),
 })
@@ -60,7 +60,7 @@ const commentsSchema = z.object({
   block: commentText.optional(),
   children: commentText.optional(),
   test: commentText.optional(),
-  veriq: commentText.optional(),
+  calc: commentText.optional(),
   until: commentText.optional(),
   promote: commentText.optional(),
 })

@@ -21,11 +21,11 @@ const view = buildView(
       namespace: 'mid',
       description: 'the contract text',
       tags: ['safety'],
-      evidence: { kind: 'veriq', target: 'pkg.verify_thing' },
+      evidence: { kind: 'calc', target: 'Pkg::?verify_thing' },
       deadline: { until: 'FM', promote: 'bind' },
       comments: {
         block: 'shared with the thermal argument',
-        veriq: 'the shipped check',
+        calc: 'the shipped check',
         until: 'revisit at CDR\nonce the model lands',
         promote: 'once the rig exists',
       },
@@ -46,7 +46,7 @@ describe('DetailPanel', () => {
 
     expect(screen.getByRole('heading', { name: 'b' })).toBeInTheDocument()
     expect(screen.getByText('the contract text')).toBeInTheDocument()
-    expect(screen.getByText('pkg.verify_thing')).toBeInTheDocument()
+    expect(screen.getByText('Pkg::?verify_thing')).toBeInTheDocument()
     expect(screen.getByText(/FM/)).toBeInTheDocument()
   })
 

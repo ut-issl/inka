@@ -161,7 +161,7 @@ fn loads_bind_block_preserving_source_and_rendering_description() {
     project.write("values.toml", "target = \"the hash property\"\n");
     project.write(
         "argument/a.inka",
-        "bind b {\n  ```\n  verifies {$target}\n  ```\n  veriq: \"m.f\"\n}\n",
+        "bind b {\n  ```\n  verifies {$target}\n  ```\n  calc: \"M::?f\"\n}\n",
     );
 
     // Act
@@ -183,7 +183,7 @@ fn loads_bind_block_preserving_source_and_rendering_description() {
         "description should be rendered, got: {}",
         bind.common.description.rendered()
     );
-    assert!(matches!(&bind.source.value, SourceRef::Veriq(name) if name == "m.f"));
+    assert!(matches!(&bind.source.value, SourceRef::Calc(name) if name == "M::?f"));
 }
 
 #[test]

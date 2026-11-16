@@ -67,7 +67,7 @@ struct Comments {
     block: Option<String>,
     children: Option<String>,
     test: Option<String>,
-    veriq: Option<String>,
+    calc: Option<String>,
     until: Option<String>,
     promote: Option<String>,
 }
@@ -77,7 +77,7 @@ impl Comments {
         let properties = [
             (Property::Children, &self.children),
             (Property::Test, &self.test),
-            (Property::Veriq, &self.veriq),
+            (Property::Calc, &self.calc),
             (Property::Until, &self.until),
             (Property::Promote, &self.promote),
         ]

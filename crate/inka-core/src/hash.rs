@@ -13,7 +13,7 @@
 //! stops there: re-approval cost stays proportional to the edit.
 //!
 //! What is excluded is equally deliberate. IDs, tags, file comments, and the
-//! `test:` / `veriq:` reference strings are not contract content — an approver
+//! `test:` / `calc:` reference strings are not contract content — an approver
 //! judged the claim, not its name, its filing, or where the evidence lives — so
 //! renaming a node or retagging it never asks anyone to approve again. A
 //! deadline *is* content: `until:` is a jointly-approved decline placed toward

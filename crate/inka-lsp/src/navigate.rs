@@ -128,7 +128,7 @@ pub fn hover(block: &Block<RenderedDescription>) -> String {
     if let Block::Bind(bind) = block {
         annotations.push(match &bind.source.value {
             SourceRef::Test(id) => format!("test: \"{id}\""),
-            SourceRef::Veriq(target) => format!("veriq: \"{target}\""),
+            SourceRef::Calc(target) => format!("calc: \"{target}\""),
         });
     }
 
