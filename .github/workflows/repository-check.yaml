@@ -441,7 +441,7 @@ jobs:
 
       - name: Check spelling (reviewdog)
         if: github.event_name == 'pull_request'
-        uses: reviewdog/action-typos@d5eb1bbcd1b3bfde596f6eeb470322727862fe98 # v1.19.0
+        uses: reviewdog/action-typos@5c47488c7d57273738b3fff7daea2a1f5736a903 # v1.20.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
