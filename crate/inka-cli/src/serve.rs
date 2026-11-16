@@ -14,14 +14,18 @@
 //! into the served HTML. Both are possible and the viewer accepts either; the
 //! endpoint wins here because the bundle then stays byte-for-byte what was
 //! built, and the served page has nothing project-specific in it.
+//!
+//! The bundle itself is compiled into the binary (see `build.rs`), so an
+//! installed `inka` serves the viewer with nothing else on disk. `--assets`
+//! points at a directory instead, for working on the viewer.
 
 use std::io::{self, Write};
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use axum::Router;
-use axum::http::{StatusCode, header};
-use axum::response::{Html, IntoResponse};
+use axum::http::{StatusCode, Uri, header};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use tokio::net::TcpListener;
 use tower_http::services::{ServeDir, ServeFile};
@@ -33,9 +37,25 @@ use crate::load::load_view;
 /// Path the viewer fetches the argument from.
 const ELEMENTS_PATH: &str = "/elements.json";
 
-/// Directory the built viewer bundle is looked for in, relative to the working
-/// directory, when `--assets` says nothing.
-const DEFAULT_ASSETS: &str = "web/dist";
+/// The viewer bundle `build.rs` found at compile time, as `(path, bytes)`.
+mod embedded {
+    include!(concat!(env!("OUT_DIR"), "/web_assets.rs"));
+}
+
+/// A viewer bundle held in memory: `(path, bytes)` pairs with `/`-separated
+/// paths relative to the bundle root, `index.html` among them.
+type Bundle = &'static [(&'static str, &'static [u8])];
+
+/// Where the viewer bundle comes from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Assets {
+    /// A directory on disk, named by `--assets`.
+    Directory(PathBuf),
+    /// The bundle compiled into this binary.
+    Embedded(Bundle),
+    /// No bundle at all: the argument endpoint is still served.
+    None,
+}
 
 /// Where to listen, and what to serve alongside the argument.
 #[derive(Debug, Clone)]
@@ -68,18 +88,18 @@ pub fn run(
     };
     let elements = to_json(&view).map_err(io::Error::other)?;
 
-    let assets = match resolve_assets(options.assets.as_deref()) {
+    let assets = match resolve_assets(options.assets.as_deref(), embedded::WEB_ASSETS) {
         Ok(assets) => assets,
         Err(message) => {
             writeln!(err, "error: {message}")?;
             return Ok(Outcome::Failed);
         }
     };
-    if assets.is_none() {
+    if assets == Assets::None {
         writeln!(
             err,
-            "warning: no viewer bundle at `{DEFAULT_ASSETS}`; serving {ELEMENTS_PATH} only \
-             (build it with `npm run build` in `web/`, or pass --assets)"
+            "warning: this inka was built without the viewer bundle; serving {ELEMENTS_PATH} only \
+             (run `npm run build` in `web/` and rebuild inka, or pass --assets)"
         )?;
     }
 
@@ -107,7 +127,7 @@ pub fn run(
 ///
 /// Every route is a `get`, so any other method is refused with 405 by the
 /// router itself rather than by a check someone has to remember to write.
-fn router(elements: String, assets: Option<PathBuf>) -> Router {
+fn router(elements: String, assets: Assets) -> Router {
     let argument = Router::new().route(
         ELEMENTS_PATH,
         get(|| async move {
@@ -123,10 +143,55 @@ fn router(elements: String, assets: Option<PathBuf>) -> Router {
     match assets {
         // Unknown paths fall back to the bundle's entry point, so the viewer
         // keeps working if it ever routes in the browser.
-        Some(directory) => argument.fallback_service(
+        Assets::Directory(directory) => argument.fallback_service(
             ServeDir::new(&directory).fallback(ServeFile::new(directory.join("index.html"))),
         ),
-        None => argument.fallback(missing_bundle),
+        Assets::Embedded(bundle) => {
+            argument.fallback(move |uri: Uri| async move { embedded_file(bundle, &uri) })
+        }
+        Assets::None => argument.fallback(missing_bundle),
+    }
+}
+
+/// Answers a path from the embedded bundle, with the entry point standing in
+/// for `/` and for anything the bundle does not have, as the directory
+/// variant does.
+fn embedded_file(bundle: Bundle, uri: &Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    let found = lookup(bundle, path).or_else(|| lookup(bundle, "index.html"));
+    match found {
+        Some((path, bytes)) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, content_type(path))],
+            bytes,
+        )
+            .into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// The bundle entry at `path`, if any.
+fn lookup(bundle: Bundle, path: &str) -> Option<(&'static str, &'static [u8])> {
+    bundle.iter().copied().find(|(name, _)| *name == path)
+}
+
+/// The media type a file of the bundle is served as, from its extension.
+fn content_type(path: &str) -> &'static str {
+    match path.rsplit_once('.').map(|(_, ext)| ext) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js" | "mjs") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("json" | "map") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("ico") => "image/x-icon",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("ttf") => "font/ttf",
+        Some("wasm") => "application/wasm",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
     }
 }
 
@@ -138,28 +203,27 @@ async fn missing_bundle() -> impl IntoResponse {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Html(format!(
-            "<h1>inka serve</h1><p>The viewer bundle was not found. \
-             Build it with <code>npm run build</code> in <code>web/</code>, \
+            "<h1>inka serve</h1><p>This inka was built without the viewer bundle. \
+             Build it with <code>npm run build</code> in <code>web/</code> and rebuild inka, \
              or start the server with <code>--assets &lt;DIR&gt;</code>.</p>\
              <p>The argument itself is being served at <code>{ELEMENTS_PATH}</code>.</p>"
         )),
     )
 }
 
-/// Resolves the bundle directory.
+/// Resolves where the bundle comes from.
 ///
 /// An explicit `--assets` that is not a directory is an error: the operator
 /// asked for something specific, and silently serving nothing would hide the
-/// typo. The default is allowed to be absent, because the argument endpoint is
-/// useful on its own.
-fn resolve_assets(explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
+/// typo. Otherwise the embedded bundle is used, and its absence (a build
+/// without `web-dist/`) is allowed, because the argument endpoint is useful on
+/// its own.
+fn resolve_assets(explicit: Option<&Path>, embedded: Bundle) -> Result<Assets, String> {
     match explicit {
-        Some(directory) if directory.is_dir() => Ok(Some(directory.to_path_buf())),
+        Some(directory) if directory.is_dir() => Ok(Assets::Directory(directory.to_path_buf())),
         Some(directory) => Err(format!("no viewer bundle at `{}`", directory.display())),
-        None => {
-            let default = PathBuf::from(DEFAULT_ASSETS);
-            Ok(default.is_dir().then_some(default))
-        }
+        None if embedded.is_empty() => Ok(Assets::None),
+        None => Ok(Assets::Embedded(embedded)),
     }
 }
 
@@ -177,6 +241,12 @@ mod tests {
     use tower::ServiceExt;
 
     const ELEMENTS: &str = "[{\"data\":{\"id\":\"root\"}}]\n";
+
+    /// A bundle standing in for a built viewer.
+    const BUNDLE: Bundle = &[
+        ("index.html", b"<title>inka</title>"),
+        ("assets/app.js", b"console.log('inka')"),
+    ];
 
     /// Sends one request through the router and returns the response.
     async fn call(app: Router, method: Method, path: &str) -> axum::response::Response {
@@ -200,7 +270,7 @@ mod tests {
     #[tokio::test]
     async fn serves_the_argument_as_json() {
         // Arrange
-        let app = router(ELEMENTS.to_owned(), None);
+        let app = router(ELEMENTS.to_owned(), Assets::None);
 
         // Act
         let response = call(app, Method::GET, ELEMENTS_PATH).await;
@@ -220,7 +290,7 @@ mod tests {
     #[tokio::test]
     async fn answers_the_same_bytes_to_every_request() {
         // The projection happens once, at startup; requests only read it.
-        let app = router(ELEMENTS.to_owned(), None);
+        let app = router(ELEMENTS.to_owned(), Assets::None);
 
         let first = body_of(call(app.clone(), Method::GET, ELEMENTS_PATH).await).await;
         let second = body_of(call(app, Method::GET, ELEMENTS_PATH).await).await;
@@ -231,7 +301,7 @@ mod tests {
     #[tokio::test]
     async fn refuses_every_method_that_would_write() {
         for method in [Method::POST, Method::PUT, Method::DELETE, Method::PATCH] {
-            let app = router(ELEMENTS.to_owned(), None);
+            let app = router(ELEMENTS.to_owned(), Assets::None);
 
             let response = call(app, method.clone(), ELEMENTS_PATH).await;
 
@@ -245,7 +315,7 @@ mod tests {
 
     #[tokio::test]
     async fn explains_itself_when_the_viewer_bundle_is_missing() {
-        let app = router(ELEMENTS.to_owned(), None);
+        let app = router(ELEMENTS.to_owned(), Assets::None);
 
         let response = call(app, Method::GET, "/").await;
 
@@ -260,7 +330,7 @@ mod tests {
         std::fs::create_dir_all(&bundle).expect("the test bundle should be creatable");
         std::fs::write(bundle.join("index.html"), "<title>inka</title>")
             .expect("the test bundle should be writable");
-        let app = router(ELEMENTS.to_owned(), Some(bundle.clone()));
+        let app = router(ELEMENTS.to_owned(), Assets::Directory(bundle.clone()));
 
         // Act
         let response = call(app, Method::GET, "/index.html").await;
@@ -271,18 +341,94 @@ mod tests {
         std::fs::remove_dir_all(&bundle).expect("the test bundle should be removable");
     }
 
+    #[tokio::test]
+    async fn serves_the_embedded_bundle_with_its_entry_point_at_the_root() {
+        let app = router(ELEMENTS.to_owned(), Assets::Embedded(BUNDLE));
+
+        let response = call(app, Method::GET, "/").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .expect("the page should declare its type"),
+            "text/html; charset=utf-8"
+        );
+        assert_eq!(body_of(response).await, "<title>inka</title>");
+    }
+
+    #[tokio::test]
+    async fn serves_an_embedded_asset_with_its_media_type() {
+        let app = router(ELEMENTS.to_owned(), Assets::Embedded(BUNDLE));
+
+        let response = call(app, Method::GET, "/assets/app.js").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .expect("the asset should declare its type"),
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(body_of(response).await, "console.log('inka')");
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_the_embedded_entry_point_for_unknown_paths() {
+        // The same shape as the directory variant: browser-side routes land
+        // on the viewer rather than on a 404.
+        let app = router(ELEMENTS.to_owned(), Assets::Embedded(BUNDLE));
+
+        let response = call(app, Method::GET, "/some/route").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_of(response).await, "<title>inka</title>");
+    }
+
     #[test]
     fn refuses_an_assets_directory_that_is_not_there() {
         let missing = Path::new("definitely/not/a/bundle");
 
-        let resolved = resolve_assets(Some(missing));
+        let resolved = resolve_assets(Some(missing), BUNDLE);
 
         assert!(resolved.is_err_and(|message| message.contains("definitely/not/a/bundle")));
     }
 
     #[test]
-    fn accepts_the_absence_of_the_default_bundle() {
-        // Nothing was asked for, and the default may simply not be built yet.
-        assert!(resolve_assets(None).is_ok());
+    fn prefers_an_explicit_directory_over_the_embedded_bundle() {
+        let directory = std::env::temp_dir();
+
+        let resolved = resolve_assets(Some(&directory), BUNDLE);
+
+        assert_eq!(resolved, Ok(Assets::Directory(directory)));
+    }
+
+    #[test]
+    fn uses_the_embedded_bundle_when_nothing_is_asked_for() {
+        assert_eq!(resolve_assets(None, BUNDLE), Ok(Assets::Embedded(BUNDLE)));
+    }
+
+    #[test]
+    fn accepts_a_build_without_a_bundle() {
+        // Nothing was asked for, and the bundle may simply not have been built.
+        assert_eq!(resolve_assets(None, &[]), Ok(Assets::None));
+    }
+
+    #[test]
+    fn names_the_media_type_of_every_kind_of_file_the_bundle_holds() {
+        assert_eq!(content_type("index.html"), "text/html; charset=utf-8");
+        assert_eq!(
+            content_type("assets/index-abc123.js"),
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            content_type("assets/index-abc123.css"),
+            "text/css; charset=utf-8"
+        );
+        assert_eq!(content_type("favicon.svg"), "image/svg+xml");
+        assert_eq!(content_type("unknown.bin"), "application/octet-stream");
+        assert_eq!(content_type("README"), "application/octet-stream");
     }
 }

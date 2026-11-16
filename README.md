@@ -15,8 +15,8 @@ aarch64 Linux, x86_64 and aarch64 macOS, and x86_64 Windows.
   [Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode) or
   [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode); it bundles `inka-lsp`. The release also carries the
   `.vsix` for *Install from VSIX…*.
-- **Graph viewer.** `inka serve` looks for the viewer bundle in `web/dist`; outside a checkout, extract
-  `inka-web-v<version>.tar.gz` from the release and pass the directory with `--assets`.
+- **Graph viewer.** Built into `inka`: `inka serve` needs nothing else. `--assets <DIR>` serves a bundle you built
+  yourself instead.
 - **Test evidence adapters.** `pip install inka-evidence` (pytest, [PyPI](https://pypi.org/project/inka-evidence/)) and
   `npm install --save-dev @inka-project/inka-evidence` (Vitest, [npm](https://www.npmjs.com/package/@inka-project/inka-evidence));
   the Rust adapter `inka-evidence-rust` is in the command-line archive.
@@ -69,16 +69,20 @@ it diffs cleanly between runs. An argument that fails `check` exports nothing.
 
 ### 3. Build the graph viewer
 
-The viewer is a static front-end bundle under [`web/`](web/README.md). Build it once:
+The viewer is a static front-end bundle under [`web/`](web/README.md) that `inka` embeds at compile time. Build it
+once, then build `inka` again so it picks the bundle up:
 
 ```console
 cd web
 npm install
 npm run build
 cd ..
+cargo build -p inka-cli
 ```
 
-This writes `web/dist`, which is where `serve` looks by default.
+This writes `crate/inka-cli/web-dist`, which the crate's build script compiles into the binary (so run
+`cargo install --locked --path crate/inka-cli` after this step, not before, to get an `inka` with the viewer). A
+release binary already carries it.
 
 ### 4. Serve the interactive graph
 
@@ -95,9 +99,9 @@ header to focus that namespace, hover a node for its full description, and press
 the whole view.
 
 Useful flags: `--port` (default 8080), `--host` (loopback by default, so an argument under review is
-not published to the network), and `--assets <DIR>` if the bundle is somewhere other than
-`web/dist`. Without a bundle the server still answers `GET /elements.json`, which is the same JSON
-step 2 writes.
+not published to the network), and `--assets <DIR>` to serve a bundle from disk instead of the
+embedded one. An `inka` built without the bundle still answers `GET /elements.json`, which is the
+same JSON step 2 writes.
 
 ### 5. Start your own project
 

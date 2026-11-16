@@ -46,7 +46,8 @@ export default defineConfig({
   // Relative asset URLs: `inka serve` may mount the bundle under a sub-path.
   base: './',
   build: {
-    outDir: 'dist',
+    // Next to the CLI crate: its build script embeds the bundle into `inka`.
+    outDir: '../crate/inka-cli/web-dist',
     emptyOutDir: true,
     // The graph library is vendored into the bundle by design, so one large
     // chunk is the intended shape rather than something to warn about.

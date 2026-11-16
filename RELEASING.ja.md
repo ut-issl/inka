@@ -21,7 +21,8 @@
 
 リリースはタグ `v<version>` と，その上の [GitHub Release](https://github.com/ut-issl/inka/releases) です。GitHub Release
 には次の成果物が添付されます(それぞれにビルド来歴の attestation が付き，すべて `SHA256SUMS` に載ります)。バイナリは
-`inka`，`inka-lsp`，`inka-evidence-rust`，`inka-evidence-merge` の 4 つです。
+`inka`(グラフビューアを内蔵しているので `inka serve` に他のファイルは不要)，`inka-lsp`，`inka-evidence-rust`，
+`inka-evidence-merge` の 4 つです。
 
 | 成果物 | 内容 |
 | --- | --- |
@@ -29,7 +30,6 @@
 | `inka-vscode-v<version>-<platform>.vsix` | `inka-lsp` を同梱した VS Code 拡張。プラットフォームごとに 1 つ |
 | `inka_evidence-<version>-*.whl`，`inka_evidence-<version>.tar.gz` | Python パッケージ `inka-evidence` とその sdist |
 | `inka-project-inka-evidence-<version>.tgz` | npm パッケージ `@inka-project/inka-evidence` |
-| `inka-web-v<version>.tar.gz` | `inka serve --assets` に渡すグラフビューアのバンドル |
 
 プラットフォームは x86_64 と aarch64 の Linux(musl の静的バイナリ)，x86_64 と aarch64 の macOS，x86_64 の Windows
 です。

@@ -19,7 +19,7 @@ INKA_FIXTURE=dogfood npm run dev # the dogfood fixture instead
 npm test                         # unit and component tests
 npm run coverage
 npm run e2e                      # browser tests (needs `npx playwright install chromium`)
-npm run build                    # static bundle in dist/
+npm run build                    # static bundle in ../crate/inka-cli/web-dist/, embedded by `inka`
 ```
 
 `npm run dev` needs no Rust side: the dev server answers `/elements.json` from

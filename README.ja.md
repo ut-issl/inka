@@ -15,8 +15,8 @@ Linux，x86_64 と aarch64 の macOS，x86_64 の Windows 向けに配布しま�
 - **VS Code。** [Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode) または
   [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode) から `inka-project.inka-vscode` をインストールします。
   `inka-lsp` を同梱しています。リリースには *Install from VSIX…* 用の `.vsix` も添付されています。
-- **グラフビューア。** `inka serve` はビューアのバンドルを `web/dist` に探します。チェックアウトの外では，リリースの
-  `inka-web-v<version>.tar.gz` を展開し，そのディレクトリを `--assets` で渡します。
+- **グラフビューア。** `inka` に内蔵されているので，`inka serve` に他のファイルは不要です。自分でビルドしたバンドルを
+  使うときは `--assets <DIR>` で指定します。
 - **テストエビデンスのアダプタ。** `pip install inka-evidence`(pytest，[PyPI](https://pypi.org/project/inka-evidence/))と
   `npm install --save-dev @inka-project/inka-evidence`(Vitest，[npm](https://www.npmjs.com/package/@inka-project/inka-evidence))。
   Rust のアダプタ `inka-evidence-rust` はコマンドラインのアーカイブに入っています。
@@ -69,16 +69,20 @@ inka export tests/fixtures/aocs > aocs.elements.json
 
 ### 3. グラフビューアをビルドする
 
-ビューアは [`web/`](web/README.md) 以下の静的なフロントエンドバンドルです。最初に一度ビルドします。
+ビューアは [`web/`](web/README.md) 以下の静的なフロントエンドバンドルで，`inka` がコンパイル時に埋め込みます。最初に
+一度ビルドし，その後 `inka` をビルドし直して取り込ませます。
 
 ```console
 cd web
 npm install
 npm run build
 cd ..
+cargo build -p inka-cli
 ```
 
-`web/dist` が生成されます。`serve` は既定でここを見ます。
+`crate/inka-cli/web-dist` が生成され，クレートのビルドスクリプトがこれをバイナリに取り込みます(ビューア入りの `inka`
+を得るには，`cargo install --locked --path crate/inka-cli` はこの手順の前ではなく後に実行してください)。リリースの
+バイナリには最初から入っています。
 
 ### 4. 対話的なグラフを配信する
 
@@ -95,8 +99,8 @@ inka serve tests/fixtures/aocs
 全体表示に戻ります。
 
 主なオプション: `--port`(既定 8080)，`--host`(既定はループバック。査読中の論証をネットワークに
-公開しない)，`--assets <DIR>`(バンドルが `web/dist` 以外にある場合)。バンドルが無くても
-`GET /elements.json` は応答し，これは手順 2 と同じ JSON です。
+公開しない)，`--assets <DIR>`(内蔵のバンドルの代わりにディスク上のものを配信する)。バンドル無しで
+ビルドした `inka` でも `GET /elements.json` は応答し，これは手順 2 と同じ JSON です。
 
 ### 5. 自分のプロジェクトを始める
 
