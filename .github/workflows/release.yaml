@@ -4,9 +4,9 @@
 #
 # * `mode: dry-run` (the default) runs every check, builds every release
 #   asset and lists them in the run summary, and runs `cargo publish` with
-#   `--dry-run`, from any branch, and creates nothing. A tag that already exists or a missing CHANGELOG section is a
-#   warning, so the build can be rehearsed on a branch that is not yet a
-#   release.
+#   `--dry-run`, from any branch, and creates nothing. A tag that already
+#   exists or a missing CHANGELOG section is a warning, so the build can be
+#   rehearsed on a branch that is not yet a release.
 # * `mode: release` (from main only) releases the version in Cargo.toml as
 #   the tag `v<version>`: it builds every asset, creates the GitHub Release
 #   (and with it the tag) on the dispatched commit with the CHANGELOG.md
