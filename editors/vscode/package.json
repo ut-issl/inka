@@ -4,7 +4,7 @@
   "description": "Language support for the inka argumentation DSL",
   "version": "0.0.1",
   "license": "MIT OR Apache-2.0",
-  "publisher": "ut-issl",
+  "publisher": "inka-project",
   "repository": {
     "type": "git",
     "url": "https://github.com/ut-issl/inka"

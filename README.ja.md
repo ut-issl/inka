@@ -12,13 +12,13 @@ Linux，x86_64 と aarch64 の macOS，x86_64 の Windows 向けに配布しま�
   `inka-lsp`，`inka-evidence-rust`，`inka-evidence-merge` を `PATH` に置きます。Rust ツールチェインがあれば，
   `cargo binstall inka-cli` が同じアーカイブを取得し，`cargo install --locked inka-cli`(または `inka-lsp`，
   `inka-evidence-rust`)が [crates.io](https://crates.io/crates/inka-cli) からビルドします。
-- **VS Code。** [Marketplace](https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode) または
-  [Open VSX](https://open-vsx.org/extension/ut-issl/inka-vscode) から `ut-issl.inka-vscode` をインストールします。
+- **VS Code。** [Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode) または
+  [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode) から `inka-project.inka-vscode` をインストールします。
   `inka-lsp` を同梱しています。リリースには *Install from VSIX…* 用の `.vsix` も添付されています。
 - **グラフビューア。** `inka serve` はビューアのバンドルを `web/dist` に探します。チェックアウトの外では，リリースの
   `inka-web-v<version>.tar.gz` を展開し，そのディレクトリを `--assets` で渡します。
 - **テストエビデンスのアダプタ。** `pip install inka-evidence`(pytest，[PyPI](https://pypi.org/project/inka-evidence/))と
-  `npm install --save-dev @ut-issl/inka-evidence`(Vitest，[npm](https://www.npmjs.com/package/@ut-issl/inka-evidence))。
+  `npm install --save-dev @inka-project/inka-evidence`(Vitest，[npm](https://www.npmjs.com/package/@inka-project/inka-evidence))。
   Rust のアダプタ `inka-evidence-rust` はコマンドラインのアーカイブに入っています。
 
 リリースの `SHA256SUMS` にすべての成果物が載り，各成果物には GitHub のビルド来歴の attestation が付きます

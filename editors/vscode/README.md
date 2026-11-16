@@ -30,9 +30,9 @@ theme) and the mode after `promote:` (like the mode keyword opening a block).
 
 ## Install
 
-Install `ut-issl.inka-vscode` from the
-[Marketplace](https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode)
-or [Open VSX](https://open-vsx.org/extension/ut-issl/inka-vscode), or pick the
+Install `inka-project.inka-vscode` from the
+[Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode)
+or [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode), or pick the
 `inka-vscode-v<version>-<platform>.vsix` of a
 [GitHub Release](https://github.com/ut-issl/inka/releases) and use
 *Extensions: Install from VSIX…*. The extension is platform-specific because

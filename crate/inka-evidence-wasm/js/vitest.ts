@@ -10,7 +10,7 @@
  *     includeTaskLocation: true,
  *     reporters: [
  *       ["default"],
- *       ["@ut-issl/inka-evidence/vitest", { output: "evidence.json" }],
+ *       ["@inka-project/inka-evidence/vitest", { output: "evidence.json" }],
  *     ],
  *   },
  * });
