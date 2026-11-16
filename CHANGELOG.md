@@ -5,6 +5,32 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.2
+
+This release adds `inka init` and is the first to publish the packages to their registries.
+
+### Command line (`inka`)
+
+- `inka init [PATH]` scaffolds a new project with `inka.toml`, an empty `values.toml`, and a starter argument.
+- The new project passes `inka check` and `inka fmt --check` as it stands.
+- The project name defaults to the directory's name, and `--name` overrides it.
+- `--phases` sets `phases.order`, and its first entry becomes `phases.current` (`M0` by default).
+- `inka init` only adds files and never overwrites an existing project.
+
+### Distribution
+
+- GitHub Releases now attach prebuilt binaries for Linux (musl) and macOS on x86_64 and aarch64, and Windows on x86_64.
+- They also attach the VS Code extension per platform, the Python wheels and sdist, and the npm package.
+- The web viewer bundle for `inka serve --assets` is attached as well.
+- Every asset has a build provenance attestation and is listed in `SHA256SUMS`.
+- The crates are published to crates.io, `inka-evidence` to PyPI, and `@inka-project/inka-evidence` to npm.
+- The VS Code extension is published as `inka-project.inka-vscode` to the VS Code Marketplace and Open VSX.
+- The VS Code extension bundles `inka-lsp`, and uses it before one on `PATH`.
+
+### Breaking changes
+
+- The npm package is renamed from `@ut-issl/inka-evidence` to `@inka-project/inka-evidence`.
+
 ## v0.0.1
 
 The first release of inka, a text DSL for writing design arguments as structured, reviewable claims.
