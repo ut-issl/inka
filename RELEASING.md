@@ -105,10 +105,11 @@ On a new branch from `main`:
 ### 2. Optional: dry run
 
 In the Actions tab, run the `Release` workflow with `mode` left at its default `dry-run`. A dry run can start from any
-branch. It runs the checks of a release, builds every asset exactly as a release would, and lists them with their
-sizes in the run summary, but creates and publishes nothing. An existing tag or a missing CHANGELOG section is reported
-as a warning instead of failing, so the build can be rehearsed on a branch whose version is already released. Each
-asset can be downloaded from the run as a workflow artifact.
+branch. It runs the checks of a release, builds every asset exactly as a release would, runs `cargo publish --dry-run`
+on the crates (everything but the upload), and lists the assets with their sizes in the run summary, but creates and
+publishes nothing. An existing tag or a missing CHANGELOG section is reported as a warning instead of failing, so the
+build can be rehearsed on a branch whose version is already released. Each asset can be downloaded from the run as a
+workflow artifact.
 
 ### 3. Run the release
 
@@ -122,7 +123,8 @@ creates it on the dispatched commit together with the GitHub Release. The run fa
 - some manifest or lockfile carries another version,
 - the tag already exists,
 - `CHANGELOG.md` or `CHANGELOG.ja.md` has no section for the version, or
-- any asset fails to build.
+- any asset fails to build, or
+- a crate fails to package.
 
 Once the GitHub Release exists, the registry jobs run in parallel. One registry refusing does not stop the others.
 
@@ -153,3 +155,7 @@ If a registry job failed (a trusted publisher not yet configured, an expired Ope
 the cause and use *Re-run failed jobs* on the same workflow run: the GitHub Release and the other registries are left
 as they are, and the failed job publishes the assets that run built. Publishing to a registry cannot be undone, so
 never re-run the whole workflow for a version that is already out.
+
+A re-run runs the workflow file of the dispatched commit, so it cannot pick up a fix to `release.yaml` itself. When the
+cause is in the workflow, merge the fix into `main` and cut a new patch release; the registry skips the broken version,
+and its notes say so.
