@@ -39,7 +39,7 @@ The same assets are then published to the registries, each from its own GitHub e
 | --- | --- | --- | --- |
 | [crates.io](https://crates.io) | `inka-core`, `inka-evidence`, `inka-cli`, `inka-lsp`, `inka-evidence-rust` | `crates-io` | Trusted Publishing (OIDC) |
 | [PyPI](https://pypi.org) | `inka-evidence` | `pypi` | Trusted Publishing (OIDC) |
-| [npm](https://www.npmjs.com) | `@inka-project/inka-evidence` | `npm` | Trusted Publishing (OIDC) |
+| [npm](https://www.npmjs.com) | `@inka-project/inka-evidence` | `npm` | Trusted Publishing (OIDC), staged |
 | [VS Code Marketplace](https://marketplace.visualstudio.com) | `inka-project.inka-vscode` | `vscode-marketplace` | Trusted Publishing (OIDC) |
 | [Open VSX](https://open-vsx.org) | `inka-project.inka-vscode` | `open-vsx` | `OVSX_PAT` secret |
 
@@ -69,7 +69,9 @@ while the rest of the release goes through; see [Fixing a release](#fixing-a-rel
    `@inka-project/inka-evidence` must be published by hand (`npm publish` of the tarball from the GitHub Release, with
    an account that may create packages in the scope), because a trusted publisher can only be configured on an
    existing package. Then, in the package's Settings, add a Trusted Publisher for `ut-issl/inka`, workflow
-   `release.yaml`, environment `npm`.
+   `release.yaml`, environment `npm`, with `npm stage publish` as its only allowed action: the workflow stages each
+   version and a maintainer makes it public (step 4 of the procedure), so no automation can publish on its own.
+   Set *Publishing access* to require two-factor authentication and disallow tokens.
 5. **VS Code Marketplace.** Create the publisher `inka-project` in the
    [Marketplace publisher management](https://marketplace.visualstudio.com/manage) (a personal Microsoft account
    suffices; no Azure DevOps organization or token is needed). On the publisher's *Trusted Publishing* tab, create a
@@ -129,6 +131,17 @@ Once the GitHub Release exists, the registry jobs run in parallel. One registry 
 Check that the [GitHub Release](https://github.com/ut-issl/inka/releases) has the title `v<version>`, the notes from
 `CHANGELOG.md`, every asset of the table above, and that it is marked as the latest release. Then check that the
 version appears on each registry.
+
+On npm the version is staged, not yet public. A maintainer with 2FA on their npm account approves it, from the
+*Staged packages* tab of the package on npmjs.com or from a machine where they are logged in:
+
+```console
+npm stage list @inka-project/inka-evidence
+npm stage view <stage-id>       # or `npm stage download <stage-id>` to inspect the tarball
+npm stage approve <stage-id>    # `npm stage reject <stage-id>` discards it instead
+```
+
+Until it is approved, `npm install @inka-project/inka-evidence@<version>` does not resolve.
 
 ## Fixing a release
 
