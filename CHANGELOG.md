@@ -5,6 +5,21 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.4
+
+This release builds the graph viewer into `inka`, so `inka serve` works without downloading anything else.
+
+### Command line (`inka`)
+
+- `inka serve` serves the graph viewer compiled into the binary, so `--assets` is no longer needed.
+- `--assets <DIR>` still serves a viewer bundle from disk, for working on the viewer itself.
+- `cargo install inka-cli` embeds the viewer as well.
+
+### Distribution
+
+- The web viewer bundle `inka-web-<version>.tar.gz` is no longer attached to the GitHub Release.
+- The npm package is staged on npm by the release workflow and made public when a maintainer approves it.
+
 ## v0.0.3
 
 This release changes nothing in inka itself and fixes how the release workflow publishes the packages.

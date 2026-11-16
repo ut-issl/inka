@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crate/*"]
 
 [workspace.package]
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 rust-version = "1.96"
 repository = "https://github.com/ut-issl/inka"
@@ -14,8 +14,8 @@ ariadne = "0.6"
 assert_cmd = "2"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
-inka-core = { path = "crate/inka-core", version = "0.0.3" }
-inka-evidence = { path = "crate/inka-evidence", version = "0.0.3" }
+inka-core = { path = "crate/inka-core", version = "0.0.4" }
+inka-evidence = { path = "crate/inka-evidence", version = "0.0.4" }
 insta = "1"
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 js-sys = "0.3.106"
