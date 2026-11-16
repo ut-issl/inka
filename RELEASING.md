@@ -133,5 +133,5 @@ matching `CHANGELOG` sections in a pull request.
 
 If a registry job failed (a trusted publisher not yet configured, an expired Open VSX token, a registry outage), fix
 the cause and use *Re-run failed jobs* on the same workflow run: the GitHub Release and the other registries are left
-as they are, and the failed job publishes the assets that run built. Publishing to a registry cannot be undone, so never re-run
-the whole workflow for a version that is already out.
+as they are, and the failed job publishes the assets that run built. Publishing to a registry cannot be undone, so
+never re-run the whole workflow for a version that is already out.
