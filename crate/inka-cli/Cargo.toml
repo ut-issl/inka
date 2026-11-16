@@ -4,8 +4,18 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Command-line interface for inka"
+repository.workspace = true
 license.workspace = true
-publish.workspace = true
+
+# `cargo binstall` fetches the prebuilt archive of a GitHub Release instead
+# of compiling; every binary of the workspace travels in the same archive.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/inka-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "inka-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [[bin]]
 name = "inka"

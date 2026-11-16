@@ -28,7 +28,22 @@ scopes once the server provides them. Beyond keywords and ids it only colors
 the phase after `until:` (as a function name: pale yellow in the default dark
 theme) and the mode after `promote:` (like the mode keyword opening a block).
 
-## How to run
+## Install
+
+Install `ut-issl.inka-vscode` from the
+[Marketplace](https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode)
+or [Open VSX](https://open-vsx.org/extension/ut-issl/inka-vscode), or pick the
+`inka-vscode-v<version>-<platform>.vsix` of a
+[GitHub Release](https://github.com/ut-issl/inka/releases) and use
+*Extensions: Install from VSIX…*. The extension is platform-specific because
+it bundles `inka-lsp` under its own `server/` directory.
+
+The server is found in this order: the `inka.serverPath` setting when it is
+set; the bundled `server/inka-lsp`; and `inka-lsp` on `PATH`. So a release
+needs no setup, and a development build of the server wins as soon as the
+setting points at it.
+
+## How to run from source
 
 1. `cargo build -p inka-lsp` at the repository root, or install the binary
    somewhere on `PATH`.
@@ -47,10 +62,17 @@ theme) and the mode after `promote:` (like the mode keyword opening a block).
 To stop, close the Extension Development Host window or press the red stop
 button in the first window.
 
-When `inka-lsp` is not on `PATH`, point the `inka.serverPath` setting at the
-built binary with an **absolute** path, for example
-`/home/you/inka/target/debug/inka-lsp` — settings do not expand
+To run a server you built instead of a bundled one or the one on `PATH`,
+point the `inka.serverPath` setting at the binary with an **absolute** path,
+for example `/home/you/inka/target/debug/inka-lsp` — settings do not expand
 `${workspaceFolder}`. The setting is machine-scoped, so a workspace cannot
 quietly point it at a script of its own. The binary is churned by
 `cargo build`, so consider adding `**/target/**` to `files.watcherExclude`
 if your editor does not already exclude it.
+
+## Packaging
+
+`npm run package` (`vsce package`) builds a `.vsix` of the host platform's
+layout from this directory; drop an `inka-lsp` binary into `server/` first to
+bundle it, as the release workflow does for every platform (see
+[RELEASING.md](../../RELEASING.md)).

@@ -26,6 +26,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+inka-core = { path = "crate/inka-core", version = "0.1.0" }
 serde = { version = "1" }
 """
 
@@ -144,9 +145,23 @@ class CheckTest(RepositoryTest):
         self.assertEqual(release.mismatches(self.root), [])
 
     def test_every_version_field_is_found(self) -> None:
-        # 6 manifests, 2 Cargo.lock members, 2 uv.lock projects, and 2 fields
-        # in each of the 3 package-lock.json files.
-        self.assertEqual(len(release.versions(self.root)), 6 + 2 + 2 + 6)
+        # 6 manifests, 1 path dependency, 2 Cargo.lock members, 2 uv.lock
+        # projects, and 2 fields in each of the 3 package-lock.json files.
+        self.assertEqual(len(release.versions(self.root)), 6 + 1 + 2 + 2 + 6)
+
+    def test_a_disagreeing_path_dependency_is_reported(self) -> None:
+        write(self.root, "Cargo.toml", CARGO_TOML.replace('version = "0.1.0" }', 'version = "0.0.9" }'))
+
+        self.assertEqual(
+            release.mismatches(self.root),
+            [release.Found("Cargo.toml", "workspace.dependencies.inka-core.version", "0.0.9")],
+        )
+
+    def test_a_path_dependency_without_a_version_is_an_error(self) -> None:
+        write(self.root, "Cargo.toml", CARGO_TOML.replace(', version = "0.1.0" }', " }"))
+
+        with self.assertRaisesRegex(release.ReleaseError, "inka-core.version is missing"):
+            release.versions(self.root)
 
     def test_a_disagreeing_manifest_is_reported_by_location(self) -> None:
         write(self.root, "web/package.json", package_json("web", "0.2.0"))
@@ -197,7 +212,9 @@ class BumpTest(RepositoryTest):
 
         cargo_lock = (self.root / "Cargo.lock").read_text(encoding="utf-8")
         self.assertIn('name = "serde"\nversion = "0.1.0"', cargo_lock)
-        self.assertIn('serde = { version = "1" }', (self.root / "Cargo.toml").read_text(encoding="utf-8"))
+        cargo_toml = (self.root / "Cargo.toml").read_text(encoding="utf-8")
+        self.assertIn('serde = { version = "1" }', cargo_toml)
+        self.assertIn('inka-core = { path = "crate/inka-core", version = "0.0.1" }', cargo_toml)
         python = (self.root / "crate/inka-evidence-py/pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('[tool.other]\nversion = "9.9.9"', python)
         npm_lock = json.loads((self.root / "web/package-lock.json").read_text(encoding="utf-8"))
@@ -276,6 +293,19 @@ class BumpGuardTest(RepositoryTest):
 
         self.assertEqual(release.mismatches(self.root), [])
 
+    def test_a_path_dependency_spread_over_a_table_is_refused(self) -> None:
+        spread = CARGO_TOML.replace(
+            'inka-core = { path = "crate/inka-core", version = "0.1.0" }\n',
+            "",
+        ) + '\n[workspace.dependencies.inka-core]\npath = "crate/inka-core"\nversion = "0.1.0"\n'
+        write(self.root, "Cargo.toml", spread)
+        before = self.snapshot()
+
+        with self.assertRaisesRegex(release.ReleaseError, "inka-core.*by hand"):
+            release.bump(self.root, "0.0.1")
+
+        self.assertEqual(self.snapshot(), before)
+
     def test_a_header_inside_a_multiline_string_is_refused(self) -> None:
         tricky = CARGO_TOML.replace(
             '[workspace.package]\nversion = "0.1.0"',
@@ -314,7 +344,7 @@ class MainTest(RepositoryTest):
         return code, out.getvalue(), err.getvalue()
 
     def test_check_succeeds_when_versions_agree(self) -> None:
-        self.assertEqual(self.run_main("check"), (0, "All 16 version fields are 0.1.0.\n", ""))
+        self.assertEqual(self.run_main("check"), (0, "All 17 version fields are 0.1.0.\n", ""))
 
     def test_check_names_each_disagreeing_field(self) -> None:
         write(self.root, "web/package.json", package_json("web", "0.2.0"))

@@ -1,0 +1,5 @@
+# maturin output
+dist/
+# Copied from the repository root when packaging
+LICENSE-MIT
+LICENSE-APACHE

@@ -1,9 +1,23 @@
 {
   "name": "@ut-issl/inka-evidence",
   "version": "0.0.1",
-  "license": "MIT OR Apache-2.0",
-  "private": true,
   "description": "Emit inka test evidence v1 JSON from JavaScript test adapters",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ut-issl/inka.git",
+    "directory": "crate/inka-evidence-wasm"
+  },
+  "homepage": "https://github.com/ut-issl/inka/tree/main/crate/inka-evidence-wasm#readme",
+  "bugs": {
+    "url": "https://github.com/ut-issl/inka/issues"
+  },
+  "keywords": [
+    "inka",
+    "test-evidence",
+    "vitest",
+    "wasm"
+  ],
   "engines": {
     "node": "^22.18.0 || >=24.11.0"
   },
@@ -28,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build --release --target nodejs && tsc -p tsconfig.build.json",
+    "build": "wasm-pack build --release --target nodejs && node -e \"require('node:fs').rmSync('pkg/.gitignore', { force: true })\" && tsc -p tsconfig.build.json",
     "test": "npm run build && vitest run",
     "typecheck": "npm run build && tsc --noEmit"
   },
@@ -44,5 +58,14 @@
   },
   "bin": {
     "inka-evidence-merge": "dist/merge-cli.js"
+  },
+  "files": [
+    "pkg/",
+    "dist/",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

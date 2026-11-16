@@ -1,7 +1,15 @@
-// The client half is deliberately thin: launch the server named by
-// `inka.serverPath`, hand it every inka document, and forward watched-file
-// events for the non-inka inputs a project reads (manifest, values, evidence,
-// approvals) so diagnostics follow disk changes too.
+// The client half is deliberately thin: launch the server, hand it every
+// inka document, and forward watched-file events for the non-inka inputs a
+// project reads (manifest, values, evidence, approvals) so diagnostics
+// follow disk changes too.
+//
+// The server is found in this order: the `inka.serverPath` setting when it
+// is set; the `inka-lsp` bundled under the extension's own `server/`
+// directory (the platform-specific .vsix of a release carries one); and
+// finally `inka-lsp` on PATH.
+
+import { existsSync } from "node:fs";
+import * as path from "node:path";
 
 import { ExtensionContext, window, workspace } from "vscode";
 import {
@@ -31,11 +39,11 @@ export function activate(context: ExtensionContext): void {
     synchronize: { fileEvents: watchers },
   };
 
-  startClient(clientOptions);
+  startClient(context, clientOptions);
   context.subscriptions.push(
     workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("inka.serverPath")) {
-        void restartClient(clientOptions);
+        void restartClient(context, clientOptions);
       }
     }),
   );
@@ -49,14 +57,26 @@ export function deactivate(): Thenable<void> | undefined {
   return undefined;
 }
 
-function serverCommand(): string {
-  const configured =
-    workspace.getConfiguration("inka").get<string>("serverPath") ?? "";
-  return configured.trim() === "" ? "inka-lsp" : configured.trim();
+function serverCommand(context: ExtensionContext): string {
+  const configured = (
+    workspace.getConfiguration("inka").get<string>("serverPath") ?? ""
+  ).trim();
+  if (configured !== "") {
+    return configured;
+  }
+  const bundled = path.join(
+    context.extensionPath,
+    "server",
+    process.platform === "win32" ? "inka-lsp.exe" : "inka-lsp",
+  );
+  return existsSync(bundled) ? bundled : "inka-lsp";
 }
 
-function startClient(clientOptions: LanguageClientOptions): void {
-  const command = serverCommand();
+function startClient(
+  context: ExtensionContext,
+  clientOptions: LanguageClientOptions,
+): void {
+  const command = serverCommand(context);
   client = new LanguageClient(
     "inka",
     "inka language server",
@@ -66,12 +86,13 @@ function startClient(clientOptions: LanguageClientOptions): void {
   client.start().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     void window.showErrorMessage(
-      `inka-lsp failed to start (inka.serverPath = "${command}"): ${message}`,
+      `inka-lsp failed to start (${command}): ${message}`,
     );
   });
 }
 
 async function restartClient(
+  context: ExtensionContext,
   clientOptions: LanguageClientOptions,
 ): Promise<void> {
   if (client) {
@@ -81,5 +102,5 @@ async function restartClient(
       // It never ran; there is nothing to stop.
     }
   }
-  startClient(clientOptions);
+  startClient(context, clientOptions);
 }

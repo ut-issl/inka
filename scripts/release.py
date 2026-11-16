@@ -12,7 +12,9 @@ where those fields live:
     python3 scripts/release.py notes 0.0.1 [--changelog CHANGELOG.ja.md]
 
 `Cargo.toml`'s `[workspace.package]` version is the reference the others
-must match. Versions are plain `MAJOR.MINOR.PATCH`: pre-release and build
+must match. The `[workspace.dependencies]` entries that point at a workspace
+member by `path` carry the same version as their requirement, because
+`cargo publish` replaces the path with that requirement. Versions are plain `MAJOR.MINOR.PATCH`: pre-release and build
 suffixes are spelled differently by Cargo, Python, and npm, so none is
 accepted. Only the standard library is used (Python 3.11 or later).
 
@@ -55,6 +57,7 @@ TABLE_HEADER = re.compile(r"^\[")
 NAME_LINE = re.compile(r'^name = "([^"]*)"$')
 VERSION_LINE = re.compile(r'^version = "([^"]*)"$')
 SOURCE_LINE = re.compile(r"^source = ")
+DEPENDENCY_VERSION = re.compile(r'^(?P<head>[A-Za-z0-9_-]+ = \{.*\bversion = ")(?P<version>[^"]*)(?P<tail>".*\})$')
 FENCE = re.compile(r"^(```|~~~)")
 
 Table = dict[str, Any]
@@ -162,9 +165,30 @@ def _uv_lock_version(root: Path, directory: str) -> Found:
     raise ReleaseError(f"project {name} is missing from {relative}; run `uv lock`")
 
 
+def _path_dependencies(manifest: Table) -> dict[str, Any]:
+    """The `[workspace.dependencies]` entries that name a workspace member by
+    `path`: the ones whose version requirement must track the workspace."""
+    dependencies = manifest.get("workspace", {}).get("dependencies", {})
+    return {name: spec for name, spec in dependencies.items() if isinstance(spec, dict) and "path" in spec}
+
+
+def _path_dependency_versions(root: Path) -> list[Found]:
+    manifest = _toml(root, CARGO_MANIFEST)
+    found = []
+    for name, spec in _path_dependencies(manifest).items():
+        field = f"workspace.dependencies.{name}.version"
+        if "version" not in spec:
+            raise ReleaseError(
+                f"{CARGO_MANIFEST}: {field} is missing; cargo publish needs the requirement next to the path"
+            )
+        found.append(Found(CARGO_MANIFEST, field, spec["version"]))
+    return found
+
+
 def versions(root: Path) -> list[Found]:
     """Every version field the release process keeps in step."""
     found = [Found(CARGO_MANIFEST, "workspace.package.version", workspace_version(root))]
+    found += _path_dependency_versions(root)
     found += _cargo_lock_versions(root)
     for directory in PYTHON_PROJECTS:
         relative = _relative(directory, "pyproject.toml")
@@ -245,6 +269,43 @@ def _rewrite_toml(text: str, relative: str, target: _TomlTarget, version: str) -
     return rewritten
 
 
+def _rewrite_path_dependencies(text: str, relative: str, version: str) -> str:
+    """Rewrite the version requirement of every path dependency under
+    `[workspace.dependencies]`, each written as one inline table on a line
+    of its own; any other layout is refused rather than guessed at."""
+    names = set(_path_dependencies(_parse_toml(text, relative)))
+    if not names:
+        return text
+    sections: list[list[str]] = [[]]
+    for line in text.splitlines(keepends=True):
+        if TABLE_HEADER.match(line):
+            sections.append([])
+        sections[-1].append(line)
+
+    rewritten: set[str] = set()
+    for section in sections:
+        if not section or section[0].rstrip("\n") != "[workspace.dependencies]":
+            continue
+        for index, line in enumerate(section):
+            match = DEPENDENCY_VERSION.match(line.rstrip("\n"))
+            if match and match.group("head").split(" ", 1)[0] in names:
+                section[index] = f'{match.group("head")}{version}{match.group("tail")}\n'
+                rewritten.add(match.group("head").split(" ", 1)[0])
+    missing = sorted(names - rewritten)
+    if missing:
+        raise ReleaseError(
+            f"{relative}: the path dependency {', '.join(missing)} is not one inline table line with a version "
+            "under [workspace.dependencies]; update its version by hand"
+        )
+
+    result = "".join(line for section in sections for line in section)
+    changed = _changed_leaves(_parse_toml(text, relative), _parse_toml(result, relative))
+    expected = {("workspace", "dependencies", name, "version") for name in names}
+    if any(path not in expected or value != version for path, value in changed):
+        raise ReleaseError(f"{relative} is laid out in a way bump cannot edit safely; update its version by hand")
+    return result
+
+
 def _dump_json(data: Table) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
@@ -285,6 +346,7 @@ def bump(root: Path, version: str) -> None:
         rewritten[relative] = _rewrite_json(_read(root, relative), relative, paths, version)
 
     toml(CARGO_MANIFEST, _TomlTarget("[workspace.package]", lambda _n, _s: True, 1))
+    rewritten[CARGO_MANIFEST] = _rewrite_path_dependencies(rewritten[CARGO_MANIFEST], CARGO_MANIFEST, version)
     toml(CARGO_LOCK, _TomlTarget("[[package]]", lambda n, has_source: n in members and not has_source, len(members)))
     for directory in PYTHON_PROJECTS:
         toml(_relative(directory, "pyproject.toml"), _TomlTarget("[project]", lambda _n, _s: True, 1))

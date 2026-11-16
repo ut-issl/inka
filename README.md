@@ -2,6 +2,28 @@
 
 Structured argumentation with accountable approvals. Text-based, LSP-powered, built for iterative development.
 
+## Install
+
+Every [GitHub Release](https://github.com/ut-issl/inka/releases) ships the same version of every package, for x86_64 and
+aarch64 Linux, x86_64 and aarch64 macOS, and x86_64 Windows.
+
+- **Command line.** Download `inka-v<version>-<target>.tar.gz` (`.zip` on Windows) from the release and put `inka`,
+  `inka-lsp`, `inka-evidence-rust` and `inka-evidence-merge` on your `PATH`. With a Rust toolchain,
+  `cargo binstall inka-cli` fetches the same archive, and `cargo install --locked inka-cli` (or `inka-lsp`,
+  `inka-evidence-rust`) builds from [crates.io](https://crates.io/crates/inka-cli).
+- **VS Code.** Install `ut-issl.inka-vscode` from the
+  [Marketplace](https://marketplace.visualstudio.com/items?itemName=ut-issl.inka-vscode) or
+  [Open VSX](https://open-vsx.org/extension/ut-issl/inka-vscode); it bundles `inka-lsp`. The release also carries the
+  `.vsix` for *Install from VSIX…*.
+- **Graph viewer.** `inka serve` looks for the viewer bundle in `web/dist`; outside a checkout, extract
+  `inka-web-v<version>.tar.gz` from the release and pass the directory with `--assets`.
+- **Test evidence adapters.** `pip install inka-evidence` (pytest, [PyPI](https://pypi.org/project/inka-evidence/)) and
+  `npm install --save-dev @ut-issl/inka-evidence` (Vitest, [npm](https://www.npmjs.com/package/@ut-issl/inka-evidence));
+  the Rust adapter `inka-evidence-rust` is in the command-line archive.
+
+`SHA256SUMS` on the release lists every asset, and each asset carries a GitHub build provenance attestation
+(`gh attestation verify <file> --repo ut-issl/inka`). [RELEASING.md](RELEASING.md) describes how releases are cut.
+
 ## QuickStart
 
 An inka project is a directory holding `inka.toml` and an `argument/` directory of `*.inka` files.
