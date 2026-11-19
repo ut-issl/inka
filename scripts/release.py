@@ -40,8 +40,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import shlex
 import re
+import shlex
 import subprocess
 import sys
 import textwrap
