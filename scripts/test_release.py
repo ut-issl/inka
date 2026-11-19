@@ -430,6 +430,25 @@ class DraftTest(unittest.TestCase):
             release.notes(changelog, "0.0.3")
 
 
+class NextVersionTest(unittest.TestCase):
+    def test_a_part_is_incremented_and_the_parts_after_it_reset(self) -> None:
+        self.assertEqual(release.next_version("1.2.3", "patch"), "1.2.4")
+        self.assertEqual(release.next_version("1.2.3", "minor"), "1.3.0")
+        self.assertEqual(release.next_version("1.2.3", "major"), "2.0.0")
+
+    def test_an_explicit_version_above_the_current_one_is_kept(self) -> None:
+        self.assertEqual(release.next_version("0.0.9", "0.0.10"), "0.0.10")
+
+    def test_an_explicit_version_must_move_forward(self) -> None:
+        for target in ("0.1.0", "0.0.9"):
+            with self.assertRaisesRegex(release.ReleaseError, "is not above the current version 0.1.0"):
+                release.next_version("0.1.0", target)
+
+    def test_anything_else_is_refused(self) -> None:
+        with self.assertRaisesRegex(release.ReleaseError, "neither major, minor, patch nor a plain"):
+            release.next_version("0.1.0", "pacth")
+
+
 class PullRequestTest(unittest.TestCase):
     def test_only_pull_requests_merged_in_the_range_are_selected(self) -> None:
         def entry(number: int, title: str, bot: bool, oid: str) -> release.Table:

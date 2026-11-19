@@ -88,8 +88,12 @@ while the rest of the release goes through; see [Fixing a release](#fixing-a-rel
 With a clean working tree and an authenticated [`gh`](https://cli.github.com), run:
 
 ```console
-python3 scripts/release.py prepare 0.1.0
+python3 scripts/release.py prepare patch
 ```
+
+The argument is the part of the version to increment: `patch`, `minor` or `major`, as [Versioning](#versioning) decides
+(while the major version is `0`, `minor` for a release that breaks compatibility and `patch` for any other). The parts
+after it become `0`. An explicit version above the current one, such as `0.1.0`, is accepted as well.
 
 From the tip of `origin/main`, this
 

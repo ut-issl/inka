@@ -88,8 +88,13 @@ GitHub organization から独立させています。Trusted Publisher はリポ
 作業ツリーに未コミットの変更がなく，[`gh`](https://cli.github.com) が認証済みの状態で，次を実行します。
 
 ```console
-python3 scripts/release.py prepare 0.1.0
+python3 scripts/release.py prepare patch
 ```
+
+引数には，バージョンのうち上げる部分を `patch`，`minor`，`major` のいずれかで指定します。どれを選ぶかは
+[バージョンの付け方](#バージョンの付け方)の規則に従います(メジャーバージョンが `0` の間は，互換性を壊すリリースなら `minor`，
+それ以外なら `patch`)。指定した部分より下の桁は `0` になります。`0.1.0` のように，現在より上のバージョンを直接
+指定することもできます。
 
 `origin/main` の先頭から，次のことを行います。
 

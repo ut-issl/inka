@@ -10,10 +10,12 @@ where those fields live:
     python3 scripts/release.py check          # fail if any field disagrees
     python3 scripts/release.py bump 0.0.2     # rewrite every field
     python3 scripts/release.py notes 0.0.1 [--changelog CHANGELOG.ja.md]
-    python3 scripts/release.py prepare 0.0.2 [--dry-run]   # open the release PR
+    python3 scripts/release.py prepare patch [--dry-run]   # open the release PR
 
-`prepare` is the whole first step of a release: from the tip of `origin/main`
-it creates the branch `release/v<version>`, bumps every field, drafts the
+`prepare` is the whole first step of a release. It takes the part of the
+version to increment (`major`, `minor` or `patch`; the parts after it become
+0) or an explicit version above the current one. From the tip of
+`origin/main` it creates the branch `release/v<version>`, bumps every field, drafts the
 `## v<version>` section of both changelogs from the pull requests merged
 since the previous release, and opens the pull request
 `chore(release): v<version>`, whose description lists every one of those
@@ -55,6 +57,7 @@ BASE_BRANCH = "main"
 DRAFT_MARKER = "<!-- release-draft"
 # MD013 in .markdownlint-cli2.yaml.
 MARKDOWN_WIDTH = 120
+VERSION_PARTS = ("major", "minor", "patch")
 
 
 def _relative(directory: str, name: str) -> str:
@@ -432,6 +435,20 @@ def _wrap_item(text: str) -> list[str]:
     return textwrap.wrap(text, width=MARKDOWN_WIDTH, initial_indent="- ", subsequent_indent="  ")
 
 
+def next_version(previous: str, target: str) -> str:
+    """The version a release moves to from `previous`: `target` names the
+    part to increment, or is itself a version above `previous`."""
+    major, minor, patch = _version_key(previous)
+    if target in VERSION_PARTS:
+        parts = {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}
+        return ".".join(map(str, parts[target]))
+    if not SEMVER.fullmatch(target):
+        raise ReleaseError(f"{target!r} is neither {', '.join(VERSION_PARTS)} nor a plain MAJOR.MINOR.PATCH version")
+    if _version_key(target) <= _version_key(previous):
+        raise ReleaseError(f"{target} is not above the current version {previous}")
+    return target
+
+
 def draft_section(version: str, pull_requests: list[PullRequest], language: str = "English") -> str:
     """A `## v<version>` section to start the release notes from: one item
     per pull request a person wrote, under the marker that keeps the draft
@@ -538,18 +555,18 @@ def _merged_since(root: Path, tag: str, tip: str) -> list[PullRequest]:
     return select_merged(json.loads(listing), commits)
 
 
-def prepare(root: Path, version: str, dry_run: bool) -> None:
-    """Open the pull request that prepares the release of `version`."""
+def prepare(root: Path, target: str, dry_run: bool) -> None:
+    """Open the pull request that prepares the release `target` names: a
+    part of the version to increment, or the version itself."""
     tip = f"origin/{BASE_BRANCH}"
-    branch = f"release/v{version}"
-    title = f"chore(release): v{version}"
     _command(root, "git", "fetch", "--tags", "origin", BASE_BRANCH)
     previous = _field(
         _parse_toml(_command(root, "git", "show", f"{tip}:{CARGO_MANIFEST}"), CARGO_MANIFEST),
         CARGO_MANIFEST, "workspace", "package", "version",
     )  # fmt: skip
-    if _version_key(version) <= _version_key(previous):
-        raise ReleaseError(f"{version} is not above {previous}, the version on {tip}")
+    version = next_version(previous, target)
+    branch = f"release/v{version}"
+    title = f"chore(release): v{version}"
     if not _command(root, "git", "tag", "--list", f"v{previous}").strip():
         raise ReleaseError(f"{tip} carries {previous}, but the tag v{previous} does not exist; release it first")
     pull_requests = _merged_since(root, f"v{previous}", tip)
@@ -594,8 +611,10 @@ def _parser() -> argparse.ArgumentParser:
     notes_command = commands.add_parser("notes", help="print the changelog section of VERSION")
     notes_command.add_argument("version")
     notes_command.add_argument("--changelog", default="CHANGELOG.md", help="relative to the root")
-    prepare_command = commands.add_parser("prepare", help="open the pull request that prepares the release of VERSION")
-    prepare_command.add_argument("version")
+    prepare_command = commands.add_parser("prepare", help="open the pull request that prepares the next release")
+    prepare_command.add_argument(
+        "version", metavar="major|minor|patch|VERSION", help="the part of the version to increment, or the new version"
+    )
     prepare_command.add_argument(
         "--dry-run", action="store_true", help="print the pull request description and change nothing"
     )
