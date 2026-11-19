@@ -5,6 +5,31 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.6
+
+This release resolves dotted value paths into nested tables and adds completion to the language server.
+
+### Values
+
+- `{$instrument.diameter_cm}` resolves through nested tables in a values file.
+- A values file grouped by area works as it stands, without a flattened copy.
+- Collisions between values files are still checked at the top-level key only.
+- A nested key outside the identifier grammar has no dotted path.
+
+### Language server (`inka-lsp`)
+
+- The language server answers `textDocument/completion`.
+- Completion works from the text before the cursor, so it helps while the file does not parse.
+- It offers mode keywords between blocks and the properties a block's mode still lacks.
+- It offers block ids in a `children:` list, phases after `until:`, promote targets, and value keys after `{$`.
+- A dotted value path counts as one word when value keys are completed.
+
+### Documentation
+
+- The documentation site, in English and Japanese, is published to GitHub Pages from `main`.
+- The READMEs list every field `inka export` writes.
+- The documentation site lists the Formatting, Test Evidence and Web UI pages.
+
 ## v0.0.5
 
 This release changes nothing in inka itself and fixes how the release workflow publishes the crates.
