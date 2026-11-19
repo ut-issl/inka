@@ -6,6 +6,28 @@
       "script": "compile",
       "label": "npm: compile",
       "problemMatcher": "$tsc"
+    },
+    {
+      "label": "cargo: build inka-lsp",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "build",
+        "-p",
+        "inka-lsp"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/../.."
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "build extension and server",
+      "dependsOn": [
+        "npm: compile",
+        "cargo: build inka-lsp"
+      ],
+      "problemMatcher": []
     }
   ]
 }

@@ -41,20 +41,24 @@ it bundles `inka-lsp` under its own `server/` directory.
 The server is found in this order: the `inka.serverPath` setting when it is
 set; the bundled `server/inka-lsp`; and `inka-lsp` on `PATH`. So a release
 needs no setup, and a development build of the server wins as soon as the
-setting points at it.
+setting points at it. Running the extension from source (below) uses the
+server of the checkout without any setting.
 
 ## How to run from source
 
-1. `cargo build -p inka-lsp` at the repository root, or install the binary
-   somewhere on `PATH`.
-2. `npm ci` in this directory.
-3. Open **this directory** (not the repository root) as the folder in
+1. `npm ci` in this directory.
+2. Open **this directory** (not the repository root) as the folder in
    VS Code — e.g. `code editors/vscode` from a terminal.
-4. Press `F5` (or Run → Start Debugging). The bundled launch configuration
-   compiles the extension and opens a second VS Code window titled
-   **[Extension Development Host]** with the extension loaded. Only that
-   second window has inka support; the first one is just the debugger.
-5. In the Extension Development Host window, File → Open Folder… and pick a
+3. Press `F5` (or Run → Start Debugging). The bundled launch configuration
+   compiles the extension, runs `cargo build -p inka-lsp` at the repository
+   root, and opens a second VS Code window titled
+   **[Extension Development Host]** with the extension loaded. That window
+   runs the server from this checkout's `target/debug/` — passed through the
+   `INKA_LSP_DEV_SERVER` environment variable, which the extension reads
+   only in an Extension Development Host — so nothing needs installing or
+   configuring. Only that second window has inka support; the first one is
+   just the debugger.
+4. In the Extension Development Host window, File → Open Folder… and pick a
    folder containing an inka project (any ancestor works — the server finds
    the nearest `inka.toml` per file), then open a `.inka` file. Break a
    `children:` reference to see a diagnostic appear before saving.
@@ -62,9 +66,10 @@ setting points at it.
 To stop, close the Extension Development Host window or press the red stop
 button in the first window.
 
-To run a server you built instead of a bundled one or the one on `PATH`,
-point the `inka.serverPath` setting at the binary with an **absolute** path,
-for example `/home/you/inka/target/debug/inka-lsp` — settings do not expand
+To run a server you built outside the launch configuration instead of a
+bundled one or the one on `PATH`, point the `inka.serverPath` setting at the
+binary with an **absolute** path, for example
+`/home/you/inka/target/debug/inka-lsp` — settings do not expand
 `${workspaceFolder}`. The setting is machine-scoped, so a workspace cannot
 quietly point it at a script of its own. The binary is churned by
 `cargo build`, so consider adding `**/target/**` to `files.watcherExclude`

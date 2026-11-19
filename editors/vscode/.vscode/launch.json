@@ -11,7 +11,15 @@
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
       ],
-      "preLaunchTask": "npm: compile"
+      "env": {
+        "INKA_LSP_DEV_SERVER": "${workspaceFolder}/../../target/debug/inka-lsp"
+      },
+      "windows": {
+        "env": {
+          "INKA_LSP_DEV_SERVER": "${workspaceFolder}\\..\\..\\target\\debug\\inka-lsp.exe"
+        }
+      },
+      "preLaunchTask": "build extension and server"
     }
   ]
 }
