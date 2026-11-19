@@ -105,21 +105,12 @@ fn run(cli: Cli) -> io::Result<Outcome> {
                 key_id,
                 action,
             };
-            let stdin = io::stdin();
-            let input_is_tty = stdin.is_terminal();
-            let mut input = stdin.lock();
-            let mut now = review::now;
-            let session = review::Session {
-                input: &mut input,
-                input_is_tty,
-                now: &mut now,
-            };
-            let mut out = io::BufWriter::new(io::stdout().lock());
-            let mut err = io::BufWriter::new(io::stderr().lock());
-            let outcome = review::run(&path, &request, session, &mut out, &mut err, color)?;
-            err.flush()?;
-            out.flush()?;
-            Ok(outcome)
+            run_review(
+                &path,
+                &request,
+                color,
+                review_screen(color_choice, no_color),
+            )
         }
         Command::Fmt { path, check } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());
@@ -143,6 +134,45 @@ fn run(cli: Cli) -> io::Result<Outcome> {
 }
 
 /// Runs `inka init`, listing the created paths on standard output.
+/// How `inka review` presents its standard output. The queue goes there, so
+/// that stream — not the one diagnostics go to — decides its colour and its
+/// width.
+fn review_screen(color_choice: cli::ColorChoice, no_color: bool) -> review::Screen {
+    review::Screen {
+        color: color_choice.resolve(no_color, io::stdout().is_terminal()),
+        width: console::Term::stdout()
+            .size_checked()
+            .map_or(review::Screen::DEFAULT_WIDTH, |(_, columns)| {
+                usize::from(columns)
+            }),
+    }
+}
+
+/// Runs `inka review` on the process's own terminal streams and clock.
+fn run_review(
+    path: &std::path::Path,
+    request: &review::Request,
+    color: bool,
+    screen: review::Screen,
+) -> io::Result<Outcome> {
+    let stdin = io::stdin();
+    let input_is_tty = stdin.is_terminal();
+    let mut input = stdin.lock();
+    let mut now = review::now;
+    let session = review::Session {
+        input: &mut input,
+        input_is_tty,
+        now: &mut now,
+        screen,
+    };
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let mut err = io::BufWriter::new(io::stderr().lock());
+    let outcome = review::run(path, request, session, &mut out, &mut err, color)?;
+    err.flush()?;
+    out.flush()?;
+    Ok(outcome)
+}
+
 fn run_init(path: &std::path::Path, options: &init::Options, color: bool) -> io::Result<Outcome> {
     let mut out = io::BufWriter::new(io::stdout().lock());
     let mut err = io::BufWriter::new(io::stderr().lock());

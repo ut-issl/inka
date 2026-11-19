@@ -13,10 +13,19 @@
 //! session runs cannot be approved unseen — a record against the older
 //! content simply reads as stale, exactly as if it had been written before
 //! the edit.
+//!
+//! Standard output is styled through the `console` crate. A hue means one of
+//! two things: the review state — unapproved, stale, declined, blocked — or,
+//! in blue, a block id. The state is always spelled out too, so the
+//! uncoloured rendering loses nothing. Styling wraps text that has already
+//! been through [`sanitize`]; it is never read from a source file or a
+//! record. Descriptions are wrapped to the terminal by `textwrap`, and the
+//! guides that hang the children under `children:` are drawn by `termtree`.
 
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
+use console::{Alignment, Style, measure_text_width, pad_str};
 use inka_core::approvals::{self, APPROVALS_DIR};
 use inka_core::evidence::EvidenceSet;
 use inka_core::hash::{LocalView, ViewHash};
@@ -24,6 +33,7 @@ use inka_core::record::{Record, RecordFields, Target, Timestamp};
 use inka_core::review::{BlockedReason, QueueItem, QueueState, ReviewQueue, derive_queue};
 use inka_core::source::{Diagnostics, Error, SourceMap};
 use inka_core::view::{ArgumentView, EvidenceKind, Mode, NodeComments, Property, ViewNode};
+use termtree::{GlyphPalette, Tree};
 
 use crate::check::Outcome;
 use crate::load::{ProjectView, load_project_view};
@@ -80,6 +90,113 @@ pub struct Session<'a> {
     pub input_is_tty: bool,
     /// The clock, read once per recorded decision.
     pub now: &'a mut dyn FnMut() -> Timestamp,
+    /// How standard output is presented.
+    pub screen: Screen,
+}
+
+/// How the command's standard output is presented, injected so tests render
+/// deterministically whatever terminal they run in.
+#[derive(Debug, Clone, Copy)]
+pub struct Screen {
+    /// Whether output carries ANSI styling.
+    pub color: bool,
+    /// The terminal width in columns, which the rule of a target's header
+    /// fills.
+    pub width: usize,
+}
+
+impl Screen {
+    /// The width assumed when standard output is not a terminal.
+    pub const DEFAULT_WIDTH: usize = 80;
+
+    /// `style`, switched on or off by this screen alone: the crate's own
+    /// terminal detection never decides.
+    fn styled(self, style: Style) -> Style {
+        style.force_styling(self.color)
+    }
+
+    /// A block id, wherever one is shown.
+    fn id(self) -> Style {
+        self.styled(Style::new().blue().bold())
+    }
+
+    /// Emphasis that names nothing: the keys of the prompt.
+    fn bold(self) -> Style {
+        self.styled(Style::new().bold())
+    }
+
+    fn dim(self) -> Style {
+        self.styled(Style::new().dim())
+    }
+
+    fn key(self) -> Style {
+        self.styled(Style::new().cyan())
+    }
+
+    /// The hue of a review state.
+    fn group(self, group: Group) -> Style {
+        self.styled(match group {
+            Group::Unapproved => Style::new().yellow(),
+            Group::Stale => Style::new().magenta(),
+            Group::Declined => Style::new().red(),
+            Group::Blocked => Style::new().dim(),
+        })
+    }
+
+    fn label(self, label: ReviewLabel) -> Style {
+        self.styled(match label {
+            ReviewLabel::Approve => Style::new().green(),
+            ReviewLabel::Decline => Style::new().red(),
+        })
+    }
+
+    /// A target as `mode:id`, the mode receding behind the id.
+    fn target(self, mode: Mode, id: &str) -> String {
+        format!(
+            "{}{}",
+            self.dim().apply_to(format!("{}:", mode.name())),
+            self.id().apply_to(id)
+        )
+    }
+}
+
+/// The review states the output groups and colours by.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Group {
+    Unapproved,
+    Stale,
+    Declined,
+    Blocked,
+}
+
+impl Group {
+    const fn of(state: &QueueState) -> Self {
+        match state {
+            QueueState::Missing => Group::Unapproved,
+            QueueState::Stale { .. } => Group::Stale,
+            QueueState::Declined { .. } => Group::Declined,
+        }
+    }
+
+    /// The state as a target's header spells it.
+    const fn name(self) -> &'static str {
+        match self {
+            Group::Unapproved => "unapproved",
+            Group::Stale => "stale",
+            Group::Declined => "declined",
+            Group::Blocked => "blocked",
+        }
+    }
+
+    /// The state as a section heading spells it.
+    const fn heading(self) -> &'static str {
+        match self {
+            Group::Unapproved => "Unapproved",
+            Group::Stale => "Stale",
+            Group::Declined => "Declined",
+            Group::Blocked => "Blocked",
+        }
+    }
 }
 
 /// Runs `inka review` against `project_dir`, writing the queue or recorded
@@ -96,6 +213,7 @@ pub fn run(
     err: &mut impl Write,
     color: bool,
 ) -> io::Result<Outcome> {
+    let screen = session.screen;
     let Some(ProjectView {
         manifest,
         evidence,
@@ -131,7 +249,7 @@ pub fn run(
                 Ok(queue) => queue,
                 Err(error) => return fail(&error.to_string(), err, color),
             };
-            write_queue(&queue, out)?;
+            write_queue(&queue, screen, out)?;
             Ok(Outcome::Ok)
         }
         Action::Interactive => {
@@ -173,10 +291,8 @@ fn single(
     };
     write_record(context, node, current_hash, label, comment, session)?;
     Ok(format!(
-        "recorded {} of {}:{} in {APPROVALS_DIR}/{}.jsonl",
-        label.name(),
-        node.mode.name(),
-        node.id,
+        "{} in {APPROVALS_DIR}/{}.jsonl",
+        recorded_line(label, node, session.screen),
         context.approver
     ))
 }
@@ -200,7 +316,8 @@ fn interactive(
         );
     }
 
-    write_information(queue, out)?;
+    let screen = session.screen;
+    write_sections(queue, &[Group::Declined, Group::Blocked], true, screen, out)?;
     let actionable: Vec<&QueueItem> = queue
         .items
         .iter()
@@ -218,7 +335,7 @@ fn interactive(
         let node = view
             .node(&item.id)
             .expect("the queue names nodes of the same view");
-        write_target(node, item, index + 1, total, view, out)?;
+        write_target(node, item, index + 1, total, view, screen, out)?;
         let decision = match prompt_decision(session, out)? {
             Answer::Approve => Some((ReviewLabel::Approve, None)),
             Answer::Decline => {
@@ -234,13 +351,7 @@ fn interactive(
         if let Some((label, comment)) = decision {
             match write_record(context, node, item.current_hash, label, comment, session) {
                 Ok(()) => {
-                    writeln!(
-                        out,
-                        "recorded {} of {}:{}",
-                        label.name(),
-                        node.mode.name(),
-                        node.id
-                    )?;
+                    writeln!(out, "{}", recorded_line(label, node, screen))?;
                     recorded += 1;
                 }
                 Err(message) => {
@@ -283,6 +394,17 @@ impl ReviewLabel {
     }
 }
 
+/// The confirmation of one recorded decision, the decision in its colour.
+fn recorded_line(label: ReviewLabel, node: &ViewNode, screen: Screen) -> String {
+    format!(
+        "{} of {}",
+        screen
+            .label(label)
+            .apply_to(format!("recorded {}", label.name())),
+        screen.target(node.mode, &node.id)
+    )
+}
+
 /// One interactive answer.
 enum Answer {
     Approve,
@@ -305,7 +427,18 @@ fn read_answer(session: &mut Session<'_>) -> io::Result<Option<String>> {
 /// Prompts until one of `a`/`d`/`s`/`q` is read; end of input quits.
 fn prompt_decision(session: &mut Session<'_>, out: &mut impl Write) -> io::Result<Answer> {
     loop {
-        write!(out, "(a)pprove / (d)ecline / (s)kip / (q)uit > ")?;
+        let screen = session.screen;
+        let approve = screen.label(ReviewLabel::Approve).bold();
+        let decline = screen.label(ReviewLabel::Decline).bold();
+        let key = screen.bold();
+        write!(
+            out,
+            "[{}]pprove  [{}]ecline  [{}]kip  [{}]uit > ",
+            approve.apply_to('a'),
+            decline.apply_to('d'),
+            key.apply_to('s'),
+            key.apply_to('q')
+        )?;
         out.flush()?;
         let Some(line) = read_answer(session)? else {
             writeln!(out)?;
@@ -399,57 +532,115 @@ fn current_hash(
         .map_err(|error| error.to_string())
 }
 
-/// The `--list` rendering: one line per queued target, then blocked targets.
-fn write_queue(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
-    if queue.items.is_empty() {
-        writeln!(out, "nothing needs review")?;
-    } else {
-        writeln!(out, "targets needing review: {}", queue.items.len())?;
-        for item in &queue.items {
-            writeln!(
-                out,
-                "  {}:{} — {}",
-                item.mode.name(),
-                item.id,
-                state_line(&item.state)
-            )?;
-        }
-    }
-    write_blocked(queue, out)
-}
-
-/// The informational prelude of the interactive loop: declines and blocked
-/// targets, which the loop will not prompt on.
-fn write_information(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
-    for item in &queue.items {
-        if let QueueState::Declined { .. } = &item.state {
-            writeln!(
-                out,
-                "{}:{} — {} (edit or retract to resolve)",
-                item.mode.name(),
-                item.id,
-                state_line(&item.state)
-            )?;
-        }
-    }
-    write_blocked(queue, out)
-}
-
-fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
+/// The `--list` rendering: a summary line, then one section per state.
+fn write_queue(queue: &ReviewQueue, screen: Screen, out: &mut impl Write) -> io::Result<()> {
+    let summary = match queue.items.len() {
+        0 => "nothing needs review".to_owned(),
+        1 => "1 target needs review".to_owned(),
+        count => format!("{count} targets need review"),
+    };
     if queue.blocked.is_empty() {
+        writeln!(out, "{summary}")?;
+    } else {
+        writeln!(out, "{summary}, {} blocked", queue.blocked.len())?;
+    }
+    if queue.items.is_empty() && queue.blocked.is_empty() {
         return Ok(());
     }
-    writeln!(out, "blocked:")?;
-    for item in &queue.blocked {
-        writeln!(
-            out,
-            "  {}:{} — {}",
-            item.mode.name(),
-            item.id,
-            blocked_line(&item.reason)
-        )?;
+    writeln!(out)?;
+    write_sections(
+        queue,
+        &[
+            Group::Unapproved,
+            Group::Stale,
+            Group::Declined,
+            Group::Blocked,
+        ],
+        false,
+        screen,
+        out,
+    )
+}
+
+/// One line of a section: the target, and what its state adds to the heading.
+struct Row {
+    target: String,
+    detail: Option<String>,
+}
+
+/// The targets of each of `groups` under a heading that names the state and
+/// counts them, sections separated by a blank line and empty ones omitted.
+/// The details share one column across sections.
+///
+/// `--list` shows every group. The interactive loop shows, as its `prelude`,
+/// the declined and blocked targets it will not prompt on.
+fn write_sections(
+    queue: &ReviewQueue,
+    groups: &[Group],
+    prelude: bool,
+    screen: Screen,
+    out: &mut impl Write,
+) -> io::Result<()> {
+    let sections: Vec<(Group, Vec<Row>)> = groups
+        .iter()
+        .map(|&group| (group, section_rows(queue, group, prelude, screen)))
+        .filter(|(_, rows)| !rows.is_empty())
+        .collect();
+    let column = sections
+        .iter()
+        .flat_map(|(_, rows)| rows)
+        .filter(|row| row.detail.is_some())
+        .map(|row| measure_text_width(&row.target))
+        .max()
+        .unwrap_or(0);
+
+    for (index, (group, rows)) in sections.iter().enumerate() {
+        if index > 0 {
+            writeln!(out)?;
+        }
+        let heading = format!("{} ({})", group.heading(), rows.len());
+        writeln!(out, "{}", screen.group(*group).bold().apply_to(heading))?;
+        for row in rows {
+            match &row.detail {
+                Some(detail) => writeln!(
+                    out,
+                    "  {}  {}",
+                    pad_str(&row.target, column, Alignment::Left, None),
+                    screen.dim().apply_to(detail)
+                )?,
+                None => writeln!(out, "  {}", row.target)?,
+            }
+        }
     }
     Ok(())
+}
+
+fn section_rows(queue: &ReviewQueue, group: Group, prelude: bool, screen: Screen) -> Vec<Row> {
+    if group == Group::Blocked {
+        return queue
+            .blocked
+            .iter()
+            .map(|item| Row {
+                target: screen.target(item.mode, &item.id),
+                detail: Some(blocked_line(&item.reason)),
+            })
+            .collect();
+    }
+    queue
+        .items
+        .iter()
+        .filter(|item| Group::of(&item.state) == group)
+        .map(|item| Row {
+            target: screen.target(item.mode, &item.id),
+            detail: state_detail(&item.state).map(|detail| {
+                if prelude && group == Group::Declined {
+                    format!("{detail} (edit or retract to resolve)")
+                } else {
+                    detail
+                }
+            }),
+        })
+        .collect()
 }
 
 /// One queued target, rendered as the local view the decision would judge:
@@ -458,58 +649,197 @@ fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
 /// with the comment attached to it written above it as `//` lines, the way
 /// the formatter places comments in a source file. Nothing deeper is shown —
 /// the local view is all an approval binds to.
+///
+/// A ruled header as wide as the terminal opens the target, so one target
+/// does not run into the next; a blank line closes it, ahead of the prompt.
 fn write_target(
     node: &ViewNode,
     item: &QueueItem,
     position: usize,
     total: usize,
     view: &ArgumentView,
+    screen: Screen,
     out: &mut impl Write,
 ) -> io::Result<()> {
-    writeln!(
-        out,
-        "\n[{position}/{total}] {}:{} — {}",
-        node.mode.name(),
-        node.id,
-        state_line(&item.state)
-    )?;
+    let group = Group::of(&item.state);
+    let rule = screen.dim();
+    let header = format!(
+        "{} [{position}/{total}] {} {} {} ",
+        rule.apply_to("──"),
+        screen.target(node.mode, &node.id),
+        rule.apply_to("──"),
+        screen.group(group).apply_to(group.name())
+    );
+    let fill = screen.width.saturating_sub(measure_text_width(&header));
+    writeln!(out, "\n{header}{}", rule.apply_to("─".repeat(fill)))?;
+    if let Some(detail) = state_detail(&item.state) {
+        writeln!(out, "   {}", screen.group(group).apply_to(detail))?;
+    }
+    writeln!(out)?;
+
     let comments = &node.comments;
-    write_comment(comments.block.as_deref(), 2, out)?;
-    write_indented(&node.description, 2, out)?;
+    write_comment(comments.block.as_deref(), screen, out)?;
+    write_description(&node.description, group, screen, out)?;
     if let Some(reference) = &node.evidence {
         let property = match reference.kind {
             EvidenceKind::Test => Property::Test,
             EvidenceKind::Veriq => Property::Veriq,
         };
         let quoted = format!("\"{}\"", reference.target);
-        write_property(comments, property, &quoted, out)?;
+        write_property(comments, property, &quoted, screen, out)?;
     }
-    write_children(node, view, out)?;
+    write_children(node, view, screen, out)?;
     if let Some(deadline) = &node.deadline {
-        write_property(comments, Property::Until, &deadline.until, out)?;
+        write_property(comments, Property::Until, &deadline.until, screen, out)?;
         if let Some(promote) = deadline.promote {
-            write_property(comments, Property::Promote, promote.name(), out)?;
+            write_property(comments, Property::Promote, promote.name(), screen, out)?;
         }
+    }
+    writeln!(out)
+}
+
+/// The narrowest a description is wrapped to, however small the terminal.
+const MIN_TEXT_WIDTH: usize = 20;
+
+/// The guides that hang each child under `children:`, the way a file
+/// explorer draws a directory's entries.
+const GUIDES: GlyphPalette = GlyphPalette {
+    middle_item: "├",
+    last_item: "└",
+    item_indent: "─ ",
+    middle_skip: "│",
+    last_skip: " ",
+    skip_indent: "  ",
+};
+
+/// The description the decision judges, wrapped to the terminal in the
+/// frame that marks it as the subject.
+fn write_description(
+    text: &str,
+    group: Group,
+    screen: Screen,
+    out: &mut impl Write,
+) -> io::Result<()> {
+    // Two columns of indent, then a border and a space on either side.
+    let lines = wrap(text, screen.width.saturating_sub(2 + 4));
+    for line in frame(&lines, None, Frame::Subject(group), screen) {
+        writeln!(out, "  {line}")?;
     }
     Ok(())
 }
 
-/// The `children:` property: each direct child's id and description, under
-/// the comment on its entry.
-fn write_children(node: &ViewNode, view: &ArgumentView, out: &mut impl Write) -> io::Result<()> {
+/// The two frames a target is drawn with. The description under judgement
+/// gets a double one in the colour of its review state so it stands out from
+/// the children around it, which get a light, dim one; the double line
+/// carries the difference when colour is off.
+#[derive(Clone, Copy)]
+enum Frame {
+    Subject(Group),
+    Child,
+}
+
+impl Frame {
+    /// The corners clockwise from the top left, then the horizontal and the
+    /// vertical edge.
+    const fn glyphs(self) -> [char; 6] {
+        match self {
+            Frame::Subject(_) => ['╔', '╗', '╝', '╚', '═', '║'],
+            Frame::Child => ['╭', '╮', '╯', '╰', '─', '│'],
+        }
+    }
+
+    fn style(self, screen: Screen) -> Style {
+        match self {
+            Frame::Subject(group) => screen.group(group).bold(),
+            Frame::Child => screen.dim(),
+        }
+    }
+}
+
+/// `lines` in a frame as wide as the longest of them, with `title` — already
+/// styled — set into the top edge when there is one.
+fn frame(lines: &[String], title: Option<&str>, kind: Frame, screen: Screen) -> Vec<String> {
+    let [
+        top_left,
+        top_right,
+        bottom_right,
+        bottom_left,
+        horizontal,
+        vertical,
+    ] = kind.glyphs();
+    let edge = |length: usize| horizontal.to_string().repeat(length);
+    let title_width = title.map_or(0, measure_text_width);
+    let inner = lines
+        .iter()
+        .map(|line| measure_text_width(line))
+        // A titled edge needs a dash on either side of ` title `.
+        .chain(title.map(|_| title_width + 2))
+        .max()
+        .unwrap_or(0);
+    let border = kind.style(screen);
+    let top = match title {
+        Some(title) => format!(
+            "{} {title} {}",
+            border.apply_to(format!("{top_left}{horizontal}")),
+            border.apply_to(format!("{}{top_right}", edge(inner - title_width - 1)))
+        ),
+        None => border
+            .apply_to(format!("{top_left}{}{top_right}", edge(inner + 2)))
+            .to_string(),
+    };
+    let mut framed = vec![top];
+    framed.extend(lines.iter().map(|line| {
+        format!(
+            "{} {} {}",
+            border.apply_to(vertical),
+            pad_str(line, inner, Alignment::Left, None),
+            border.apply_to(vertical)
+        )
+    }));
+    framed.push(
+        border
+            .apply_to(format!("{bottom_left}{}{bottom_right}", edge(inner + 2)))
+            .to_string(),
+    );
+    framed
+}
+
+/// The `children:` property as a tree: each direct child hangs from a guide
+/// with the comment on its entry and then its description, wrapped to the
+/// terminal in a frame that carries its id in the top edge.
+fn write_children(
+    node: &ViewNode,
+    view: &ArgumentView,
+    screen: Screen,
+    out: &mut impl Write,
+) -> io::Result<()> {
     if node.children.is_empty() {
         return Ok(());
     }
     let comments = &node.comments;
-    write_comment(property_comment(comments, Property::Children), 2, out)?;
-    writeln!(out, "  children:")?;
-    for child in &node.children {
+    write_comment(property_comment(comments, Property::Children), screen, out)?;
+
+    // Two columns of indent, three of guide, then the frame's own four.
+    let width = screen.width.saturating_sub(2 + 3 + 4);
+    let entries = node.children.iter().map(|child| {
         let description = view.node(child).map_or("(not defined)", |child_node| {
             child_node.description.as_str()
         });
-        write_comment(comments.children.get(child).map(String::as_str), 4, out)?;
-        write_indented(&format!("{child}:"), 4, out)?;
-        write_indented(description, 6, out)?;
+        let mut lines = comment_lines(comments.children.get(child).map(String::as_str), screen);
+        let id = screen.id().apply_to(sanitize(child)).to_string();
+        lines.extend(frame(
+            &wrap(description, width),
+            Some(&id),
+            Frame::Child,
+            screen,
+        ));
+        Tree::new(lines.join("\n")).with_multiline(true)
+    });
+    let tree = Tree::new(screen.key().apply_to("children:").to_string())
+        .with_glyphs(GUIDES)
+        .with_leaves(entries);
+    for line in tree.to_string().lines() {
+        writeln!(out, "  {line}")?;
     }
     Ok(())
 }
@@ -519,37 +849,59 @@ fn write_property(
     comments: &NodeComments,
     property: Property,
     value: &str,
+    screen: Screen,
     out: &mut impl Write,
 ) -> io::Result<()> {
-    write_comment(property_comment(comments, property), 2, out)?;
-    write_indented(&format!("{}: {value}", property.name()), 2, out)
+    write_comment(property_comment(comments, property), screen, out)?;
+    writeln!(
+        out,
+        "  {} {}",
+        screen.key().apply_to(format!("{}:", property.name())),
+        sanitize(value)
+    )
 }
 
 fn property_comment(comments: &NodeComments, property: Property) -> Option<&str> {
     comments.properties.get(&property).map(String::as_str)
 }
 
-/// A comment as `//` lines, `//` alone for an empty line.
-fn write_comment(text: Option<&str>, indent: usize, out: &mut impl Write) -> io::Result<()> {
-    let Some(text) = text else {
-        return Ok(());
-    };
-    for line in text.lines() {
-        let line = sanitize(line);
-        if line.is_empty() {
-            writeln!(out, "{:indent$}//", "")?;
-        } else {
-            writeln!(out, "{:indent$}// {line}", "")?;
-        }
+/// A comment written above the property it is attached to.
+fn write_comment(text: Option<&str>, screen: Screen, out: &mut impl Write) -> io::Result<()> {
+    for line in comment_lines(text, screen) {
+        writeln!(out, "  {line}")?;
     }
     Ok(())
 }
 
-fn write_indented(text: &str, indent: usize, out: &mut impl Write) -> io::Result<()> {
-    for line in text.lines() {
-        writeln!(out, "{:indent$}{}", "", sanitize(line))?;
-    }
-    Ok(())
+/// A comment as `//` lines, `//` alone for an empty line.
+fn comment_lines(text: Option<&str>, screen: Screen) -> Vec<String> {
+    let style = screen.dim();
+    text.into_iter()
+        .flat_map(str::lines)
+        .map(|line| {
+            let line = sanitize(line);
+            let comment = if line.is_empty() {
+                "//".to_owned()
+            } else {
+                format!("// {line}")
+            };
+            style.apply_to(comment).to_string()
+        })
+        .collect()
+}
+
+/// `text` made safe for the terminal and wrapped to `width` columns, never
+/// narrower than [`MIN_TEXT_WIDTH`]. The line breaks of the source are kept.
+/// A tab has no width a frame could be aligned to, so it becomes spaces.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let clean: Vec<String> = text
+        .lines()
+        .map(|line| sanitize(line).replace('\t', "    "))
+        .collect();
+    textwrap::wrap(&clean.join("\n"), width.max(MIN_TEXT_WIDTH))
+        .into_iter()
+        .map(std::borrow::Cow::into_owned)
+        .collect()
 }
 
 /// Text out of a source file or a record, made safe for the terminal.
@@ -569,14 +921,16 @@ fn is_bidi_control(c: char) -> bool {
     matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
-fn state_line(state: &QueueState) -> String {
+/// What a state says beyond its name: who approved an earlier version, or
+/// who declined. An unapproved target has nothing to add.
+fn state_detail(state: &QueueState) -> Option<String> {
     match state {
-        QueueState::Missing => "no approval covers the current content".to_owned(),
-        QueueState::Stale { approvers } => format!(
-            "approvals are stale: {} approved an earlier version",
+        QueueState::Missing => None,
+        QueueState::Stale { approvers } => Some(format!(
+            "{} approved an earlier version",
             sanitize(&approvers.join(", "))
-        ),
-        QueueState::Declined { by } => format!("declined by {}", sanitize(&by.join(", "))),
+        )),
+        QueueState::Declined { by } => Some(format!("by {}", sanitize(&by.join(", ")))),
     }
 }
 
@@ -631,6 +985,12 @@ mod tests {
 
     use inka_core::view::Evidence;
 
+    /// An uncoloured screen of a fixed width.
+    const PLAIN: Screen = Screen {
+        color: false,
+        width: 60,
+    };
+
     /// Writes the three-node scenario project and returns its directory.
     fn scenario_project() -> tempfile::TempDir {
         project_with(
@@ -671,6 +1031,7 @@ mod tests {
             input: &mut input,
             input_is_tty: true,
             now: &mut now,
+            screen: PLAIN,
         };
         let mut out = Vec::new();
         let mut err = Vec::new();
@@ -778,12 +1139,15 @@ fiat leaf {
             transcript.contains(
                 "\
   // shared with the thermal argument
-  the branch claim
+  ╔══════════════════╗
+  ║ the branch claim ║
+  ╚══════════════════╝
   // one entry per hazard
   children:
-    // the only hazard so far
-    leaf:
-      checked in CI
+  └─ // the only hazard so far
+     ╭─ leaf ────────╮
+     │ checked in CI │
+     ╰───────────────╯
   // revisit at CDR
   //
   // once the model lands
@@ -834,16 +1198,217 @@ fiat leaf {
         let mut out = Vec::new();
 
         // Act
-        write_target(&node, &item, 1, 1, &view, &mut out).expect("writing to a vec succeeds");
+        write_target(&node, &item, 1, 1, &view, PLAIN, &mut out)
+            .expect("writing to a vec succeeds");
 
         // Assert
         let text = String::from_utf8(out).expect("UTF-8");
         assert!(
             text.ends_with(
-                "  checked by a solver\n  // the shipped check\n  veriq: \"aocs.check\"\n"
+                "  ║ checked by a solver ║\n  ╚═════════════════════╝\n  \
+                 // the shipped check\n  veriq: \"aocs.check\"\n\n"
             ),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_target_header_names_the_state_and_fills_the_terminal_width() {
+        // Arrange: approve everything, then edit the leaf so it is stale.
+        let dir = scenario_project();
+        run_interactive(dir.path(), "a\na\na\n");
+        let argument = dir.path().join("argument/arg.inka");
+        let text = fs::read_to_string(&argument).expect("the argument reads");
+        fs::write(&argument, text.replace("taken as given", "taken, edited"))
+            .expect("the argument writes");
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\ns\n");
+
+        // Assert: every header is exactly as wide as the screen, and a stale
+        // target says who approved the earlier version under it.
+        let headers: Vec<&str> = transcript
+            .lines()
+            .filter(|line| line.starts_with("── ["))
+            .collect();
+        assert_eq!(headers.len(), 2, "{transcript}");
+        for header in &headers {
+            assert_eq!(measure_text_width(header), PLAIN.width, "{header}");
+        }
+        assert!(
+            transcript.contains(
+                "── [2/2] fiat:leaf ── stale ────────────────────────────────\n   \
+                 alice approved an earlier version\n\n  \
+                 ╔═══════════════╗\n  ║ taken, edited ║\n  ╚═══════════════╝\n\n\
+                 [a]pprove  [d]ecline  [s]kip  [q]uit > "
+            ),
+            "{transcript}"
+        );
+    }
+
+    #[test]
+    fn a_header_wider_than_the_terminal_gets_no_rule_to_wrap() {
+        // Arrange: a screen narrower than the header itself.
+        let node = ViewNode {
+            id: "leaf".to_owned(),
+            mode: Mode::Fiat,
+            namespace: "arg".to_owned(),
+            description: "taken as given".to_owned(),
+            tags: Vec::new(),
+            evidence: None,
+            deadline: None,
+            children: Vec::new(),
+            comments: NodeComments::default(),
+        };
+        let item = QueueItem {
+            id: node.id.clone(),
+            mode: node.mode,
+            current_hash: LocalView::fiat("unused", None).view_hash(),
+            state: QueueState::Missing,
+        };
+        let view = ArgumentView {
+            nodes: vec![node.clone()],
+            edges: Vec::new(),
+            roots: Vec::new(),
+        };
+        let narrow = Screen {
+            color: false,
+            width: 10,
+        };
+        let mut out = Vec::new();
+
+        // Act
+        write_target(&node, &item, 1, 1, &view, narrow, &mut out)
+            .expect("writing to a vec succeeds");
+        let text = String::from_utf8(out).expect("UTF-8");
+
+        // Assert
+        assert!(
+            text.starts_with("\n── [1/1] fiat:leaf ── unapproved \n"),
+            "{text:?}"
+        );
+    }
+
+    #[test]
+    fn colour_marks_the_state_and_leaves_the_text_unchanged() {
+        // Arrange: a declined leaf, so the prelude and a target both render.
+        let dir = scenario_project();
+        run_interactive(dir.path(), "s\nd\nnot so\nq\n");
+        let render = |color: bool| {
+            let request = Request {
+                approver: "alice".to_owned(),
+                key_id: None,
+                action: Action::Interactive,
+            };
+            let mut input = Cursor::new(b"a\nq\n".to_vec());
+            let mut now = || -> Timestamp {
+                "2026-11-01T00:00:00Z"
+                    .parse()
+                    .expect("the fixed instant parses")
+            };
+            let session = Session {
+                input: &mut input,
+                input_is_tty: true,
+                now: &mut now,
+                screen: Screen { color, ..PLAIN },
+            };
+            let mut out = Vec::new();
+            run(
+                dir.path(),
+                &request,
+                session,
+                &mut out,
+                &mut Vec::new(),
+                false,
+            )
+            .expect("writing to vecs succeeds");
+            String::from_utf8(out).expect("the transcript is UTF-8")
+        };
+
+        // Act: the same session twice, on a throwaway copy of the records.
+        let records = dir.path().join("approvals/alice.jsonl");
+        let before = fs::read_to_string(&records).expect("the records read");
+        let coloured = render(true);
+        fs::write(&records, before).expect("the records restore");
+        let plain = render(false);
+
+        // Assert: red for the decline, yellow for the unapproved target,
+        // green for the approval, cyan for a property key — and nothing but
+        // styling differs from the plain rendering.
+        assert!(
+            coloured.contains("\u{1b}[31m\u{1b}[1mDeclined (1)\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(
+            coloured.contains("\u{1b}[33munapproved\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(
+            coloured.contains("\u{1b}[32mrecorded approve\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(
+            coloured.contains("\u{1b}[36mchildren:\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(
+            coloured.contains("\u{1b}[34m\u{1b}[1mleaf\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(
+            coloured.contains("\u{1b}[33m\u{1b}[1m╔════════════════╗\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(!plain.contains('\u{1b}'), "{plain:?}");
+        assert_eq!(console::strip_ansi_codes(&coloured), plain);
+        assert!(
+            plain.starts_with("Declined (1)\n  fiat:leaf  by alice (edit or retract to resolve)\n"),
+            "{plain}"
+        );
+    }
+
+    #[test]
+    fn descriptions_wrap_to_the_terminal_and_children_hang_from_guides() {
+        // Arrange: descriptions longer than the 60-column screen, one of
+        // them Japanese, which has no spaces to break at.
+        let dir = project_with(
+            "objective root {\n  ```\n  the root claim is long enough that it cannot fit on \
+             one line of a sixty column terminal\n  ```\n  children: first, second\n}\n\n\
+             fiat first {\n  ```\n  the first child also says rather more than a single \
+             line of the terminal can hold\n  ```\n}\n\n\
+             fiat second {\n  ```\n  評価はコミット済みの入力だけから再現でき、\
+             途中で環境の状態を一切読まないことを前提とする。\n  ```\n}\n",
+        );
+
+        // Act
+        let transcript = run_interactive(dir.path(), "s\ns\ns\n");
+
+        // Assert: the frame closes on every line, the guides run down to the
+        // last child, and nothing is wider than the screen.
+        assert!(
+            transcript.contains(
+                "\
+  ╔═════════════════════════════════════════════════════╗
+  ║ the root claim is long enough that it cannot fit on ║
+  ║ one line of a sixty column terminal                 ║
+  ╚═════════════════════════════════════════════════════╝
+  children:
+  ├─ ╭─ first ─────────────────────────────────────────────╮
+  │  │ the first child also says rather more than a single │
+  │  │ line of the terminal can hold                       │
+  │  ╰─────────────────────────────────────────────────────╯
+  └─ ╭─ second ───────────────────────────────────────────╮
+     │ 評価はコミット済みの入力だけから再現でき、途中で環 │
+     │ 境の状態を一切読まないことを前提とする。           │
+     ╰────────────────────────────────────────────────────╯
+"
+            ),
+            "{transcript}"
+        );
+        for line in transcript.lines().filter(|line| line.starts_with("  ")) {
+            assert!(measure_text_width(line) <= PLAIN.width, "{line}");
+            assert_eq!(line.trim_end(), line, "no trailing blanks: {line:?}");
+        }
     }
 
     #[test]
@@ -866,7 +1431,10 @@ fiat leaf {
             transcript.contains("  // red [31malert reversed\n  //\n  until: M0\n"),
             "{transcript:?}"
         );
-        assert!(transcript.contains("  taken\tas given\n"), "{transcript:?}");
+        assert!(
+            transcript.contains("  ║ taken    as given ║\n"),
+            "{transcript:?}"
+        );
     }
 
     #[test]
