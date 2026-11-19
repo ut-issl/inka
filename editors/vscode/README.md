@@ -20,7 +20,12 @@ language server. The server provides:
 - document formatting (Format Document) with exactly the output of
   `inka fmt`; a document that does not parse, or whose project's manifest or
   values cannot be loaded, is left as it is. Formatting on save is not turned
-  on for you — enable `editor.formatOnSave` under `"[inka]"` if you want it.
+  on for you — enable `editor.formatOnSave` under `"[inka]"` if you want it;
+- completion, accepted with Tab or Enter: the mode keywords between blocks,
+  the properties a block's mode still lacks, the ids of other blocks in a
+  `children:` list, the phases after `until:`, the modes after `promote:`,
+  and the value keys after `{$` in a description. It works from the text
+  around the cursor, so it keeps working while the file does not parse.
 
 The grammar stays flat on purpose — rich highlighting inside fenced
 descriptions is the server's job via semantic tokens, which supersede these

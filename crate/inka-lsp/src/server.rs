@@ -23,17 +23,17 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{CodeLensRefresh, InlayHintRefreshRequest, Request as _};
 use lsp_types::{
-    CodeLensOptions, Diagnostic, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-    HoverProviderCapability, InitializeParams, OneOf, PublishDiagnosticsParams, RenameOptions,
-    SemanticTokensFullOptions, SemanticTokensOptions, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    CodeLensOptions, CompletionOptions, Diagnostic, DidChangeTextDocumentParams,
+    DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, HoverProviderCapability, InitializeParams, OneOf,
+    PublishDiagnosticsParams, RenameOptions, SemanticTokensFullOptions, SemanticTokensOptions,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
     TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
 };
 use serde::de::DeserializeOwned;
 
 use crate::state::Overlays;
-use crate::{diagnostics, requests, roots, tokens, uri};
+use crate::{complete, diagnostics, requests, roots, tokens, uri};
 
 /// One boxed error type for everything that can end the server: protocol
 /// violations, closed channels, and serialization failures alike.
@@ -138,6 +138,15 @@ fn capabilities() -> ServerCapabilities {
             resolve_provider: Some(false),
         }),
         document_formatting_provider: Some(OneOf::Left(true)),
+        completion_provider: Some(CompletionOptions {
+            trigger_characters: Some(
+                complete::TRIGGER_CHARACTERS
+                    .iter()
+                    .map(|character| (*character).to_owned())
+                    .collect(),
+            ),
+            ..CompletionOptions::default()
+        }),
         ..ServerCapabilities::default()
     }
 }
@@ -386,6 +395,17 @@ fn cast<P: DeserializeOwned>(notification: Notification) -> Option<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completion_is_advertised_with_its_trigger_characters() {
+        let completion = capabilities()
+            .completion_provider
+            .expect("completion is advertised");
+        assert_eq!(
+            completion.trigger_characters,
+            Some(vec![":".to_owned(), ",".to_owned(), "$".to_owned()])
+        );
+    }
 
     #[test]
     fn document_formatting_is_advertised() {

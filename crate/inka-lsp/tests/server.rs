@@ -177,7 +177,7 @@ fn an_unsupported_request_is_refused_not_ignored() {
     let client = Client::start();
 
     // Act
-    client.request::<lsp_types::request::Completion>(
+    client.request::<lsp_types::request::SignatureHelpRequest>(
         7,
         serde_json::json!({
             "textDocument": { "uri": "file:///nowhere/a.inka" },
@@ -193,8 +193,8 @@ fn an_unsupported_request_is_refused_not_ignored() {
     assert_eq!(response.id, RequestId::from(7));
     let error = response
         .response_result
-        .expect_err("completion is not implemented");
-    assert!(error.message.contains("textDocument/completion"));
+        .expect_err("signature help is not implemented");
+    assert!(error.message.contains("textDocument/signatureHelp"));
 
     client.shutdown();
 }
