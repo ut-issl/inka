@@ -60,8 +60,10 @@ itself accepts any layout.
   evidence target, which `check` does not interpret. Descriptions never use
   quotes.
 - `//` line comments are part of the syntax tree; see [Comments](#comments).
-- No escape for `{$` — only the exact pattern `{$identifier}` is interpolation;
-  everything else is literal.
+- No escape for `{$` — only the exact pattern `{$path}` is interpolation, where
+  `path` is one or more identifiers joined by `.` (`{$mass}`,
+  `{$instrument.diameter_cm}`); everything else is literal. The `.` is a path
+  separator inside `{$...}` only and is unrelated to the `::` of namespaces.
 - Property order is free; duplicate properties are an error.
 - Tags are free vocabulary; `check` says nothing about them (typo detection
   belongs to policy selectors: a selector matching no existing tag warns).
@@ -114,12 +116,19 @@ a syntax error: every `//` outside a fence attaches to exactly one place.
 - `inka.toml`: `[project] name`; `[phases] order` (total order) + `current`
   (validated against order); `[values] files`. Unknown keys are rejected.
 - The argument is read by convention: every `*.inka` under `argument/`.
-- Values files are flat TOML maps; keys match the identifier grammar, so every
-  key is referenceable as `{$key}`. A string value is taken verbatim; any
+- Values files are TOML maps; top-level keys match the identifier grammar, so
+  every key is referenceable as `{$key}`. A string value is taken verbatim; any
   other TOML value — numbers, booleans, arrays, tables (e.g. a vector
   requirement) — is rendered with its TOML spelling. No recursive expansion
   (one pass); key collisions across files are an error; an undefined `{$var}`
-  is an error.
+  is an error, naming the full path.
+- A dotted path resolves through nested tables: `{$instrument.diameter_cm}`
+  looks up `instrument`, then `diameter_cm`. A path that lands on a table still
+  expands as TOML notation. Nested keys outside the identifier grammar have no
+  path (they remain visible in their table's notation), and arrays are not
+  indexed. Collisions are checked at the top-level key only: one file owns a
+  whole subtree. Paths are addressing, not computation, and interpolation runs
+  before normalization, so the hash never sees a path.
 
 ## Hashing (v1)
 

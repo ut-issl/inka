@@ -187,6 +187,35 @@ fn loads_bind_block_preserving_source_and_rendering_description() {
 }
 
 #[test]
+fn interpolates_dotted_paths_into_nested_value_tables() {
+    // Arrange
+    let project = TempProject::new("dotted-paths");
+    project.write(
+        "inka.toml",
+        &MANIFEST_WITHOUT_VALUES.replace("files = []", "files = [\"values.toml\"]"),
+    );
+    project.write(
+        "values.toml",
+        "[instrument]\ndiameter_cm = 30\n\n[instrument.optics]\nf-number = \"f/8\"\n",
+    );
+    project.write(
+        "argument/a.inka",
+        "fiat a {\n  ```\n  {$instrument.diameter_cm} cm at {$instrument.optics.f-number}; {$instrument.optics}\n  ```\n}\n",
+    );
+
+    // Act
+    let loaded = load_project(&project.root)
+        .result
+        .expect("nested values should load");
+
+    // Assert
+    assert_eq!(
+        rendered_descriptions(&loaded),
+        ["  30 cm at f/8; { f-number = \"f/8\" }\n"]
+    );
+}
+
+#[test]
 fn loads_empty_argument_directory_as_project_without_blocks() {
     // Arrange
     let project = TempProject::new("empty-argument");

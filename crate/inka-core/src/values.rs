@@ -1,10 +1,16 @@
-//! Values files: flat TOML maps whose entries resolve `{$var}` in
-//! descriptions.
+//! Values files: TOML maps whose entries resolve `{$var}` and dotted
+//! `{$table.key}` paths in descriptions.
 //!
 //! The files listed under `[values] files` are merged in order. A key defined
 //! by more than one file is an error rather than a last-one-wins rule:
 //! contracts are hashed after interpolation, so a silent override would
 //! change hashes without any visible signal about which definition applied.
+//! The rule applies to top-level keys only: one file owns a whole subtree.
+//!
+//! A nested table is addressable by a dotted path through its keys, so a file
+//! grouped by area (`[instrument]`, `[requirement]`) can be used as it is.
+//! Paths are resolved here, once: the merged map holds an entry for every
+//! reachable path, which keeps interpolation a plain lookup.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -71,15 +77,23 @@ pub fn load_values(
     merge_value_files(&texts)
 }
 
-/// Merges already-read values files into one flat map.
+/// Merges already-read values files into one map from value path to text.
 ///
 /// Values are interpolated into description text, so everything becomes a
 /// string here: a string value is taken verbatim, and any other TOML value —
 /// including arrays and tables, e.g. a vector requirement — keeps its TOML
-/// spelling (`42`, `true`, `[1, 2, 3]`). Only the keys must be flat, and each
-/// key must match the `{$var}` name grammar — a key that could never be
-/// referenced would otherwise sit as a silently dead entry. Pure so that
-/// merging and validation rules are testable without touching the filesystem.
+/// spelling (`42`, `true`, `[1, 2, 3]`). Each top-level key must match the
+/// `{$var}` name grammar — a key that could never be referenced would
+/// otherwise sit as a silently dead entry.
+///
+/// A table value is also entered under the dotted path of each of its keys,
+/// recursively (`instrument.diameter_cm`), next to its own entry, which still
+/// holds the whole table in TOML notation. A nested key that does not match
+/// the name grammar has no path, but stays visible in its table's text.
+/// Arrays are not indexed: an array, even of tables, is one value.
+///
+/// Pure so that merging and validation rules are testable without touching
+/// the filesystem.
 ///
 /// # Errors
 ///
@@ -110,15 +124,31 @@ pub fn merge_value_files(
                 });
             }
             origins.insert(key.clone(), path);
-            values.insert(key, stringify(value));
+            insert_paths(&mut values, key, &value);
         }
     }
     Ok(values)
 }
 
-fn stringify(value: toml::Value) -> String {
+/// Enters `value` under `path` and, when it is a table, each referenceable
+/// key below it under its dotted path.
+///
+/// Top-level keys are unique and contain no `.`, and nested keys are only
+/// followed when they match the name grammar, so no two paths can collide.
+fn insert_paths(values: &mut HashMap<String, String>, path: String, value: &toml::Value) {
+    if let toml::Value::Table(table) = value {
+        for (key, child) in table {
+            if is_variable_name(key) {
+                insert_paths(values, format!("{path}.{key}"), child);
+            }
+        }
+    }
+    values.insert(path, stringify(value));
+}
+
+fn stringify(value: &toml::Value) -> String {
     match value {
-        toml::Value::String(text) => text,
+        toml::Value::String(text) => text.clone(),
         other => other.to_string(),
     }
 }
@@ -194,6 +224,100 @@ mod tests {
             values.get("limits").map(String::as_str),
             Some("{ max = 2, min = 1 }")
         );
+    }
+
+    #[test]
+    fn enters_every_nested_key_under_its_dotted_path() {
+        // Arrange
+        let files = [file(
+            "a.toml",
+            "top = 1\n\n[instrument]\ndiameter_cm = 30\n\n[instrument.optics]\nf-number = \"f/8\"\n",
+        )];
+
+        // Act
+        let values = merge_value_files(&files).expect("nested tables should merge");
+
+        // Assert
+        assert_eq!(values.get("top").map(String::as_str), Some("1"));
+        assert_eq!(
+            values.get("instrument.diameter_cm").map(String::as_str),
+            Some("30")
+        );
+        assert_eq!(
+            values.get("instrument.optics.f-number").map(String::as_str),
+            Some("f/8")
+        );
+        assert_eq!(
+            values.get("instrument.optics").map(String::as_str),
+            Some("{ f-number = \"f/8\" }")
+        );
+        assert_eq!(values.len(), 5);
+    }
+
+    #[test]
+    fn a_table_keeps_its_toml_notation_next_to_its_paths() {
+        // Arrange
+        let files = [file("a.toml", "limits = { min = 1, max = 2 }")];
+
+        // Act
+        let values = merge_value_files(&files).expect("table values should merge");
+
+        // Assert
+        assert_eq!(
+            values.get("limits").map(String::as_str),
+            Some("{ max = 2, min = 1 }")
+        );
+        assert_eq!(values.get("limits.min").map(String::as_str), Some("1"));
+        assert_eq!(values.get("limits.max").map(String::as_str), Some("2"));
+    }
+
+    #[test]
+    fn a_nested_key_outside_the_name_grammar_has_no_path() {
+        // Arrange: `"a.b"` would read as two segments, and `10x` is no name.
+        let files = [file("a.toml", "[t]\n\"a.b\" = 1\n10x = 2\nok = 3\n")];
+
+        // Act
+        let values = merge_value_files(&files).expect("the table itself is still a value");
+
+        // Assert
+        assert_eq!(values.get("t.ok").map(String::as_str), Some("3"));
+        assert!(!values.contains_key("t.a.b"));
+        assert!(!values.contains_key("t.10x"));
+        assert_eq!(
+            values.get("t").map(String::as_str),
+            Some("{ 10x = 2, \"a.b\" = 1, ok = 3 }")
+        );
+    }
+
+    #[test]
+    fn arrays_are_not_indexed() {
+        // Arrange
+        let files = [file("a.toml", "[[mode]]\nname = \"safe\"\n")];
+
+        // Act
+        let values = merge_value_files(&files).expect("arrays of tables should merge");
+
+        // Assert
+        assert_eq!(values.len(), 1);
+        assert!(values.contains_key("mode"));
+    }
+
+    #[test]
+    fn rejects_top_level_table_defined_in_two_files() {
+        // Arrange: disjoint nested keys still collide at the top level.
+        let files = [
+            file("a.toml", "[instrument]\nmass = 1\n"),
+            file("b.toml", "[instrument]\npower = 2\n"),
+        ];
+
+        // Act
+        let error = merge_value_files(&files).expect_err("one file owns a subtree");
+
+        // Assert
+        let ValuesError::DuplicateKey { key, .. } = error else {
+            panic!("expected DuplicateKey, got {error:?}");
+        };
+        assert_eq!(key, "instrument");
     }
 
     #[test]
