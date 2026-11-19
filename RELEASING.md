@@ -85,7 +85,7 @@ while the rest of the release goes through; see [Fixing a release](#fixing-a-rel
 
 ### 1. Prepare the release pull request
 
-With a clean working tree and an authenticated [`gh`](https://cli.github.com), run:
+With a clean working tree, run:
 
 ```console
 python3 scripts/release.py prepare patch
@@ -101,21 +101,25 @@ From the tip of `origin/main`, this
 - bumps the version in every manifest and lockfile and nothing else (what `release.py bump <version>` does alone),
 - adds a draft `## v<version>` section above the previous release in both `CHANGELOG.md` and `CHANGELOG.ja.md`, with
   one item per pull request merged since the previous release, and
-- opens the pull request `chore(release): v<version>`, whose description lists every pull request merged since the
-  previous release: the ones people wrote, then the automated updates, folded.
+- prints a description for the release pull request, which lists every pull request merged since the previous release:
+  the ones people wrote, then the automated updates, folded.
 
-`--dry-run` prints that description and changes nothing.
+It commits and pushes nothing, and needs only `git`: the pull requests are read from the commits their merges left on
+`main`. `--dry-run` prints that description and changes nothing.
 
 Then, on that branch:
 
 1. Rewrite both draft sections as release notes and delete their `<!-- release-draft ... -->` comments. Use `###` for
    subsections such as `### Breaking changes`, and write one sentence per line, because a GitHub Release keeps line
    breaks. The English section becomes the body of the GitHub Release. While a draft comment is left,
-   `Check package versions agree` fails on the pull request, and the release workflow refuses to release.
-2. Merge the pull request into `main` after CI passes.
+   `python3 scripts/release.py check` fails, and so do `Check package versions agree` on a pull request and the release
+   workflow. Rewrite the drafts before pushing, so that the pull request does not start with a failing check.
+2. Commit the result as `chore(release): v<version>` and push the branch.
+3. Open the pull request `chore(release): v<version>` into `main` with the printed description.
+4. Merge the pull request into `main` after CI passes.
 
-The pull request description is written once. If more pull requests are merged before the release pull request is,
-take the list from `prepare --dry-run` again.
+The description is printed once. If more pull requests are merged before the release pull request is, take the list
+from `prepare --dry-run` again.
 
 ### 2. Optional: dry run
 

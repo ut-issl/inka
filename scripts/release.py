@@ -10,18 +10,20 @@ where those fields live:
     python3 scripts/release.py check          # fail if any field disagrees
     python3 scripts/release.py bump 0.0.2     # rewrite every field
     python3 scripts/release.py notes 0.0.1 [--changelog CHANGELOG.ja.md]
-    python3 scripts/release.py prepare patch [--dry-run]   # open the release PR
+    python3 scripts/release.py prepare patch [--dry-run]   # start the release branch
 
-`prepare` is the whole first step of a release. It takes the part of the
-version to increment (`major`, `minor` or `patch`; the parts after it become
-0) or an explicit version above the current one. From the tip of
-`origin/main` it creates the branch `release/v<version>`, bumps every field, drafts the
+`prepare` starts a release. It takes the part of the version to increment
+(`major`, `minor` or `patch`; the parts after it become 0) or an explicit
+version above the current one. From the tip of `origin/main` it creates the
+branch `release/v<version>`, bumps every field, and drafts the
 `## v<version>` section of both changelogs from the pull requests merged
-since the previous release, and opens the pull request
-`chore(release): v<version>`, whose description lists every one of those
-pull requests. It needs `git` and an authenticated `gh`. The drafted
-sections carry a marker that `check` and `notes` refuse, so the pull request
-cannot be merged or released until a person has rewritten them.
+since the previous release. It commits and pushes nothing: it prints the
+commands that do, and a description for the pull request
+`chore(release): v<version>` that lists every one of those pull requests.
+It needs only `git`, and reads the pull requests from the commits their
+merges left on `main`. The drafted sections carry a marker that `check` and
+`notes` refuse, so rewrite them before committing: a pull request that still
+holds a draft fails its checks.
 
 `Cargo.toml`'s `[workspace.package]` version is the reference the others
 must match. The `[workspace.dependencies]` entries that point at a workspace
@@ -39,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 import textwrap
@@ -58,6 +61,8 @@ DRAFT_MARKER = "<!-- release-draft"
 # MD013 in .markdownlint-cli2.yaml.
 MARKDOWN_WIDTH = 120
 VERSION_PARTS = ("major", "minor", "patch")
+# The subject GitHub gives the commit of a merged pull request.
+MERGED_SUBJECT = re.compile(r"(.+) \(#(\d+)\)")
 
 
 def _relative(directory: str, name: str) -> str:
@@ -494,10 +499,6 @@ def pull_request_body(version: str, previous: str, pull_requests: list[PullReque
         f"Prepare the v{version} release: bump every package from {previous} to {version} "
         f"(`scripts/release.py bump`) and add the `## v{version}` section to {changelogs}.",
         "",
-        "The changelog sections start as drafts generated from the pull requests below. "
-        "Rewrite them as release notes in this pull request: "
-        "`Check package versions agree` fails until the draft marker is gone.",
-        "",
         f"After this is merged, run the `Release` workflow on `{BASE_BRANCH}` with `mode: release` "
         "(see RELEASING.md).",
         "",
@@ -533,31 +534,27 @@ def _command(root: Path, *argv: str) -> str:
     return done.stdout
 
 
-def select_merged(listing: list[Table], commits: set[str]) -> list[PullRequest]:
-    """The pull requests of a `gh pr list` listing whose merge commit is one
-    of `commits`, in the order they were opened."""
-    selected = [
-        PullRequest(entry["number"], entry["title"].strip(), bool((entry.get("author") or {}).get("is_bot")))
-        for entry in listing
-        if (entry.get("mergeCommit") or {}).get("oid") in commits
-    ]
-    return sorted(selected)
+def parse_merged(log: str) -> list[PullRequest]:
+    """The pull requests behind the commits of a `git log` listing, in the
+    order they were opened. Each line is the author and the subject of a
+    commit, separated by a tab. GitHub ends the subject of a merged pull
+    request with its number, and names an app that wrote one `<app>[bot]`.
+    A commit without a number was not merged from a pull request."""
+    merged = []
+    for line in log.splitlines():
+        author, _, subject = line.partition("\t")
+        if match := MERGED_SUBJECT.fullmatch(subject.strip()):
+            merged.append(PullRequest(int(match.group(2)), match.group(1).strip(), author.endswith("[bot]")))
+    return sorted(merged)
 
 
 def _merged_since(root: Path, tag: str, tip: str) -> list[PullRequest]:
-    commits = set(_command(root, "git", "rev-list", f"{tag}..{tip}").split())
-    if not commits:
-        return []
-    listing = _command(
-        root, "gh", "pr", "list", "--state", "merged", "--base", BASE_BRANCH,
-        "--limit", "1000", "--json", "number,title,author,mergeCommit",
-    )  # fmt: skip
-    return select_merged(json.loads(listing), commits)
+    return parse_merged(_command(root, "git", "log", "--first-parent", "--format=%an%x09%s", f"{tag}..{tip}"))
 
 
 def prepare(root: Path, target: str, dry_run: bool) -> None:
-    """Open the pull request that prepares the release `target` names: a
-    part of the version to increment, or the version itself."""
+    """Start the branch of the release `target` names: a part of the version
+    to increment, or the version itself. Nothing is committed or pushed."""
     tip = f"origin/{BASE_BRANCH}"
     _command(root, "git", "fetch", "--tags", "origin", BASE_BRANCH)
     previous = _field(
@@ -574,7 +571,7 @@ def prepare(root: Path, target: str, dry_run: bool) -> None:
         raise ReleaseError(f"no pull request was merged into {BASE_BRANCH} since v{previous}; nothing to release")
     body = pull_request_body(version, previous, pull_requests)
     if dry_run:
-        print(f"Would open '{title}' from {branch} with this description:\n")
+        print(f"Would start {branch} from {tip}, for the pull request '{title}' with this description:\n")
         print(body, end="")
         return
 
@@ -586,13 +583,13 @@ def prepare(root: Path, target: str, dry_run: bool) -> None:
         language = "Japanese" if name.endswith(".ja.md") else "English"
         section = draft_section(version, pull_requests, language)
         (root / name).write_text(insert_section(_read(root, name), version, section), encoding="utf-8")
-    _command(root, "git", "commit", "--all", "--message", title)
-    _command(root, "git", "push", "--set-upstream", "origin", branch)
-    url = _command(
-        root, "gh", "pr", "create", "--base", BASE_BRANCH, "--head", branch, "--title", title, "--body", body
-    ).strip()
-    print(f"Opened {url}")
-    print(f"Rewrite the v{version} sections of {' and '.join(CHANGELOGS)} on {branch}, then merge it.")
+    print(f"Started {branch} with every package at {version}. Nothing is committed or pushed.\n")
+    print(f"1. Rewrite the v{version} sections of {' and '.join(CHANGELOGS)} and delete their draft comments.")
+    print("2. Commit and push:\n")
+    print(f"       git commit --all --message {shlex.quote(title)}")
+    print(f"       git push --set-upstream origin {branch}\n")
+    print(f"3. Open the pull request '{title}' into {BASE_BRANCH} with this description:\n")
+    print(body, end="")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -611,7 +608,7 @@ def _parser() -> argparse.ArgumentParser:
     notes_command = commands.add_parser("notes", help="print the changelog section of VERSION")
     notes_command.add_argument("version")
     notes_command.add_argument("--changelog", default="CHANGELOG.md", help="relative to the root")
-    prepare_command = commands.add_parser("prepare", help="open the pull request that prepares the next release")
+    prepare_command = commands.add_parser("prepare", help="start the branch that prepares the next release")
     prepare_command.add_argument(
         "version", metavar="major|minor|patch|VERSION", help="the part of the version to increment, or the new version"
     )
