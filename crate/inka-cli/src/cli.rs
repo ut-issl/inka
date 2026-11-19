@@ -12,7 +12,7 @@ use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 #[derive(Debug, Parser)]
 #[command(name = "inka", version, about)]
 pub struct Cli {
-    /// When to colour diagnostic output.
+    /// When to colour output.
     #[arg(long, value_enum, default_value = "auto", global = true)]
     pub color: ColorChoice,
 
@@ -122,10 +122,11 @@ pub enum Command {
     },
 }
 
-/// When diagnostic snippets should be coloured.
+/// When output should be coloured.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ColorChoice {
-    /// Colour when standard error is a terminal and `NO_COLOR` is unset.
+    /// Colour when the stream written to is a terminal and `NO_COLOR` is
+    /// unset.
     Auto,
     /// Always colour, even when the output is redirected or piped.
     Always,

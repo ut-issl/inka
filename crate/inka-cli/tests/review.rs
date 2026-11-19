@@ -133,12 +133,11 @@ fn editing_a_description_returns_the_target_and_its_direct_parent_as_stale() {
         .arg("--list")
         .assert()
         .success()
-        .stdout(predicate::str::contains("targets needing review: 2"))
+        .stdout(predicate::str::starts_with("2 targets need review\n"))
         .stdout(predicate::str::contains(
-            "structure:branch — approvals are stale: alice approved an earlier version",
-        ))
-        .stdout(predicate::str::contains(
-            "fiat:leaf — approvals are stale: alice approved an earlier version",
+            "Stale (2)\n  \
+             structure:branch  alice approved an earlier version\n  \
+             fiat:leaf         alice approved an earlier version\n",
         ))
         .stdout(predicate::str::contains("root").not());
 }
@@ -174,7 +173,9 @@ fn a_declined_target_shows_as_declined_in_the_queue() {
         .arg("--list")
         .assert()
         .success()
-        .stdout(predicate::str::contains("fiat:leaf — declined by bob"));
+        .stdout(predicate::str::contains(
+            "Declined (1)\n  fiat:leaf  by bob\n",
+        ));
     inka()
         .arg("eval")
         .arg(dir.path())
@@ -323,4 +324,38 @@ fn interactive_mode_without_a_terminal_is_refused_with_a_hint() {
         .failure()
         .stderr(predicate::str::contains("standard input is not a terminal"))
         .stderr(predicate::str::contains("--list"));
+}
+
+#[test]
+fn a_piped_queue_is_coloured_only_when_asked() {
+    // Arrange
+    let dir = tempfile::tempdir().expect("a temp dir creates");
+    scenario_project(dir.path());
+    let list = |color: &str| {
+        let output = inka()
+            .arg("review")
+            .arg("--path")
+            .arg(dir.path())
+            .arg("--as")
+            .arg("alice")
+            .arg("--list")
+            .arg("--color")
+            .arg(color)
+            .output()
+            .expect("the command runs");
+        String::from_utf8(output.stdout).expect("the queue is UTF-8")
+    };
+
+    // Act: standard output is a pipe in both runs.
+    let auto = list("auto");
+    let always = list("always");
+
+    // Assert: a pipe gets no escape sequences unless colour is forced, and
+    // forcing it yellows the unapproved heading without changing the text.
+    assert!(!auto.contains('\u{1b}'), "{auto:?}");
+    assert!(
+        always.contains("\u{1b}[33m\u{1b}[1mUnapproved (3)\u{1b}[0m"),
+        "{always:?}"
+    );
+    assert_eq!(console::strip_ansi_codes(&always), auto);
 }

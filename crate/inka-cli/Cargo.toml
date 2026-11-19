@@ -28,16 +28,20 @@ path = "src/main.rs"
 ariadne = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
+console = { workspace = true }
 inka-core = { workspace = true }
 jiff = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+termtree = { workspace = true }
+textwrap = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tower-http = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
+console = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
 serde_json = { workspace = true }
