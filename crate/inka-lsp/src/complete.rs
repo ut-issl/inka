@@ -381,20 +381,27 @@ fn context(prefix: &str) -> Option<(Context, usize)> {
     walk(tokens).map(|context| (context, start))
 }
 
-/// After `{$` and an unfinished key on the cursor's line, the offset where
-/// the key starts.
+/// After `{$` and an unfinished value path on the cursor's line, the offset
+/// where the path starts.
+///
+/// The whole dotted path is the word being typed, so `{$instrument.d`
+/// replaces from `instrument` and filters against keys like
+/// `instrument.diameter_cm`.
 fn value_reference(prefix: &str) -> Option<usize> {
     let line = &prefix[prefix.rfind('\n').map_or(0, |newline| newline + 1)..];
     let at = line.rfind("{$")?;
-    let key = &line[at + 2..];
-    let valid = key
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-        && key
+    let path = &line[at + 2..];
+    let valid = path.split('.').enumerate().all(|(index, segment)| {
+        segment
             .bytes()
-            .next()
-            .is_none_or(|byte| byte.is_ascii_alphabetic() || byte == b'_');
-    valid.then_some(prefix.len() - key.len())
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+            && match segment.bytes().next() {
+                Some(first) => first.is_ascii_alphabetic() || first == b'_',
+                // Only the segment being typed may still be empty.
+                None => index == path.split('.').count() - 1,
+            }
+    });
+    valid.then_some(prefix.len() - path.len())
 }
 
 /// Where the token stream leaves the cursor.
@@ -780,6 +787,20 @@ mod tests {
         assert_eq!(start, "fiat f {\n  ```\n  mass {$".len());
         assert_eq!(at_end("fiat f {\n  ```\n  {$"), Some(Context::Value));
         assert_eq!(at_end("fiat f {\n  ```\n  {$a b"), None);
+    }
+
+    #[test]
+    fn a_dotted_value_path_is_one_word() {
+        let (context, start) = context("fiat f {\n  ```\n  d {$instrument.di").expect("a context");
+        assert_eq!(context, Context::Value);
+        assert_eq!(start, "fiat f {\n  ```\n  d {$".len());
+        assert_eq!(
+            at_end("fiat f {\n  ```\n  {$instrument."),
+            Some(Context::Value)
+        );
+        assert_eq!(at_end("fiat f {\n  ```\n  {$.a"), None);
+        assert_eq!(at_end("fiat f {\n  ```\n  {$a..b"), None);
+        assert_eq!(at_end("fiat f {\n  ```\n  {$a.1"), None);
     }
 
     #[test]

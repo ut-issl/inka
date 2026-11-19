@@ -5,10 +5,12 @@
 //!
 //! Two rules are deliberate and fixed:
 //!
-//! - Only the exact pattern `{$name}` with `name` matching the identifier
-//!   grammar `[A-Za-z_][A-Za-z0-9_-]*` is special. Anything else — `{$}`,
-//!   `{$1a}`, an unterminated `{$` — is ordinary text, so no escape syntax is
-//!   needed.
+//! - Only the exact pattern `{$path}` is special, where `path` is one or more
+//!   names joined by `.` (`{$mass}`, `{$instrument.diameter_cm}`) and each
+//!   name matches the identifier grammar `[A-Za-z_][A-Za-z0-9_-]*`. Anything
+//!   else — `{$}`, `{$1a}`, `{$a.}`, an unterminated `{$` — is ordinary text,
+//!   so no escape syntax is needed. The `.` separates path segments inside
+//!   `{$...}` only and is unrelated to the `::` of namespaces.
 //! - Expansion is a single pass and never re-scans its own output. A value
 //!   containing `{$...}` stays literal; recursive expansion would need an
 //!   occurs-check for little gain.
@@ -48,8 +50,9 @@ impl RenderedDescription {
 ///
 /// # Errors
 ///
-/// Returns one [`Error`] per `{$var}` whose name is not in `values`,
-/// anchored to the exact `{$var}` byte range in the source file.
+/// Returns one [`Error`] per `{$var}` whose path is not in `values`, naming
+/// the full path and anchored to the exact `{$var}` byte range in the source
+/// file.
 pub fn interpolate<S: std::hash::BuildHasher>(
     description: &Description,
     values: &HashMap<String, String, S>,
@@ -71,7 +74,7 @@ pub fn interpolate<S: std::hash::BuildHasher>(
         let reference = raw[name_start..]
             .find('}')
             .map(|close| (&raw[name_start..name_start + close], name_start + close + 1))
-            .filter(|(name, _)| is_variable_name(name));
+            .filter(|(name, _)| is_value_path(name));
 
         let Some((name, end)) = reference else {
             // Not the exact pattern: the `{$` is ordinary text. Rescanning
@@ -98,6 +101,11 @@ pub fn interpolate<S: std::hash::BuildHasher>(
     } else {
         Err(errors)
     }
+}
+
+/// Whether `path` is one or more `.`-joined names, the grammar inside `{$...}`.
+fn is_value_path(path: &str) -> bool {
+    path.split('.').all(is_variable_name)
 }
 
 /// Whether `name` matches the identifier grammar `[A-Za-z_][A-Za-z0-9_-]*`,
@@ -178,6 +186,49 @@ mod tests {
 
         // Assert
         assert_eq!(rendered.rendered(), "orbit: 500 km");
+    }
+
+    #[test]
+    fn expands_dotted_paths() {
+        // Arrange
+        let description = description("d = {$instrument.diameter_cm} cm", 0);
+        let values = values(&[("instrument.diameter_cm", "30")]);
+
+        // Act
+        let rendered = interpolate(&description, &values).expect("dotted path expands");
+
+        // Assert
+        assert_eq!(rendered.rendered(), "d = 30 cm");
+    }
+
+    #[test]
+    fn reports_an_undefined_path_by_its_full_spelling() {
+        // Arrange: the table exists, the leaf under it does not.
+        let description = description("{$instrument.missing}", 0);
+        let values = values(&[("instrument", "{ mass = 1 }")]);
+
+        // Act
+        let errors = interpolate(&description, &values).expect_err("missing leaf is an error");
+
+        // Assert
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].message, "undefined variable `instrument.missing`");
+        let span = errors[0].span.expect("interpolation errors are anchored");
+        assert_eq!((span.start, span.end), (0, "{$instrument.missing}".len()));
+    }
+
+    #[test]
+    fn leaves_malformed_paths_literal() {
+        // Arrange
+        let description = description("{$a.} {$.a} {$a..b} {$a.1b} {$a::b}", 0);
+        let values = values(&[("a", "x")]);
+
+        // Act
+        let rendered =
+            interpolate(&description, &values).expect("malformed paths are plain text, not errors");
+
+        // Assert
+        assert_eq!(rendered.rendered(), "{$a.} {$.a} {$a..b} {$a.1b} {$a::b}");
     }
 
     #[test]
