@@ -7,6 +7,7 @@
 //! policy until measured otherwise — so what the editor shows is always the
 //! result of one plain load over current text.
 
+mod complete;
 mod diagnostics;
 mod hints;
 mod lens;

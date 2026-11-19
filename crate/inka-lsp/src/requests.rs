@@ -1,12 +1,14 @@
 //! Answering document requests: hover, goto definition, references, rename
-//! (with its prepare step), semantic tokens, inlay hints, code lenses, and
-//! document formatting.
+//! (with its prepare step), semantic tokens, inlay hints, code lenses,
+//! document formatting, and completion.
 //!
 //! Every request loads the project fresh through the overlay store, exactly
 //! like diagnostics do, so an answer always describes what is on screen. A
 //! request about something that is not an identifier (or not inside a
 //! loadable project) answers `null`; only rename reports errors, because a
-//! refused rename needs a reason the editor can show.
+//! refused rename needs a reason the editor can show. Completion is the one
+//! exception to loading: it serves text that is mid-edit and so rarely
+//! loads, and reads its inputs one by one instead (see [`complete`]).
 //!
 //! The decoration surfaces follow the same rule by design: while an edit
 //! keeps the project from loading, tokens, hints, and lenses answer `null`
@@ -19,24 +21,25 @@ use std::collections::HashMap;
 
 use lsp_server::{ErrorCode, Request, Response};
 use lsp_types::request::{
-    CodeLensRequest, Formatting, GotoDefinition, HoverRequest, InlayHintRequest,
+    CodeLensRequest, Completion, Formatting, GotoDefinition, HoverRequest, InlayHintRequest,
     PrepareRenameRequest, References, Rename, Request as _, SemanticTokensFullRequest,
 };
 use lsp_types::{
-    CodeLens, CodeLensParams, DocumentFormattingParams, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint, InlayHintParams,
-    Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range, ReferenceParams,
-    RenameParams, SemanticTokens, SemanticTokensParams, TextDocumentIdentifier,
+    CodeLens, CodeLensParams, CompletionParams, CompletionResponse, DocumentFormattingParams,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint,
+    InlayHintParams, Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range,
+    ReferenceParams, RenameParams, SemanticTokens, SemanticTokensParams, TextDocumentIdentifier,
     TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use inka_core::project::{Project, format_project, load_project_with};
+use inka_core::read::ReadText as _;
 use inka_core::source::{FileId, SourceMap, Span};
 
 use crate::state::Overlays;
-use crate::{hints, lens, navigate, position, rename, roots, tokens, uri};
+use crate::{complete, hints, lens, navigate, position, rename, roots, tokens, uri};
 
 /// Answers one request, or hands it back when the method is not one of ours.
 pub fn answer(overlays: &Overlays, request: Request) -> Result<Response, Request> {
@@ -50,6 +53,7 @@ pub fn answer(overlays: &Overlays, request: Request) -> Result<Response, Request
         InlayHintRequest::METHOD => Ok(dispatch(overlays, request, inlay_hints)),
         CodeLensRequest::METHOD => Ok(dispatch(overlays, request, code_lens)),
         Formatting::METHOD => Ok(dispatch(overlays, request, formatting)),
+        Completion::METHOD => Ok(dispatch(overlays, request, completion)),
         _ => Err(request),
     }
 }
@@ -379,4 +383,29 @@ fn rename_to(overlays: &Overlays, params: RenameParams) -> Result<Option<Workspa
         changes: Some(changes),
         ..WorkspaceEdit::default()
     }))
+}
+
+/// The completions at the cursor, computed from the open text without
+/// loading the project — `null` only outside a project.
+#[allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value)] // see `hover`
+fn completion(
+    overlays: &Overlays,
+    params: CompletionParams,
+) -> Result<Option<CompletionResponse>, String> {
+    let document = params.text_document_position;
+    let Some(path) = uri::to_path(&document.text_document.uri) else {
+        return Ok(None);
+    };
+    let Some(root) = roots::project_root(&path) else {
+        return Ok(None);
+    };
+    let Ok(text) = overlays.read_text(&path) else {
+        return Ok(None);
+    };
+    let mut map = SourceMap::new();
+    let file = map.add_file(path.clone(), text);
+    let source = map.file(file).expect("the file was just added");
+    let offset = position::offset_of(source, document.position);
+    let items = complete::complete(&root, &path, &source.text, offset, overlays);
+    Ok(Some(CompletionResponse::Array(items)))
 }

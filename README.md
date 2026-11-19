@@ -153,8 +153,8 @@ inka fmt my-argument
 ```
 
 For editing, the [VS Code extension](editors/vscode/README.md) runs `inka-lsp`. It gives diagnostics
-as you type, hover, go to definition, find references, rename, inlay hints, approval code lenses,
-and formatting with exactly the output of `inka fmt`.
+as you type, completion, hover, go to definition, find references, rename, inlay hints, approval code
+lenses, and formatting with exactly the output of `inka fmt`.
 
 ### Next
 
