@@ -1,6 +1,6 @@
 # テスト証拠の契約
 
-英語版（正）: [English](../../en/design/test-evidence.md)。
+英語版（正）: [English](https://www.space.t.u-tokyo.ac.jp/inka/design/test-evidence/)。
 
 ## 責務分担
 
