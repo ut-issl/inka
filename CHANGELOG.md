@@ -5,6 +5,25 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.7
+
+This release makes the output of `inka review` easier to read, with colour and a clearer layout.
+
+### Command line (`inka`)
+
+- `inka review --list` groups the queue under a heading per state, with the number of targets in each heading.
+- The queue shows who approved or declined a target, or why it is blocked, in one aligned column.
+- Each interactive target opens with a rule as wide as the terminal that carries the position, `mode:id` and the state.
+- The description under judgement sits in a frame in the colour of its state and wraps to the terminal width.
+- Children are drawn as a tree, each in a frame of its own with its id in the top edge.
+- Unapproved is yellow, stale magenta, declined red, blocked dim, and a recorded approval green.
+- The state is always written as text too, so nothing depends on colour alone.
+- Colour follows standard output, so `inka review --list | less` carries no escape sequences without `--color always`.
+
+### Development
+
+- `scripts/release.py prepare` opens the pull request that prepares a release.
+
 ## v0.0.6
 
 This release resolves dotted value paths into nested tables and adds completion to the language server.
