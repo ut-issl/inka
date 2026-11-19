@@ -382,3 +382,105 @@ class NotesEdgeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+PULL_REQUESTS = [
+    release.PullRequest(11, "feat(cli): add a flag", False),
+    release.PullRequest(12, "chore(deps): update a crate", True),
+    release.PullRequest(13, "fix(core): keep the order", False),
+]
+
+
+class DraftTest(unittest.TestCase):
+    def test_the_draft_lists_the_pull_requests_a_person_wrote(self) -> None:
+        section = release.draft_section("0.0.3", PULL_REQUESTS)
+
+        self.assertTrue(section.startswith("## v0.0.3\n\n" + release.DRAFT_MARKER), section)
+        self.assertTrue(section.endswith("- feat(cli): add a flag (#11)\n- fix(core): keep the order (#13)\n"), section)
+        self.assertNotIn("#12", section)
+
+    def test_a_long_title_is_wrapped_within_the_line_length(self) -> None:
+        section = release.draft_section("0.0.3", [release.PullRequest(14, "word " * 40, False)])
+
+        self.assertLessEqual(max(map(len, section.splitlines())), release.MARKDOWN_WIDTH)
+        self.assertIn("\n  word", section)
+
+    def test_a_release_of_automated_updates_still_has_an_item(self) -> None:
+        self.assertIn("- Dependency updates only.", release.draft_section("0.0.3", PULL_REQUESTS[1:2]))
+
+    def test_the_section_goes_above_the_newest_release(self) -> None:
+        changelog = release.insert_section(NotesTest.CHANGELOG, "0.0.3", "## v0.0.3\n\nThird.\n")
+
+        self.assertIn("Preamble.\n\n## v0.0.3\n\nThird.\n\n## v0.0.2\n", changelog)
+        self.assertEqual(release.notes(changelog, "0.0.3"), "Third.\n")
+        self.assertEqual(release.notes(changelog, "0.0.2"), release.notes(NotesTest.CHANGELOG, "0.0.2"))
+
+    def test_a_changelog_without_a_release_gets_the_section_at_its_end(self) -> None:
+        self.assertEqual(release.insert_section("# Changelog\n", "0.0.1", "## v0.0.1\n"), "# Changelog\n\n## v0.0.1\n")
+
+    def test_an_existing_section_is_not_duplicated(self) -> None:
+        with self.assertRaisesRegex(release.ReleaseError, "already has a '## v0.0.2' section"):
+            release.insert_section(NotesTest.CHANGELOG, "0.0.2", "## v0.0.2\n")
+
+    def test_a_draft_is_not_release_notes(self) -> None:
+        section = release.draft_section("0.0.3", PULL_REQUESTS)
+        changelog = release.insert_section(NotesTest.CHANGELOG, "0.0.3", section)
+
+        with self.assertRaisesRegex(release.ReleaseError, "still the generated draft"):
+            release.notes(changelog, "0.0.3")
+
+
+class NextVersionTest(unittest.TestCase):
+    def test_a_part_is_incremented_and_the_parts_after_it_reset(self) -> None:
+        self.assertEqual(release.next_version("1.2.3", "patch"), "1.2.4")
+        self.assertEqual(release.next_version("1.2.3", "minor"), "1.3.0")
+        self.assertEqual(release.next_version("1.2.3", "major"), "2.0.0")
+
+    def test_an_explicit_version_above_the_current_one_is_kept(self) -> None:
+        self.assertEqual(release.next_version("0.0.9", "0.0.10"), "0.0.10")
+
+    def test_an_explicit_version_must_move_forward(self) -> None:
+        for target in ("0.1.0", "0.0.9"):
+            with self.assertRaisesRegex(release.ReleaseError, "is not above the current version 0.1.0"):
+                release.next_version("0.1.0", target)
+
+    def test_anything_else_is_refused(self) -> None:
+        with self.assertRaisesRegex(release.ReleaseError, "neither major, minor, patch nor a plain"):
+            release.next_version("0.1.0", "next")
+
+
+class PullRequestTest(unittest.TestCase):
+    def test_only_pull_requests_merged_in_the_range_are_selected(self) -> None:
+        def entry(number: int, title: str, bot: bool, oid: str) -> release.Table:
+            return {"number": number, "title": title, "author": {"is_bot": bot}, "mergeCommit": {"oid": oid}}
+
+        listing = [
+            entry(13, " fix ", False, "c"),
+            entry(12, "deps", True, "b"),
+            entry(9, "old", False, "a"),
+            {"number": 8, "title": "odd", "author": None, "mergeCommit": None},
+        ]
+
+        self.assertEqual(
+            release.select_merged(listing, {"b", "c"}),
+            [release.PullRequest(12, "deps", True), release.PullRequest(13, "fix", False)],
+        )
+
+    def test_the_description_lists_every_pull_request(self) -> None:
+        body = release.pull_request_body("0.0.3", "0.0.2", PULL_REQUESTS)
+
+        self.assertIn("## Pull requests included since v0.0.2\n\n### Changes by maintainers\n\n- #11\n- #13\n", body)
+        self.assertIn("<summary>1 pull request</summary>\n\n- #12\n\n</details>\n", body)
+
+    def test_a_release_without_automated_updates_has_no_such_list(self) -> None:
+        self.assertNotIn("Automated updates", release.pull_request_body("0.0.3", "0.0.2", PULL_REQUESTS[:1]))
+
+
+class DraftCheckTest(MainTest):
+    def test_check_fails_while_a_changelog_holds_a_draft(self) -> None:
+        write(self.root, "CHANGELOG.ja.md", "# Changelog\n\n" + release.draft_section("0.1.0", PULL_REQUESTS))
+
+        code, _, err = self.run_main("check")
+
+        self.assertEqual(code, 1)
+        self.assertIn("CHANGELOG.ja.md: a section is still the generated draft", err)

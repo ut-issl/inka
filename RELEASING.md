@@ -85,22 +85,37 @@ while the rest of the release goes through; see [Fixing a release](#fixing-a-rel
 
 ### 1. Prepare the release pull request
 
-On a new branch from `main`:
+With a clean working tree and an authenticated [`gh`](https://cli.github.com), run:
 
-1. Bump the version of every package:
+```console
+python3 scripts/release.py prepare patch
+```
 
-   ```console
-   python3 scripts/release.py bump 0.1.0
-   ```
+The argument is the part of the version to increment: `patch`, `minor` or `major`, as [Versioning](#versioning) decides
+(while the major version is `0`, `minor` for a release that breaks compatibility and `patch` for any other). The parts
+after it become `0`. An explicit version above the current one, such as `0.1.0`, is accepted as well.
 
-   This rewrites the version in every manifest and lockfile and nothing else. Run
-   `python3 scripts/release.py check` to confirm that they agree.
-2. Write the release notes. Add a section whose heading is exactly `## v<version>` (for example `## v0.1.0`) above the
-   previous release in both `CHANGELOG.md` and `CHANGELOG.ja.md`. Use `###` for subsections such as
-   `### Breaking changes`, and write one sentence per line, because a GitHub Release keeps line breaks. The English
-   section becomes the body of the GitHub Release, and the release workflow refuses to release unless both files have
-   the section.
-3. Open the pull request and merge it into `main` after CI passes.
+From the tip of `origin/main`, this
+
+- creates the branch `release/v<version>`,
+- bumps the version in every manifest and lockfile and nothing else (what `release.py bump <version>` does alone),
+- adds a draft `## v<version>` section above the previous release in both `CHANGELOG.md` and `CHANGELOG.ja.md`, with
+  one item per pull request merged since the previous release, and
+- opens the pull request `chore(release): v<version>`, whose description lists every pull request merged since the
+  previous release: the ones people wrote, then the automated updates, folded.
+
+`--dry-run` prints that description and changes nothing.
+
+Then, on that branch:
+
+1. Rewrite both draft sections as release notes and delete their `<!-- release-draft ... -->` comments. Use `###` for
+   subsections such as `### Breaking changes`, and write one sentence per line, because a GitHub Release keeps line
+   breaks. The English section becomes the body of the GitHub Release. While a draft comment is left,
+   `Check package versions agree` fails on the pull request, and the release workflow refuses to release.
+2. Merge the pull request into `main` after CI passes.
+
+The pull request description is written once. If more pull requests are merged before the release pull request is,
+take the list from `prepare --dry-run` again.
 
 ### 2. Optional: dry run
 
