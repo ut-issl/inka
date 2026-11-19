@@ -450,20 +450,19 @@ class NextVersionTest(unittest.TestCase):
 
 
 class PullRequestTest(unittest.TestCase):
-    def test_only_pull_requests_merged_in_the_range_are_selected(self) -> None:
-        def entry(number: int, title: str, bot: bool, oid: str) -> release.Table:
-            return {"number": number, "title": title, "author": {"is_bot": bot}, "mergeCommit": {"oid": oid}}
-
-        listing = [
-            entry(13, " fix ", False, "c"),
-            entry(12, "deps", True, "b"),
-            entry(9, "old", False, "a"),
-            {"number": 8, "title": "odd", "author": None, "mergeCommit": None},
-        ]
+    def test_pull_requests_are_read_from_the_commits_their_merges_left(self) -> None:
+        log = (
+            "alice\tfix(core): keep the order (#9) (#13)\n"
+            "renovate[bot]\tchore(deps): update a crate (#12)\n"
+            "alice\tchore: a commit pushed without a pull request\n"
+        )
 
         self.assertEqual(
-            release.select_merged(listing, {"b", "c"}),
-            [release.PullRequest(12, "deps", True), release.PullRequest(13, "fix", False)],
+            release.parse_merged(log),
+            [
+                release.PullRequest(12, "chore(deps): update a crate", True),
+                release.PullRequest(13, "fix(core): keep the order (#9)", False),
+            ],
         )
 
     def test_the_description_lists_every_pull_request(self) -> None:
