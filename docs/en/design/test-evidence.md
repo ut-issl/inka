@@ -1,6 +1,6 @@
 # Test evidence contracts
 
-Japanese translation: [日本語版](../../ja/design/test-evidence.md).
+Japanese translation: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/design/test-evidence/).
 
 ## Responsibility boundary
 
