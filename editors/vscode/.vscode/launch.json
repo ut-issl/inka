@@ -11,9 +11,6 @@
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
       ],
-      // Run the server built from this checkout. The extension reads this
-      // only in an Extension Development Host, and an `inka.serverPath`
-      // setting still takes precedence.
       "env": {
         "INKA_LSP_DEV_SERVER": "${workspaceFolder}/../../target/debug/inka-lsp"
       },
