@@ -850,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "inka-cli"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "ariadne",
  "assert_cmd",
@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "inka-core"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "inka-evidence",
  "insta",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "inka-evidence"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "jsonschema",
  "proptest",
@@ -902,7 +902,7 @@ dependencies = [
 
 [[package]]
 name = "inka-evidence-py"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "inka-evidence",
  "pyo3",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "inka-evidence-rust"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -927,7 +927,7 @@ dependencies = [
 
 [[package]]
 name = "inka-evidence-wasm"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "inka-evidence",
  "js-sys",
@@ -938,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "inka-lsp"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "inka-core",
  "lsp-server",

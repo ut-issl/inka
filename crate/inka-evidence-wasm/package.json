@@ -1,6 +1,6 @@
 {
   "name": "@inka-project/inka-evidence",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Emit inka test evidence v1 JSON from JavaScript test adapters",
   "license": "MIT OR Apache-2.0",
   "repository": {
