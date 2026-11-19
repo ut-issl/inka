@@ -446,7 +446,7 @@ class NextVersionTest(unittest.TestCase):
 
     def test_anything_else_is_refused(self) -> None:
         with self.assertRaisesRegex(release.ReleaseError, "neither major, minor, patch nor a plain"):
-            release.next_version("0.1.0", "pacth")
+            release.next_version("0.1.0", "next")
 
 
 class PullRequestTest(unittest.TestCase):
