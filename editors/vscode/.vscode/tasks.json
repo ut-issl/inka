@@ -6,6 +6,23 @@
       "script": "compile",
       "label": "npm: compile",
       "problemMatcher": "$tsc"
+    },
+    {
+      // The server the launch configuration runs, built from the
+      // repository root so it lands in the shared target/ directory.
+      "label": "cargo: build inka-lsp",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["build", "-p", "inka-lsp"],
+      "options": {
+        "cwd": "${workspaceFolder}/../.."
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "build extension and server",
+      "dependsOn": ["npm: compile", "cargo: build inka-lsp"],
+      "problemMatcher": []
     }
   ]
 }

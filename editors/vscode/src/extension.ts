@@ -4,14 +4,16 @@
 // follow disk changes too.
 //
 // The server is found in this order: the `inka.serverPath` setting when it
-// is set; the `inka-lsp` bundled under the extension's own `server/`
-// directory (the platform-specific .vsix of a release carries one); and
-// finally `inka-lsp` on PATH.
+// is set; in an Extension Development Host only, the `INKA_LSP_DEV_SERVER`
+// environment variable (the launch configuration points it at the
+// repository's `target/debug/inka-lsp`); the `inka-lsp` bundled under the
+// extension's own `server/` directory (the platform-specific .vsix of a
+// release carries one); and finally `inka-lsp` on PATH.
 
 import { existsSync } from "node:fs";
 import * as path from "node:path";
 
-import { ExtensionContext, window, workspace } from "vscode";
+import { ExtensionContext, ExtensionMode, window, workspace } from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -63,6 +65,15 @@ function serverCommand(context: ExtensionContext): string {
   ).trim();
   if (configured !== "") {
     return configured;
+  }
+  // Read only while debugging the extension, so an installed extension
+  // never picks up a server from whatever environment VS Code started in.
+  const development = (process.env.INKA_LSP_DEV_SERVER ?? "").trim();
+  if (
+    context.extensionMode === ExtensionMode.Development &&
+    development !== ""
+  ) {
+    return development;
   }
   const bundled = path.join(
     context.extensionPath,
