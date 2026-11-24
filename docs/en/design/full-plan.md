@@ -58,7 +58,7 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    (structure approvals travel; fiat must be re-accepted; bind must be re-bound
    and re-approved). Depends on signatures.
 10. **Visualization.** The graph surface of the [Web UI](web-ui.md): the
-    argument as cards carrying description and review state, explored by
+    argument as cards carrying description and evaluation status, explored by
     expanding and collapsing from the objectives down; layout delegated to an
     existing JS graph library. The graph itself records nothing — a decision is
     only ever taken on a node's local view, under the Web UI's recording

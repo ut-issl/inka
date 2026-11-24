@@ -7,10 +7,14 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
 
 ## Foundation
 
-- The Web UI shows the shared argument view — the same projection every other output is built on — and the
-  review queue the core derives from it. It never parses the argument, and it computes no hash, no review state
-  and no queue order of its own: those come from the core, through the server, exactly as `inka review` and
-  `inka eval` read them.
+- The Web UI shows the shared argument view — the same projection every other output is built on — together
+  with the review queue and the evaluation the core derives from it.
+- Meaning is decided in Rust, once. The front end never parses the argument and derives nothing that carries
+  meaning: no hash, no review state, no verdict, no queue order, no ordering or grouping of nodes. Those come
+  from the core, through the server, exactly as `inka review` and `inka eval` read them. The front end decides
+  only where things are drawn and what the viewer has open — layout, expansion, selection, search text.
+- The data the server sends has one definition, in Rust. The front end's types are generated from it; the bundle
+  holds no hand-written copy that could drift.
 - The server keeps no state of its own. Every answer is derived from the repository's files at the time of the
   request, so the page and the command line never disagree about what the project says. A project that fails
   `check` is shown as its diagnostics, never as a partial argument.
@@ -37,8 +41,20 @@ The local view is the unit both surfaces present a node in. It is what an approv
   below a child means navigating to that child's own local view.
 - Everything that enters the view hash is on screen without a hover, a click or a scroll inside a nested box:
   no contract content is reachable only through an interaction.
-- The header names the target (`<mode>:<id>`) and its review state. The state is always spelled out; colour
-  repeats it and never carries it alone.
+- The header names the target (`<mode>:<id>`) and its [status](#node-status), and, for a queued target, its
+  review state.
+
+## Node status
+
+- Every node carries the verdict `inka eval` gives it: established or not.
+- A node that is not established is one of two things, and the two are told apart: *blamed* — it fails through a
+  cause of its own, named as `inka eval` names it (no approval, stale approval, declined, `until:` expired,
+  evidence missing, evidence failed) — or unestablished only because something below it is.
+- This status is what is shown wherever a node is named with a state: a card, a local view's header, a sidebar
+  entry, a hover preview. It is always spelled out; colour repeats it and never carries it alone.
+- The count `inka eval` prints — established nodes out of all nodes — is always visible.
+- The review queue's states (unapproved, stale, declined, blocked) are the same validity function read from the
+  approver's side, so a node's status and its place in the queue never disagree.
 
 ## Contract text
 
@@ -85,8 +101,8 @@ by the same code path. Nothing in the record tells the two apart.
 
 ## Graph surface
 
-- Every node is a card that carries its mode, its id, its review state and its description, rendered as in the
-  local view. A long description may be clipped on the card; the node's local view shows it whole.
+- Every node is a card that carries its mode, its id, its [status](#node-status) and its description, rendered
+  as in the local view. A long description may be clipped on the card; the node's local view shows it whole.
 - The four discharge modes (objective / structure / bind / fiat) are visually distinct and also named on the
   card.
 - The layout is a top-down layered DAG — objectives at the top, edges flowing downward. An edge points from a
@@ -99,8 +115,8 @@ by the same code path. Nothing in the record tells the two apart.
 - The graph opens collapsed: the objectives and their direct children are visible.
 - A node with children is expanded or collapsed on its own. Expanding shows its direct children; collapsing
   hides every descendant that is not also reachable through another expanded, visible node.
-- A collapsed node says that it has hidden children and how many nodes lie below it, so nothing is hidden
-  silently.
+- A collapsed node says that it has hidden children, how many nodes lie below it, and how many of those are
+  blamed — so nothing is hidden silently, and what needs attention can be found without expanding everything.
 - A node is visible exactly when it is an objective or a child of an expanded, visible node. Whether a node is
   visible never depends on the order in which things were expanded.
 - The whole graph can be expanded, and collapsed again, in one action.
@@ -121,10 +137,9 @@ Context that helps a reviewer but is not part of what an approval binds to. It i
 the local view's contract content.
 
 - **Sidebar.** On both surfaces a sidebar lists the review queue and every node of the argument, and finds
-  nodes by id and by description text. An entry shows the node's mode and review state; choosing one opens the
-  node.
+  nodes by id and by description text. An entry shows the node's mode and status; choosing one opens the node.
 - **Hover.** Hovering a reference to a node — a child in a local view, a parent, a sidebar entry, a clipped
-  card — previews that node's mode, id, state and description. A preview never offers a decision, and nothing
+  card — previews that node's mode, id, status and description. A preview never offers a decision, and nothing
   is reachable only through one.
 - **Namespace.** A node's namespace is shown with its id wherever the node is named. Until namespace resolution
   lands, a node's namespace is its argument-file stem.
@@ -140,5 +155,6 @@ the local view's contract content.
 
 - `concept.md` core idea 1 (the four discharge modes the cards make visible) and core idea 2 (the local view an
   approval binds to)
-- `spec.md` Comments (presentation at review), Approval records (the record a decision appends)
+- `spec.md` Comments (presentation at review), Approval records (the record a decision appends), Evaluation
+  semantics (established and blame)
 - `full-plan.md` capability 2 (approval-session upgrades) and capability 10 (visualization)
