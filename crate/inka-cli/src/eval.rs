@@ -17,7 +17,9 @@ use inka_core::source::{Diagnostics, Error, SourceMap};
 use serde::Serialize;
 
 use crate::check::Outcome;
-use crate::load::{ProjectView, load_project_view};
+use inka_core::argument::Argument;
+
+use crate::load::load_project_view;
 use crate::render::render;
 
 /// Runs `inka eval` against `project_dir`, writing the verdict to `out` and
@@ -36,10 +38,11 @@ pub fn run(
     err: &mut impl Write,
     color: bool,
 ) -> io::Result<Outcome> {
-    let Some(ProjectView {
+    let Some(Argument {
         manifest,
         evidence,
         view,
+        ..
     }) = load_project_view(project_dir, err, color)?
     else {
         return Ok(Outcome::Failed);

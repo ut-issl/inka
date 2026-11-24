@@ -22,12 +22,14 @@
 //! subtree before judging the claim it supports. See [`leaves_first`].
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
+use crate::approvals::{self, StoreError};
 use crate::eval::{ApprovalStatus, EvalError, PhaseOrder, approval_status};
 use crate::evidence::EvidenceSet;
 use crate::hash::{InterfaceHash, LocalView, LocalViewError, ViewHash};
 use crate::manifest::PhasesSection;
-use crate::record::Record;
+use crate::record::{InvalidTarget, Label, Record, RecordError, RecordFields, Target, Timestamp};
 use crate::view::{ArgumentView, EvidenceKind, Mode, ViewNode};
 
 /// Why a target needs a decision.
@@ -246,11 +248,199 @@ fn interface_hash(node: &ViewNode, evidence: &EvidenceSet) -> Result<Resolution,
     })
 }
 
+/// A judgement on one target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Decision {
+    /// An approval, with an optional note.
+    Approve {
+        /// The note the record carries.
+        comment: Option<String>,
+    },
+    /// A veto; it must say why.
+    Decline {
+        /// Why the content is vetoed.
+        comment: String,
+    },
+}
+
+impl Decision {
+    /// The label the record of this decision carries.
+    #[must_use]
+    pub const fn label(&self) -> Label {
+        match self {
+            Decision::Approve { .. } => Label::Approve,
+            Decision::Decline { .. } => Label::Decline,
+        }
+    }
+}
+
+/// Who is deciding, and where their decisions are kept: everything a record
+/// needs besides the target, its hash, the decision and the instant.
+#[derive(Debug, Clone, Copy)]
+pub struct Reviewer<'a> {
+    /// The directory records append to, one file per approver.
+    pub approvals_dir: &'a Path,
+    /// Who is reviewing.
+    pub approver: &'a str,
+    /// The key id records name; the approver name when not given.
+    pub key_id: Option<&'a str>,
+    /// The project's current phase, which every record carries.
+    pub phase: &'a str,
+}
+
+/// Why a decision was not recorded.
+#[derive(Debug, thiserror::Error)]
+pub enum DecideError {
+    #[error("no block named `{target}` in the argument")]
+    UnknownTarget { target: String },
+    /// The target has no current view hash a decision could name.
+    #[error("{}", unhashable(.id, .reason))]
+    Unhashable { id: String, reason: BlockedReason },
+    /// The target's content is not what the decision was taken on.
+    #[error(
+        "`{id}` has changed since it was shown: the decision names {expected} but the current \
+         content hashes to {current}"
+    )]
+    Changed {
+        id: String,
+        expected: ViewHash,
+        current: ViewHash,
+    },
+    #[error(transparent)]
+    LocalView(#[from] LocalViewError),
+    #[error(transparent)]
+    Target(#[from] InvalidTarget),
+    #[error(transparent)]
+    Record(#[from] RecordError),
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
+fn unhashable(id: &str, reason: &BlockedReason) -> String {
+    match reason {
+        BlockedReason::VeriqNotEvaluated => {
+            format!("`{id}` is a veriq bind; veriq evidence is not evaluated yet")
+        }
+        BlockedReason::MissingEvidence { target } => format!(
+            "bind `{id}` has no imported evidence for `{target}`; deliver the evidence first"
+        ),
+        BlockedReason::UntilExpired { until } => {
+            format!("`{id}` is past until:{until}; no approval of it counts")
+        }
+    }
+}
+
+/// The view hash a decision on `node` recorded now would name.
+///
+/// # Errors
+///
+/// Returns [`DecideError::Unhashable`] for a bind whose evidence has not been
+/// delivered or is not evaluated, and [`DecideError::LocalView`] when a
+/// hand-built view cannot be hashed.
+pub fn current_hash(
+    view: &ArgumentView,
+    node: &ViewNode,
+    evidence: &EvidenceSet,
+) -> Result<ViewHash, DecideError> {
+    let interface = match interface_hash(node, evidence).map_err(local_view_error)? {
+        Resolution::Hashable(interface) => interface,
+        Resolution::Blocked(reason) => {
+            return Err(DecideError::Unhashable {
+                id: node.id.clone(),
+                reason,
+            });
+        }
+    };
+    Ok(LocalView::of_node(view, node, interface)?.view_hash())
+}
+
+/// [`interface_hash`] fails only on a view that cannot be hashed.
+fn local_view_error(error: EvalError) -> DecideError {
+    match error {
+        EvalError::LocalView(error) => DecideError::LocalView(error),
+        other => unreachable!("resolving an interface hash reads no phase and no graph: {other}"),
+    }
+}
+
+/// Builds the record of `decision` on `node` at `view_hash` and appends it to
+/// the reviewer's file: the one write path a decision has. Nothing existing
+/// is rewritten or removed.
+///
+/// The instant is passed in rather than read here, so the core stays free of
+/// a clock.
+///
+/// # Errors
+///
+/// Returns [`DecideError::Record`] when the fields do not make a valid record
+/// and [`DecideError::Store`] when the append fails.
+pub fn record_decision(
+    reviewer: &Reviewer<'_>,
+    node: &ViewNode,
+    view_hash: ViewHash,
+    decision: Decision,
+    timestamp: Timestamp,
+) -> Result<Record, DecideError> {
+    let fields = RecordFields {
+        target: Target::new(node.mode, &node.id)?,
+        view_hash,
+        approver: reviewer.approver.to_owned(),
+        key_id: reviewer.key_id.unwrap_or(reviewer.approver).to_owned(),
+        timestamp,
+        phase: reviewer.phase.to_owned(),
+        until: None,
+        policy_hash: None,
+    };
+    let record = match decision {
+        Decision::Approve { comment } => Record::approve(fields, comment),
+        Decision::Decline { comment } => Record::decline(fields, comment),
+    }?;
+    approvals::append(reviewer.approvals_dir, &record)?;
+    Ok(record)
+}
+
+/// Records `decision` on the target named `target`, whatever its queue state:
+/// an extra approval or a veto is a judgement too, and counting is eval's job.
+///
+/// With `expected`, the decision is recorded only if that is still the
+/// target's current hash — the guard a caller needs when the content was
+/// shown at one moment and judged at a later one.
+///
+/// # Errors
+///
+/// Returns [`DecideError::UnknownTarget`] when the view has no such node,
+/// [`DecideError::Changed`] when `expected` is not the current hash, and
+/// otherwise whatever [`current_hash`] or [`record_decision`] return.
+pub fn decide(
+    reviewer: &Reviewer<'_>,
+    view: &ArgumentView,
+    evidence: &EvidenceSet,
+    target: &str,
+    expected: Option<ViewHash>,
+    decision: Decision,
+    timestamp: Timestamp,
+) -> Result<Record, DecideError> {
+    let Some(node) = view.node(target) else {
+        return Err(DecideError::UnknownTarget {
+            target: target.to_owned(),
+        });
+    };
+    let current = current_hash(view, node, evidence)?;
+    if let Some(expected) = expected
+        && expected != current
+    {
+        return Err(DecideError::Changed {
+            id: node.id.clone(),
+            expected,
+            current,
+        });
+    }
+    record_decision(reviewer, node, current, decision, timestamp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::record::{RecordFields, Target};
     use crate::view::{Deadline, Evidence, NodeComments, ViewEdge};
 
     fn phases(current: &str) -> PhasesSection {
@@ -354,6 +544,136 @@ mod tests {
 
     fn queued_ids(queue: &ReviewQueue) -> Vec<&str> {
         queue.items.iter().map(|item| item.id.as_str()).collect()
+    }
+
+    fn reviewer(dir: &Path) -> Reviewer<'_> {
+        Reviewer {
+            approvals_dir: dir,
+            approver: "iwata",
+            key_id: None,
+            phase: "M1",
+        }
+    }
+
+    fn now() -> Timestamp {
+        "2026-09-10T08:30:00Z".parse().expect("a valid timestamp")
+    }
+
+    fn approval() -> Decision {
+        Decision::Approve { comment: None }
+    }
+
+    #[test]
+    fn a_decision_is_appended_at_the_current_hash_under_the_reviewer() {
+        // Arrange
+        let view = chain();
+        let dir = tempfile::tempdir().expect("a temporary directory");
+
+        // Act
+        let record = decide(
+            &reviewer(dir.path()),
+            &view,
+            &EvidenceSet::default(),
+            "leaf",
+            None,
+            approval(),
+            now(),
+        )
+        .expect("the decision records");
+
+        // Assert
+        assert_eq!(record.view_hash(), hash_of(&view, "leaf"));
+        assert_eq!(record.key_id(), "iwata");
+        assert_eq!(record.phase(), "M1");
+        let stored = approvals::load_dir(dir.path()).expect("the store reads back");
+        assert_eq!(stored, [record]);
+    }
+
+    #[test]
+    fn a_decision_on_content_that_changed_since_it_was_shown_is_refused_and_writes_nothing() {
+        // Arrange: the hash on screen was the branch's, the target is the leaf.
+        let view = chain();
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let shown = hash_of(&view, "branch");
+
+        // Act
+        let error = decide(
+            &reviewer(dir.path()),
+            &view,
+            &EvidenceSet::default(),
+            "leaf",
+            Some(shown),
+            approval(),
+            now(),
+        )
+        .expect_err("the hash on screen is not the current one");
+
+        // Assert
+        assert!(matches!(
+            error,
+            DecideError::Changed { expected, current, .. }
+                if expected == shown && current == hash_of(&view, "leaf")
+        ));
+        let stored = approvals::load_dir(dir.path()).expect("the store reads back");
+        assert_eq!(stored, []);
+    }
+
+    #[test]
+    fn a_decision_naming_the_current_hash_is_recorded() {
+        // Arrange
+        let view = chain();
+        let dir = tempfile::tempdir().expect("a temporary directory");
+
+        // Act
+        let result = decide(
+            &reviewer(dir.path()),
+            &view,
+            &EvidenceSet::default(),
+            "leaf",
+            Some(hash_of(&view, "leaf")),
+            Decision::Decline {
+                comment: "not yet".to_owned(),
+            },
+            now(),
+        );
+
+        // Assert
+        let record = result.expect("the hash matches");
+        assert_eq!(record.label(), Label::Decline);
+        assert_eq!(record.comment(), Some("not yet"));
+    }
+
+    #[test]
+    fn a_decision_on_an_unknown_target_or_an_undelivered_bind_says_why() {
+        // Arrange
+        let view = view(vec![
+            node("bound", Mode::Bind, "evidence says so", &[]),
+            node("root", Mode::Objective, "the root claim", &["bound"]),
+        ]);
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let decide_on = |target: &str| {
+            decide(
+                &reviewer(dir.path()),
+                &view,
+                &EvidenceSet::default(),
+                target,
+                None,
+                approval(),
+                now(),
+            )
+            .expect_err("no decision can be recorded")
+            .to_string()
+        };
+
+        // Act & Assert
+        assert_eq!(
+            decide_on("absent"),
+            "no block named `absent` in the argument"
+        );
+        assert_eq!(
+            decide_on("bound"),
+            "bind `bound` has no imported evidence for `tests/x.rs`; deliver the evidence first"
+        );
     }
 
     #[test]
