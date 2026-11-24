@@ -38,6 +38,7 @@ inka の最初のリリースです。inka は，設計の論証を構造化さ�
 - 計算が仮定するノードは bind の依存先になり，bind の承認対象にも含まれます。
 - `inka review` は calc の bind のソース・結果・仮定を表示します。
 - その bind を前回承認したときから仮定がどう変わったかも示します。
+- `inka review` は blocked な対象ごとに解消手段（`until:` の編集，またはエビデンスの配送）を示します。
 - Python パッケージ `inka-evidence` は，`inka-evidence-veriq` コマンドで veriq のプロジェクトからこれを出力します。
 
 `inka-evidence-veriq` にはリリース済みのどの版よりも新しい veriq が必要なため，`veriq` extra は固定した git コミットから veriq をインストールします。

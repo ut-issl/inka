@@ -331,6 +331,32 @@ bind に対する最新の `approve` レコードのうちスナップショッ�
 
 大きな仮定集合は当面素朴に提示する。グルーピングや diff のみの表示は[未決事項](open-questions.md)。
 
+### blocked な bind
+
+上の提示は、判断を記録できる bind のためのものである。`inka review` が `blocked:` の下に報告する bind は、
+`--list` でも対話ループの前置きでも1行で表示する。内容は理由と、それを解消する手段である。
+
+```text
+blocked:
+  bind:margin_ok — approvals no longer count: the current phase is past until:M2 (edit `until:` to resolve)
+  bind:detumble_ok — no imported calc evidence provides `AOCS::?verify_detumble` (deliver the evidence to resolve)
+```
+
+証拠が読み込まれていない bind には、提示するものがない。`until:` が失効した bind は証拠が読み込まれているが、
+それでも提示しない。理由は次のとおり。
+
+- 提示は判断のためにあるが、記録できる判断がない。失効は hard であり、新しい承認を含めて、その bind への
+  承認は一切数えられない。
+- 出口は `until:` の編集である。編集すると bind のハッシュが変わるので、bind はキューに戻る。そこで全体が
+  提示され、直近の承認のスナップショットとの diff も表示される。見ないまま承認されるものはない。
+- その間に証拠が通っているかどうかは、`inka eval` が失効とは独立した原因として報告する。
+- `--list` は1ターゲット1行であり、前置きはセッションのたびに読まれる。失効した bind すべてのソースを
+  そこに出すと、キューが埋もれる。
+
+2つの形式で表示を揃えるのは、blocked なターゲットがどこで見ても同じに読めるようにするためである。
+test の bind も同じ規則に従う。blocked な test の bind は1行だけで、ケース一覧は表示しない。解消手段の
+表示も bind に限らない。失効した objective・structure・fiat も同じ形で表示する。
+
 ## capsula による配送
 
 配送は[テスト証拠](test-evidence.md#capsula経由の配送)の手順に従い、テストのアダプターの代わりに veriq の

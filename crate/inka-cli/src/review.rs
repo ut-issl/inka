@@ -595,7 +595,8 @@ fn current_hash(
         .map_err(|error| error.to_string())
 }
 
-/// The `--list` rendering: one line per queued target, then blocked targets.
+/// The `--list` rendering: one line per queued target, then one line per
+/// blocked target.
 fn write_queue(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
     if queue.items.is_empty() {
         writeln!(out, "nothing needs review")?;
@@ -631,6 +632,15 @@ fn write_information(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()
     write_blocked(queue, out)
 }
 
+/// The blocked targets, one line each in both forms of the command: the
+/// reason, then what resolves it.
+///
+/// A blocked bind is not shown with its evidence, whichever kind it cites and
+/// even when the evidence is loaded. Nothing can be decided on a blocked
+/// target, and the presentation exists for a decision: the way out of an
+/// expired `until:` is an edit, which changes the hash and brings the target
+/// back into the queue, where it is presented in full against what was last
+/// approved. Whether its evidence passes meanwhile is `inka eval`'s report.
 fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
     if queue.blocked.is_empty() {
         return Ok(());
@@ -639,10 +649,11 @@ fn write_blocked(queue: &ReviewQueue, out: &mut impl Write) -> io::Result<()> {
     for item in &queue.blocked {
         writeln!(
             out,
-            "  {}:{} — {}",
+            "  {}:{} — {} ({})",
             item.mode.name(),
             item.id,
-            blocked_line(&item.reason)
+            blocked_line(&item.reason),
+            blocked_remedy(&item.reason)
         )?;
     }
     Ok(())
@@ -928,6 +939,15 @@ fn blocked_line(reason: &BlockedReason) -> String {
                 sanitize(until)
             )
         }
+    }
+}
+
+/// What takes a target out of `blocked:`, as the declines of the prelude say
+/// `edit or retract to resolve`.
+const fn blocked_remedy(reason: &BlockedReason) -> &'static str {
+    match reason {
+        BlockedReason::MissingEvidence { .. } => "deliver the evidence to resolve",
+        BlockedReason::UntilExpired { .. } => "edit `until:` to resolve",
     }
 }
 
@@ -1259,6 +1279,148 @@ fiat table_complete {
         .expect("the manifest writes");
         fs::write(dir.path().join("calc-evidence.json"), evidence).expect("the evidence writes");
         dir
+    }
+
+    /// Runs `--list` against `dir`, returning the captured stdout.
+    fn run_list(dir: &Path) -> String {
+        let request = Request {
+            approver: "alice".to_owned(),
+            key_id: None,
+            action: Action::List,
+        };
+        let mut input = Cursor::new(Vec::new());
+        let mut now = || -> Timestamp {
+            "2026-11-01T00:00:00Z"
+                .parse()
+                .expect("the fixed instant parses")
+        };
+        let session = Session {
+            input: &mut input,
+            input_is_tty: false,
+            now: &mut now,
+        };
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        let outcome = run(dir, &request, session, &mut out, &mut err, false)
+            .expect("writing to vecs succeeds");
+        assert!(matches!(outcome, Outcome::Ok), "the listing succeeds");
+        String::from_utf8(out).expect("the listing is UTF-8")
+    }
+
+    /// Moves the project one phase on: `M0`, the phase every `until:` of
+    /// these scenarios names, is now behind it.
+    fn advance_past_m0(dir: &Path) {
+        let manifest = dir.join("inka.toml");
+        let text = fs::read_to_string(&manifest).expect("the manifest reads");
+        let advanced = text.replace(
+            "order = [\"M0\"]\ncurrent = \"M0\"",
+            "order = [\"M0\", \"M1\"]\ncurrent = \"M1\"",
+        );
+        assert_ne!(advanced, text, "the manifest declares the single phase");
+        fs::write(manifest, advanced).expect("the manifest writes");
+    }
+
+    /// The lines of `transcript` from `blocked:` up to the first prompt or
+    /// the end: everything either form says about blocked targets.
+    fn blocked_section(transcript: &str) -> String {
+        let lines: Vec<&str> = transcript
+            .lines()
+            .skip_while(|line| *line != "blocked:")
+            .take_while(|line| !line.is_empty() && *line != "nothing needs a decision")
+            .collect();
+        format!("{}\n", lines.join("\n"))
+    }
+
+    #[test]
+    fn an_expired_calc_bind_is_one_line_with_its_remedy_in_both_forms() {
+        // Arrange: the evidence is loaded and the bind was approved, so a
+        // snapshot exists — everything a full presentation would draw on.
+        let argument = CALC_ARGUMENT.replace(
+            "  calc: \"Power::?verify_margin\"\n",
+            "  calc: \"Power::?verify_margin\"\n  until: M0\n",
+        );
+        let dir = calc_project(
+            &argument,
+            &calc_evidence(&["model_valid", "table_complete"]),
+        );
+        run_interactive(dir.path(), "a\na\na\na\n");
+        assert_eq!(snapshot_files(dir.path()).len(), 1);
+        advance_past_m0(dir.path());
+
+        // Act
+        let listing = run_list(dir.path());
+        let transcript = run_interactive(dir.path(), "q\n");
+
+        // Assert: the reason and the way out, and none of the evidence.
+        let expected = "\
+blocked:
+  bind:margin_ok — approvals no longer count: the current phase is past until:M0 (edit `until:` to resolve)
+";
+        assert_eq!(blocked_section(&listing), expected, "{listing}");
+        assert_eq!(blocked_section(&transcript), expected, "{transcript}");
+        for output in [&listing, &transcript] {
+            assert!(!output.contains("sources:"), "{output}");
+            assert!(!output.contains("leaves:"), "{output}");
+            assert!(!output.contains("assumes:"), "{output}");
+        }
+    }
+
+    #[test]
+    fn a_calc_bind_without_evidence_is_one_line_with_its_remedy_in_both_forms() {
+        // Arrange: a delivery that holds no target at all.
+        let dir = calc_project(CALC_ARGUMENT, r#"{"v": 1, "targets": []}"#);
+
+        // Act
+        let listing = run_list(dir.path());
+        let transcript = run_interactive(dir.path(), "q\n");
+
+        // Assert
+        let expected = "\
+blocked:
+  bind:margin_ok — no imported calc evidence provides `Power::?verify_margin` (deliver the evidence to resolve)
+";
+        assert_eq!(blocked_section(&listing), expected, "{listing}");
+        assert_eq!(blocked_section(&transcript), expected, "{transcript}");
+    }
+
+    #[test]
+    fn a_blocked_test_bind_reads_as_a_blocked_calc_bind_does() {
+        // Arrange: one test bind expired over loaded evidence, one that no
+        // delivery answers.
+        let dir = project_with(
+            "objective root {\n  ```\n  the root claim\n  ```\n  children: tested, untested\n}\n\n\
+             bind tested {\n  ```\n  the hash survives a round trip\n  ```\n  test: \"tests/clean.rs::holds\"\n  until: M0\n}\n\n\
+             bind untested {\n  ```\n  the hash is stable\n  ```\n  test: \"tests/clean.rs::stable\"\n}\n",
+        );
+        fs::write(
+            dir.path().join("inka.toml"),
+            "[project]\nname = \"review-scenario\"\n\n[phases]\norder = [\"M0\"]\ncurrent = \"M0\"\n\n\
+             [values]\nfiles = []\n\n[evidence]\ntests = [\"evidence.json\"]\n",
+        )
+        .expect("the manifest writes");
+        fs::write(
+            dir.path().join("evidence.json"),
+            r##"{"v": 1, "tests": [{"id": "tests/clean.rs::holds", "body": "#[test]\nfn holds() {}\n",
+                "executions": [{"case": "default", "outcome": "pass"}]}]}"##,
+        )
+        .expect("the evidence writes");
+        advance_past_m0(dir.path());
+
+        // Act
+        let listing = run_list(dir.path());
+        let transcript = run_interactive(dir.path(), "q\n");
+
+        // Assert: the same two lines as for calc binds, and no case list.
+        let expected = "\
+blocked:
+  bind:tested — approvals no longer count: the current phase is past until:M0 (edit `until:` to resolve)
+  bind:untested — no imported test evidence provides `tests/clean.rs::stable` (deliver the evidence to resolve)
+";
+        assert_eq!(blocked_section(&listing), expected, "{listing}");
+        assert_eq!(blocked_section(&transcript), expected, "{transcript}");
+        for output in [&listing, &transcript] {
+            assert!(!output.contains("default"), "{output}");
+        }
     }
 
     fn snapshot_files(dir: &Path) -> Vec<PathBuf> {
