@@ -103,8 +103,7 @@ the whole view.
 
 Useful flags: `--port` (default 8080), `--host` (loopback by default, so an argument under review is
 not published to the network), and `--assets <DIR>` to serve a bundle from disk instead of the
-embedded one. The server no longer answers `GET /elements.json` (it replies `410 Gone`); step 2's `inka export` is
-how that JSON is obtained.
+embedded one. The cytoscape JSON of step 2 comes from `inka export` only; the server does not serve it.
 
 ### 5. Start your own project
 

@@ -43,9 +43,6 @@ use crate::load::load_project_view;
 /// Path the viewer fetches the page from.
 const PAGE_PATH: &str = "/api/page";
 
-/// Path the server used to answer with `inka export` output.
-const RETIRED_ELEMENTS_PATH: &str = "/elements.json";
-
 /// The viewer bundle `build.rs` found at compile time, as `(path, bytes)`.
 mod embedded {
     include!(concat!(env!("OUT_DIR"), "/web_assets.rs"));
@@ -138,15 +135,13 @@ pub fn run(
 /// Every route is a `get`, so any other method is refused with 405 by the
 /// router itself rather than by a check someone has to remember to write.
 fn router(project_dir: PathBuf, assets: Assets) -> Router {
-    let argument = Router::new()
-        .route(
-            PAGE_PATH,
-            get(move || {
-                let project_dir = project_dir.clone();
-                async move { page(project_dir).await }
-            }),
-        )
-        .route(RETIRED_ELEMENTS_PATH, get(retired_elements));
+    let argument = Router::new().route(
+        PAGE_PATH,
+        get(move || {
+            let project_dir = project_dir.clone();
+            async move { page(project_dir).await }
+        }),
+    );
 
     match assets {
         // Unknown paths fall back to the bundle's entry point, so the viewer
@@ -172,16 +167,6 @@ async fn page(project_dir: PathBuf) -> Response {
         // rather than a state to present.
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
-}
-
-/// Says where the export went. Without this the path would fall through to
-/// the viewer's entry point, and a tool that still asks for JSON here would
-/// be handed a page of HTML with a success status.
-async fn retired_elements() -> impl IntoResponse {
-    (
-        StatusCode::GONE,
-        "inka serve no longer answers /elements.json; run `inka export` for the cytoscape elements\n",
-    )
 }
 
 fn page_response(page: &Page) -> Response {
@@ -453,18 +438,6 @@ mod tests {
                 "{method} should be refused"
             );
         }
-    }
-
-    #[tokio::test]
-    async fn the_retired_export_path_says_where_the_export_went() {
-        // With a bundle, an unknown path answers the viewer's entry point; a
-        // tool still asking here for JSON must not be handed that.
-        let app = bundle_router(Assets::Embedded(BUNDLE));
-
-        let response = call(app, Method::GET, "/elements.json").await;
-
-        assert_eq!(response.status(), StatusCode::GONE);
-        assert!(body_of(response).await.contains("inka export"));
     }
 
     #[tokio::test]
