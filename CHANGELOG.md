@@ -38,6 +38,7 @@ Every package in the repository is released together under this version.
 - The nodes a calculation assumes become dependencies of the bind and part of what its approval covers.
 - `inka review` shows a calc bind's sources, results and assumptions.
 - It also shows how the assumptions changed since the last approval of the bind.
+- `inka review` says what resolves each blocked target: an edit of `until:`, or the delivery of the evidence.
 - The `inka-evidence` Python package emits it from a veriq project, with the `inka-evidence-veriq` command.
 
 `inka-evidence-veriq` needs a veriq newer than any released one, so the `veriq` extra installs veriq from a pinned git commit.

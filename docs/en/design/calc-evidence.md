@@ -413,6 +413,36 @@ of another version alone.
 Large assumption sets are presented naively for now; grouping and diff-only
 views are an [open question](open-questions.md).
 
+### Blocked binds
+
+The presentation above is for a bind a decision can be recorded on. A bind
+`inka review` reports under `blocked:` gets one line — the reason and what
+resolves it — in `--list` and in the prelude of the interactive loop alike:
+
+```text
+blocked:
+  bind:margin_ok — approvals no longer count: the current phase is past until:M2 (edit `until:` to resolve)
+  bind:detumble_ok — no imported calc evidence provides `AOCS::?verify_detumble` (deliver the evidence to resolve)
+```
+
+A bind without loaded evidence has nothing to present. A bind whose `until:`
+has expired does — its evidence is loaded — and is still not presented:
+
+- The presentation serves a decision, and none can be recorded. Expiry is
+  hard, so no approval of the bind counts, including a new one.
+- The way out is an edit of `until:`. That changes the bind's hash, so the
+  bind returns to the queue, where it is presented in full and diffed against
+  the snapshot of its last approval. Nothing is approved unseen.
+- Whether the evidence passes meanwhile is what `inka eval` reports, as a
+  cause independent of the expiry.
+- `--list` is one line per target, and the prelude is read before every
+  session; the sources of every expired bind there would bury the queue.
+
+The two forms agree so that a blocked target reads the same wherever it is
+met. Test binds follow the same rule: a blocked test bind is its one line,
+and no case list is shown. The remedies are not specific to binds either — an
+expired objective, structure or fiat reads the same way.
+
 ## Delivery through capsula
 
 Delivery follows the [test evidence](test-evidence.md#delivery-through-capsula)
