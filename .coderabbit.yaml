@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit configuration. Reference: https://docs.coderabbit.ai/reference/configuration
+# CodeRabbit also reads CLAUDE.md / AGENTS.md as coding guidelines.
+---
+language: "en-US"
+
+reviews:
+  # Lockfiles, generated output, and frozen test artifacts are not worth
+  # reviewing and count against the per-review file limit.
+  path_filters:
+    - "!**/Cargo.lock"
+    - "!**/uv.lock"
+    - "!**/package-lock.json"
+    - "!target/**"
+    - "!site/**"
+    - "!**/*.snap"
+    - "!web/fixtures/*.json"
+    - "!tests/fixtures/dogfood/evidence/**"
+
+  path_instructions:
+    - path: "crate/**/*.rs"
+      instructions: >-
+        Flag new behavior that lacks corresponding tests. Do not repeat issues
+        that clippy or rustfmt already report.
+    - path: "tests/golden/**"
+      instructions: >-
+        Golden vectors freeze the byte layout behind every recorded approval's
+        view_hash, so this directory is append-only (see
+        tests/golden/README.md). Flag any edit, rename, or removal of an
+        existing vector; a layout change must ship as a parallel version with
+        its own vectors.
+    - path: "**/*.md"
+      instructions: >-
+        Each English document has a Japanese counterpart: `X.ja.md` next to
+        `X.md` at the repository root, and `docs/ja/**` for `docs/en/**`. Flag
+        a pull request that changes one side without the matching change to
+        the other, and translations that disagree with the English text.
+
+  auto_review:
+    auto_incremental_review: true
+    # Dependency-update PRs would quickly exhaust the review rate limit.
+    ignore_usernames:
+      - "renovate[bot]"
+
+  # Already enforced in CI (cargo clippy, and markdownlint, yamllint,
+  # actionlint, and zizmor in the repository check).
+  tools:
+    clippy:
+      enabled: false
+    markdownlint:
+      enabled: false
+    yamllint:
+      enabled: false
+    actionlint:
+      enabled: false
+    zizmor:
+      enabled: false
