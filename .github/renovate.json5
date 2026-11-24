@@ -4,6 +4,8 @@
     'config:best-practices',
   ],
   minimumReleaseAge: '3 days',
+  // Pull requests are squashed on `main`.
+  automergeStrategy: 'squash',
   customManagers: [
     {
       customType: 'regex',
@@ -185,15 +187,6 @@
       ],
     },
     {
-      matchFileNames: [
-        '.github/workflows/**',
-      ],
-      matchUpdateTypes: [
-        'patch',
-      ],
-      // automerge: true,
-    },
-    {
       matchDepNames: [
         'renovatebot/renovate',
       ],
@@ -206,26 +199,15 @@
       ],
     },
     {
-      matchDepNames: [
-        'renovatebot/renovate',
-      ],
-      matchFileNames: [
-        '.github/workflows/ci.yaml',
-        '.github/workflows/ci.yml',
-      ],
+      // Majors wait for a person; everything else merges once CI passes.
       matchUpdateTypes: [
         'minor',
-      ],
-      // automerge: true,
-    },
-    {
-      matchManagers: [
-        'pre-commit',
-      ],
-      matchUpdateTypes: [
         'patch',
+        'pin',
+        'pinDigest',
+        'digest',
       ],
-      // automerge: true,
+      automerge: true,
     },
   ],
   'git-submodules': {

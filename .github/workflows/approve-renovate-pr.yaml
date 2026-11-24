@@ -1,0 +1,29 @@
+name: Approve Renovate PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+
+  approve:
+    name: Approve
+    # The ruleset on `main` requires one approval and dismisses it on every
+    # push, so Renovate's automerge needs a fresh approval for each of its
+    # pushes. A push by anyone else to a Renovate branch is left for a person.
+    if: >-
+      ${{ github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.event.sender.login == 'renovate[bot]' }}
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Approve the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr review --approve "${PR_URL}"
