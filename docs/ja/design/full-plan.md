@@ -13,8 +13,9 @@ PoC の上に積む機能領域。以下の並びは**依存関係にもとづ�
    ポリシーファイルからパースする。承認に `policy_hash` を記録。存在しないタグに
    マッチするセレクタは warning(タグのタイポ検出)。組み込み `any(1)` を置き換える。
 2. **承認セッションの強化。** 前回自分が承認した局所ビューとの diff(過去ソースの
-   復元が必要)、承認者側 `until:` の効力、CLI で不足するなら TUI(ratatui)。
-   どの UI でも部分木展開なしの規則は維持。
+   復元が必要)、承認者側 `until:` の効力、`inka serve` が配信するブラウザ上の
+   レビューセッション(各対象を `inka review` と同じ形で提示し、同じレコードを記録する。
+   [Web UI](web-ui.md))。どの UI でも部分木展開なしの規則は維持。
 3. **what-if 評価。** `--forecast <phase>`、`--margin`、`--without-approver`、
    `--as-of`、`--diff-approvals` — すべて純関数 eval の入力を差し替えて呼び直す薄い層。
 4. **LSP。** ワークスペース分割(core / cli / lsp。core は同期のまま、tokio なし)、
@@ -43,14 +44,14 @@ PoC の上に積む機能領域。以下の並びは**依存関係にもとづ�
 9. **プロジェクト横断の再利用。** バンドル(ノード+attestation+元ポリシー)の
    export/import、取り込み側の trust 条項、可搬性規則(structure 承認は運べる、
    fiat は再受諾、bind は再束縛+再承認)。署名に依存。
-10. **可視化。** 静的な単一 HTML の export(トポロジー・承認状態・stale。
-    description はクリック時のみ)。レイアウトは既存 JS グラフライブラリに委譲。
-    読み取り専用で、承認フローからは到達不可。
+10. **可視化。** [Web UI](web-ui.md) のグラフ面: 論証を description とレビュー状態を
+    載せたカードとして描き、objective から下へ展開・折りたたみしながら探索する。
+    レイアウトは既存 JS グラフライブラリに委譲。グラフ自体は何も記録しない — 判断は
+    常にノードの局所ビュー上で、Web UI の記録条件のもとでのみ下される。
 
 ## 継続する技術選択
 
-手書き再帰下降(パーサジェネレータなし)、`ratatui` + `crossterm`、`lsp-server` +
-`lsp-types`(同期)、`ed25519-dalek` + `ssh-key`、バッチ HTTP は `ureq`、diff は
+手書き再帰下降(パーサジェネレータなし)、`lsp-server` + `lsp-types`(同期)、`ed25519-dalek` + `ssh-key`、バッチ HTTP は `ureq`、diff は
 `similar`、テストは `insta` + `proptest` + `cargo-fuzz`。意図的に採らないもの:
 インクリメンタル計算基盤(実測で困るまで全再計算)、core 内の async、バイナリ
 フォーマット(すべてテキスト)。
