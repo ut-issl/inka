@@ -21,6 +21,7 @@ use crate::view::{ArgumentView, EvidenceKind, Mode, Property, ViewNode};
 
 /// One node's local view, as content to present.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct LocalContent {
     pub id: String,
     pub mode: Mode,
@@ -37,6 +38,7 @@ pub struct LocalContent {
 
 /// A bind's evidence reference with the comment on its property.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct EvidenceContent {
     pub kind: EvidenceKind,
     /// The opaque evidence target, verbatim.
@@ -46,6 +48,7 @@ pub struct EvidenceContent {
 
 /// The `children:` property: its comment, then each direct child.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct ChildrenContent {
     pub comment: Option<String>,
     /// The direct children, in the order the block declares them.
@@ -55,6 +58,7 @@ pub struct ChildrenContent {
 /// One direct child as its parent's local view shows it: the comment on the
 /// entry and the child's description, nothing below.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct ChildContent {
     pub id: String,
     /// The comment on the parent's entry for this child.
@@ -66,6 +70,7 @@ pub struct ChildContent {
 
 /// The deadline annotations, each with the comment on its property.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct DeadlineContent {
     pub until: String,
     pub until_comment: Option<String>,
@@ -74,6 +79,7 @@ pub struct DeadlineContent {
 
 /// A `promote:` annotation with the comment on it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 pub struct PromoteContent {
     pub mode: Mode,
     pub comment: Option<String>,

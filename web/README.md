@@ -87,6 +87,22 @@ cargo run -p inka-cli -- export tests/fixtures/dogfood > web/fixtures/dogfood.el
 `src/model/fixtures.test.ts` holds them to the contract, so drift between the
 exporter and this bundle fails the test suite rather than the browser.
 
+## Generated from Rust
+
+The data the Web UI is moving to has one definition, in Rust: `crate/inka-core/src/wire.rs`. Two things here
+are generated from it and never edited:
+
+- `src/generated/*.ts` — the TypeScript types of that data, one file per Rust type;
+- `fixtures/*.page.json` — the page the server would send for each of the two example projects.
+
+`cargo test -p inka-core` fails when either is out of date. Regenerate both from the repository root:
+
+```sh
+INKA_UPDATE_GENERATED=1 cargo test -p inka-core
+```
+
+The viewer does not read these yet; it still consumes the `inka export` payload described above.
+
 ## Layout
 
 ```text

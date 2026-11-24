@@ -212,6 +212,7 @@ fn expired_deadline(node: &ViewNode, phases: &PhaseOrder) -> Result<Option<Strin
 
 /// A cause a node fails on its own, as blame reports it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(tag = "cause", rename_all = "snake_case")]
 pub enum BlameReason {
     /// No record targets the node's current content or any earlier version.

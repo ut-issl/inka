@@ -1,0 +1,1272 @@
+{
+  "kind": "argument",
+  "established": 1,
+  "total": 25,
+  "nodes": [
+    {
+      "id": "approvals_meaningful",
+      "mode": "structure",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "inka_ok"
+      ],
+      "children": [
+        "description_is_contract",
+        "labels_cover_reality",
+        "policy_is_reviewable",
+        "queue_minimizes_friction"
+      ],
+      "below": 6,
+      "blamed_below": 6,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:cabcfff2f5994533284e5f59aaf102f74796b6f1763c120fead878632508aaaf",
+      "local": {
+        "id": "approvals_meaningful",
+        "mode": "structure",
+        "comment": null,
+        "description": "A recorded approve expresses a judgement the approver took on based solely on the local view, and does not degenerate into formal ritual",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "description_is_contract",
+              "comment": null,
+              "description": "In a living argument, descriptions are maintained as contract sentences whose truth can be judged without reading the substructure"
+            },
+            {
+              "id": "labels_cover_reality",
+              "comment": null,
+              "description": "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n- **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n- **decline**: refuse; a veto, with a reason comment required\n- **cannot-take-responsibility**: cannot take this on personally; a delegate may be named"
+            },
+            {
+              "id": "policy_is_reviewable",
+              "comment": null,
+              "description": "Which targets need how many approvals from whom is defined by policy text in the repository, and changes to approval criteria go through PR review"
+            },
+            {
+              "id": "queue_minimizes_friction",
+              "comment": null,
+              "description": "An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "approver_unforgeable",
+      "mode": "fiat",
+      "namespace": "audit",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "records_auditable"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:56ec2091db56ccbcb952c0433f4ea37868ab9732da99f60ca0cd529e2893b462",
+      "local": {
+        "id": "approver_unforgeable",
+        "mode": "fiat",
+        "comment": "approver_unforgeable is the value-interpolation example; sig_scheme is defined\nin values.toml. Contracts are hashed after interpolation, so changing the value\nprecisely invalidates this approval and the parent's structure approval.",
+        "description": "Forging an approval record's approver is detected by verifying the record's signature (SSH signature (sshsig / ed25519))",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M7",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "approvers_follow_norm",
+      "mode": "fiat",
+      "namespace": "assumptions",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "description_is_contract"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:1f254739d9b08181005aa1bd17f13845fecb93333705ee5e3b500c6d874593a4",
+      "local": {
+        "id": "approvers_follow_norm",
+        "mode": "fiat",
+        "comment": null,
+        "description": "Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "assumptions_surfaced",
+      "mode": "fiat",
+      "namespace": "truth-validity",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "truth_validity_separated"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:5170f1ded81bc8a9ba0a89cf6f500903c7761a2cf4ed4930c1f799641d35ed61",
+      "local": {
+        "id": "assumptions_surfaced",
+        "mode": "fiat",
+        "comment": null,
+        "description": "Every assumption a verification result relies on is aggregated mechanically through the interfaces and presented to the boundary bind approver as the total assumption set",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M8",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "bind_validity_by_human",
+      "mode": "fiat",
+      "namespace": "truth-validity",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "truth_validity_separated"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:838b0efea6345809e47e07c05ab0a1cb4e288e2a46d6492c6345a267fed26d44",
+      "local": {
+        "id": "bind_validity_by_human",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "description_is_contract",
+      "mode": "structure",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "approvals_meaningful"
+      ],
+      "children": [
+        "lint_flags_leaky_contracts",
+        "approvers_follow_norm"
+      ],
+      "below": 2,
+      "blamed_below": 2,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:905f2cdeb4db98a9b24ff70d35f1563b50a7a89de52251ec043b2ec1ad18994c",
+      "local": {
+        "id": "description_is_contract",
+        "mode": "structure",
+        "comment": null,
+        "description": "In a living argument, descriptions are maintained as contract sentences whose truth can be judged without reading the substructure",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "lint_flags_leaky_contracts",
+              "comment": null,
+              "description": "The LLM lint returns decline when the parent claim does not follow from the children's contracts, or when wording presupposes knowledge outside the local view"
+            },
+            {
+              "id": "approvers_follow_norm",
+              "comment": null,
+              "description": "Approvers follow the norm: when a judgement required reading the subtree, either decline, or demand a revision that promotes what was learned into the children's contracts"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "edit_cost_proportional",
+      "mode": "structure",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "inka_ok"
+      ],
+      "children": [
+        "invalidation_exact",
+        "surface_edits_free"
+      ],
+      "below": 6,
+      "blamed_below": 5,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:a20b00e1c928aa5ea79500aa1d8b1b3f31c6d161f3e7c6be506c885806a623cf",
+      "local": {
+        "id": "edit_cost_proportional",
+        "mode": "structure",
+        "comment": null,
+        "description": "For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "invalidation_exact",
+              "comment": null,
+              "description": "Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents"
+            },
+            {
+              "id": "surface_edits_free",
+              "comment": null,
+              "description": "Renaming IDs and reordering child references never invalidate any approval"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "eval_reproducible",
+      "mode": "fiat",
+      "namespace": "audit",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "records_auditable"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:d8546ffaf877b35d0e244566c0a8671192e8e501f408e6731b64dc1525b1ca49",
+      "local": {
+        "id": "eval_reproducible",
+        "mode": "fiat",
+        "comment": null,
+        "description": "eval's input is repository content only; the result for a given commit is identical regardless of execution environment or time",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M3",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "git_hosting_intact",
+      "mode": "fiat",
+      "namespace": "assumptions",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "records_auditable"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:2747e094a5e8bc65118e76b794b0a12e4aa03c06ca544174fca4e752bd9ddb4f",
+      "local": {
+        "id": "git_hosting_intact",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "hash_vectors_replay",
+      "mode": "bind",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "invalidation_exact"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "established"
+      },
+      "review": null,
+      "view_hash": "sha256:d7033341d4c30becbd56b11abf6a396e38f382d596f7e4f6151f9e3cd2a57637",
+      "local": {
+        "id": "hash_vectors_replay",
+        "mode": "bind",
+        "comment": "The first real CI bind (#75): the broad soundness claim above stays a\nfiat, while this narrow slice of it is established through evidence the\nRust adapter emitted from an actual test run and capsula delivered.",
+        "description": "The frozen hash v1 golden vectors replay byte-for-byte on the current implementation",
+        "evidence": {
+          "kind": "test",
+          "target": "inka-core::golden::every_recorded_vector_still_hashes_to_its_recorded_value",
+          "comment": null
+        },
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "id_not_in_contract",
+      "mode": "fiat",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "surface_edits_free"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:970bce45ef7433a6cc4833d0addddc5589d478cd639335052967732262fda483",
+      "local": {
+        "id": "id_not_in_contract",
+        "mode": "fiat",
+        "comment": null,
+        "description": "IDs and tags are not part of the contract: what an approver judged is the content, not its name",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "inka_ok",
+      "mode": "objective",
+      "namespace": "objective",
+      "tags": [],
+      "root": true,
+      "parents": [],
+      "children": [
+        "edit_cost_proportional",
+        "approvals_meaningful",
+        "records_auditable",
+        "truth_validity_separated"
+      ],
+      "below": 24,
+      "blamed_below": 23,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:a86803beb7fc52f01322a0ed24527ff62100b7d03d761422a5899945369f49b1",
+      "local": {
+        "id": "inka_ok",
+        "mode": "objective",
+        "comment": null,
+        "description": "A team adopting inka can maintain meaningful approvals and auditable records over a frequently edited argument, at a cost proportional to the size of each edit",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "edit_cost_proportional",
+              "comment": null,
+              "description": "For any text edit, the set of approvals that must be renewed coincides exactly with the range whose interface (local view) the edit changed"
+            },
+            {
+              "id": "approvals_meaningful",
+              "comment": null,
+              "description": "A recorded approve expresses a judgement the approver took on based solely on the local view, and does not degenerate into formal ritual"
+            },
+            {
+              "id": "records_auditable",
+              "comment": null,
+              "description": "A third party can mechanically verify, for the approval state at any commit, who approved what, and under which policy and phase"
+            },
+            {
+              "id": "truth_validity_separated",
+              "comment": null,
+              "description": "Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity — whether the verification is appropriate evidence for the proposition"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "invalidation_exact",
+      "mode": "structure",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "edit_cost_proportional"
+      ],
+      "children": [
+        "local_view_binding",
+        "local_view_hash_sound",
+        "hash_vectors_replay"
+      ],
+      "below": 3,
+      "blamed_below": 2,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:72997ae6a82e8aaeff4b07a0ded027a2ce20e066ea23f0a5b28f59b6b005a143",
+      "local": {
+        "id": "invalidation_exact",
+        "mode": "structure",
+        "comment": null,
+        "description": "Editing a description invalidates only the node's own approvals and the structure approvals of all its direct parents",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "local_view_binding",
+              "comment": null,
+              "description": "Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below"
+            },
+            {
+              "id": "local_view_hash_sound",
+              "comment": null,
+              "description": "The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes"
+            },
+            {
+              "id": "hash_vectors_replay",
+              "comment": null,
+              "description": "The frozen hash v1 golden vectors replay byte-for-byte on the current implementation"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "labels_cover_reality",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "approvals_meaningful"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:52fb791766eebfbdfe4ba77122c149a2ffb1f2c6942d0797cb01e17bc3234144",
+      "local": {
+        "id": "labels_cover_reality",
+        "mode": "fiat",
+        "comment": "labels_cover_reality is the markdown-description example.\nFence content is hashed near-verbatim: newlines are part of the contract.",
+        "description": "The three labels approve / decline / cannot-take-responsibility express, without excess or gaps, the judgement states an approver can take:\n\n- **approve**: take it on (optionally reserved with an approver-side `until:<phase>`)\n- **decline**: refuse; a veto, with a reason comment required\n- **cannot-take-responsibility**: cannot take this on personally; a delegate may be named",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "lint_flags_leaky_contracts",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "description_is_contract"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:1361903042ce411ff28ccf5a159d5a779225eb2b8207783428a95580fb4cef1c",
+      "local": {
+        "id": "lint_flags_leaky_contracts",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The LLM lint returns decline when the parent claim does not follow from the children's contracts, or when wording presupposes knowledge outside the local view",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M9",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "local_view_binding",
+      "mode": "fiat",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "invalidation_exact"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:5d64a47e9f5b48f6e643c5c7c93643a4696a5348bfbf6a5617d94a59802dd3f4",
+      "local": {
+        "id": "local_view_binding",
+        "mode": "fiat",
+        "comment": null,
+        "description": "Every approval record is bound solely to a hash computed from the target's local view (its own description and those of its direct children) and does not depend on anything at grandchild depth or below",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M3",
+          "until_comment": "bind to the scenario test: approve, edit a grandchild, stays fresh",
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "local_view_hash_sound",
+      "mode": "fiat",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "invalidation_exact",
+        "surface_edits_free",
+        "target_unswappable"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:555ddf29645786a10dcfec23009ad14dfc1db0ec233dcbda588dadc1f9924d0c",
+      "local": {
+        "id": "local_view_hash_sound",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M2",
+          "until_comment": "bind to the hash v1 golden vectors and proptests (first CI bind target)",
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "log_tamper_evident",
+      "mode": "fiat",
+      "namespace": "audit",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "records_auditable"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:92e8c985904afccd35e6824178ef93a5166b5a7c730481bf508699d713bcc0f4",
+      "local": {
+        "id": "log_tamper_evident",
+        "mode": "fiat",
+        "comment": null,
+        "description": "Deleting or rewriting approval records (including suppressing a decline) is detected by reconciliation against the anchoring",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M7",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "policy_is_reviewable",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "approvals_meaningful"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:2a8c099ab4e2349921a96c569b5193628ed1a4ac73527b2d901720e748fab939",
+      "local": {
+        "id": "policy_is_reviewable",
+        "mode": "fiat",
+        "comment": "Bind to policy parser + eval tests.",
+        "description": "Which targets need how many approvals from whom is defined by policy text in the repository, and changes to approval criteria go through PR review",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M3",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "queue_minimizes_friction",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "approvals_meaningful"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:1d66d44baccdbf91fbc976dccc59396a373b1b7b32e2991b4213433c8559ea96",
+      "local": {
+        "id": "queue_minimizes_friction",
+        "mode": "fiat",
+        "comment": "Bind once the approve session lands.",
+        "description": "An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M4",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "records_auditable",
+      "mode": "structure",
+      "namespace": "audit",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "inka_ok"
+      ],
+      "children": [
+        "target_unswappable",
+        "approver_unforgeable",
+        "log_tamper_evident",
+        "eval_reproducible",
+        "git_hosting_intact"
+      ],
+      "below": 6,
+      "blamed_below": 6,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:cdd27d08eca26a3589ec7ed3c427a8a086f52adbc96d21608f42db2f1a4b4e1d",
+      "local": {
+        "id": "records_auditable",
+        "mode": "structure",
+        "comment": null,
+        "description": "A third party can mechanically verify, for the approval state at any commit, who approved what, and under which policy and phase",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "target_unswappable",
+              "comment": null,
+              "description": "Swapping an approval record's target (pretending an approval covers different content) is detected by checking the view_hash"
+            },
+            {
+              "id": "approver_unforgeable",
+              "comment": null,
+              "description": "Forging an approval record's approver is detected by verifying the record's signature (SSH signature (sshsig / ed25519))"
+            },
+            {
+              "id": "log_tamper_evident",
+              "comment": null,
+              "description": "Deleting or rewriting approval records (including suppressing a decline) is detected by reconciliation against the anchoring"
+            },
+            {
+              "id": "eval_reproducible",
+              "comment": null,
+              "description": "eval's input is repository content only; the result for a given commit is identical regardless of execution environment or time"
+            },
+            {
+              "id": "git_hosting_intact",
+              "comment": null,
+              "description": "The repository hosting infrastructure (git history and the CI execution environment) is not controlled by an attacker"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "surface_edits_free",
+      "mode": "structure",
+      "namespace": "editing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "edit_cost_proportional"
+      ],
+      "children": [
+        "local_view_hash_sound",
+        "id_not_in_contract"
+      ],
+      "below": 2,
+      "blamed_below": 2,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:7c34b12f3a7160ddeaac151c8865be30c645b22108451e0530f072accf0bdd51",
+      "local": {
+        "id": "surface_edits_free",
+        "mode": "structure",
+        "comment": null,
+        "description": "Renaming IDs and reordering child references never invalidate any approval",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "local_view_hash_sound",
+              "comment": null,
+              "description": "The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes"
+            },
+            {
+              "id": "id_not_in_contract",
+              "comment": null,
+              "description": "IDs and tags are not part of the contract: what an approver judged is the content, not its name"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "target_unswappable",
+      "mode": "structure",
+      "namespace": "audit",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "records_auditable"
+      ],
+      "children": [
+        "local_view_hash_sound"
+      ],
+      "below": 1,
+      "blamed_below": 1,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:4fa01b5439fa04c2c7cb1ae3fad8a5e4d06050db6094a0e02450de746ab9003e",
+      "local": {
+        "id": "target_unswappable",
+        "mode": "structure",
+        "comment": null,
+        "description": "Swapping an approval record's target (pretending an approval covers different content) is detected by checking the view_hash",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "local_view_hash_sound",
+              "comment": null,
+              "description": "The local-view hash corresponds one-to-one with contract content: normalization-equivalent local views yield the same hash, and local views that differ as contracts yield different hashes"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "truth_validity_separated",
+      "mode": "structure",
+      "namespace": "truth-validity",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "inka_ok"
+      ],
+      "children": [
+        "verification_truth_by_machine",
+        "bind_validity_by_human",
+        "assumptions_surfaced"
+      ],
+      "below": 3,
+      "blamed_below": 3,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:04397e31b9aa29bdfc58cf06314494849c1cafe0c5fdd5467f68d2845ca3472b",
+      "local": {
+        "id": "truth_validity_separated",
+        "mode": "structure",
+        "comment": null,
+        "description": "Whether a mechanically verifiable fact holds is removed from human approval; humans judge only validity — whether the verification is appropriate evidence for the proposition",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "verification_truth_by_machine",
+              "comment": null,
+              "description": "Verification outcomes are decided mechanically by veriq and CI; eval only reconciles the results and demands no human approval"
+            },
+            {
+              "id": "bind_validity_by_human",
+              "comment": null,
+              "description": "The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval"
+            },
+            {
+              "id": "assumptions_surfaced",
+              "comment": null,
+              "description": "Every assumption a verification result relies on is aggregated mechanically through the interfaces and presented to the boundary bind approver as the total assumption set"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "verification_truth_by_machine",
+      "mode": "fiat",
+      "namespace": "truth-validity",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "truth_validity_separated"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:1ed8ab610ed46c817691ef962b91b6709d094f5ce36b4023a25f56a9ddea0e29",
+      "local": {
+        "id": "verification_truth_by_machine",
+        "mode": "fiat",
+        "comment": null,
+        "description": "Verification outcomes are decided mechanically by veriq and CI; eval only reconciles the results and demands no human approval",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M8",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    }
+  ],
+  "roots": [
+    "inka_ok"
+  ],
+  "order": [
+    "inka_ok",
+    "approvals_meaningful",
+    "description_is_contract",
+    "approvers_follow_norm",
+    "edit_cost_proportional",
+    "invalidation_exact",
+    "hash_vectors_replay",
+    "labels_cover_reality",
+    "lint_flags_leaky_contracts",
+    "local_view_binding",
+    "policy_is_reviewable",
+    "queue_minimizes_friction",
+    "records_auditable",
+    "approver_unforgeable",
+    "eval_reproducible",
+    "git_hosting_intact",
+    "log_tamper_evident",
+    "surface_edits_free",
+    "id_not_in_contract",
+    "target_unswappable",
+    "local_view_hash_sound",
+    "truth_validity_separated",
+    "assumptions_surfaced",
+    "bind_validity_by_human",
+    "verification_truth_by_machine"
+  ],
+  "namespaces": [
+    {
+      "name": "objective",
+      "nodes": [
+        "inka_ok"
+      ]
+    },
+    {
+      "name": "approval",
+      "nodes": [
+        "approvals_meaningful",
+        "description_is_contract",
+        "labels_cover_reality",
+        "lint_flags_leaky_contracts",
+        "policy_is_reviewable",
+        "queue_minimizes_friction"
+      ]
+    },
+    {
+      "name": "assumptions",
+      "nodes": [
+        "approvers_follow_norm",
+        "git_hosting_intact"
+      ]
+    },
+    {
+      "name": "editing",
+      "nodes": [
+        "edit_cost_proportional",
+        "invalidation_exact",
+        "hash_vectors_replay",
+        "local_view_binding",
+        "surface_edits_free",
+        "id_not_in_contract",
+        "local_view_hash_sound"
+      ]
+    },
+    {
+      "name": "audit",
+      "nodes": [
+        "records_auditable",
+        "approver_unforgeable",
+        "eval_reproducible",
+        "log_tamper_evident",
+        "target_unswappable"
+      ]
+    },
+    {
+      "name": "truth-validity",
+      "nodes": [
+        "truth_validity_separated",
+        "assumptions_surfaced",
+        "bind_validity_by_human",
+        "verification_truth_by_machine"
+      ]
+    }
+  ],
+  "queue": {
+    "walk": [
+      "local_view_binding",
+      "local_view_hash_sound",
+      "invalidation_exact",
+      "id_not_in_contract",
+      "surface_edits_free",
+      "edit_cost_proportional",
+      "lint_flags_leaky_contracts",
+      "approvers_follow_norm",
+      "description_is_contract",
+      "labels_cover_reality",
+      "policy_is_reviewable",
+      "queue_minimizes_friction",
+      "approvals_meaningful",
+      "target_unswappable",
+      "approver_unforgeable",
+      "log_tamper_evident",
+      "eval_reproducible",
+      "git_hosting_intact",
+      "records_auditable",
+      "verification_truth_by_machine",
+      "bind_validity_by_human",
+      "assumptions_surfaced",
+      "truth_validity_separated",
+      "inka_ok"
+    ],
+    "groups": [
+      {
+        "state": "unapproved",
+        "targets": [
+          "local_view_binding",
+          "local_view_hash_sound",
+          "invalidation_exact",
+          "id_not_in_contract",
+          "surface_edits_free",
+          "edit_cost_proportional",
+          "lint_flags_leaky_contracts",
+          "approvers_follow_norm",
+          "description_is_contract",
+          "labels_cover_reality",
+          "policy_is_reviewable",
+          "queue_minimizes_friction",
+          "approvals_meaningful",
+          "target_unswappable",
+          "approver_unforgeable",
+          "log_tamper_evident",
+          "eval_reproducible",
+          "git_hosting_intact",
+          "records_auditable",
+          "verification_truth_by_machine",
+          "bind_validity_by_human",
+          "assumptions_surfaced",
+          "truth_validity_separated",
+          "inka_ok"
+        ]
+      }
+    ]
+  },
+  "warnings": []
+}

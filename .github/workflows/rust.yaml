@@ -46,6 +46,9 @@ jobs:
               - 'tests/golden/**'
               - '**/*.inka'
               - '**/inka.toml'
+              # Generated from, and checked against, the Rust definitions.
+              - 'web/src/generated/**'
+              - 'web/fixtures/*.page.json'
               - .github/workflows/rust.yaml
 
   check:

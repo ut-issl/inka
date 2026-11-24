@@ -24,6 +24,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use serde::Serialize;
+
 use crate::approvals::{self, StoreError};
 use crate::eval::{ApprovalStatus, EvalError, PhaseOrder, approval_status};
 use crate::evidence::EvidenceSet;
@@ -64,7 +66,9 @@ pub struct QueueItem {
 }
 
 /// Why review cannot act on an unestablished target.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(tag = "cause", rename_all = "snake_case")]
 pub enum BlockedReason {
     /// No imported evidence provides the bind's `test:` reference, so there
     /// is no interface hash and no current view hash to decide on.
