@@ -136,7 +136,8 @@ inka review --path my-argument --as alice premise --approve
 inka review --path my-argument --as alice goal --decline --comment "state a real objective"
 ```
 
-`--list` も対象も指定しなければ，`review` は待ち行列を対話的に順に巡ります。判断はすべて
+`--list` も対象も指定しなければ，`review` は待ち行列を対話的に順に巡ります。待ち行列は部分木ごとに
+葉から根へ向かって並ぶので，あるブロックはその下にあるすべてのブロックの後に出てきます。判断はすべて
 `approvals/<approver>.jsonl` に追記され，書き換えられることはありません。承認はそのとき示された内容に
 対するものなので，ブロックを編集するとその承認は古くなり，そのブロックの契約に依拠する親の承認も
 古くなります。承認が古くなったブロックは待ち行列に戻ります。
