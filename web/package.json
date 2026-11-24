@@ -20,8 +20,7 @@
     "cytoscape": "^3.34.3",
     "cytoscape-dagre": "^4.0.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "zod": "^4.5.4"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",

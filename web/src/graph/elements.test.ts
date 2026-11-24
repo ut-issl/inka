@@ -1,19 +1,15 @@
 import { describe, expect, test } from 'vitest'
 
-import { edge, node } from '../test/factory'
-import { parseElements } from '../model/elements'
-import { buildView } from '../model/view'
+import { edge, node, view as buildView } from '../test/factory'
 import { cytoscapeElements } from './elements'
 
-const view = buildView(
-  parseElements([
-    node('a', { mode: 'objective', namespace: 'top', description: 'secret contract' }),
-    node('b', { mode: 'fiat', namespace: 'low' }),
-    node('c', { mode: 'fiat', namespace: 'low' }),
-    edge('a', 'b'),
-    edge('a', 'c', 'secret entry comment'),
-  ]),
-)
+const view = buildView([
+  node('a', { mode: 'objective', namespace: 'top', description: 'secret contract' }),
+  node('b', { mode: 'fiat', namespace: 'low' }),
+  node('c', { mode: 'fiat', namespace: 'low' }),
+  edge('a', 'b'),
+  edge('a', 'c', 'secret entry comment'),
+])
 
 describe('cytoscapeElements', () => {
   test('emits one node per block, in the view order', () => {

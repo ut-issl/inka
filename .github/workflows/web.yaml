@@ -39,6 +39,9 @@ jobs:
           files_yaml: |
             web:
               - 'web/**'
+              # The end-to-end tests run against `inka serve`.
+              - crate/inka-cli/src/serve.rs
+              - crate/inka-core/src/wire.rs
               - .github/workflows/web.yaml
 
   check:
@@ -124,6 +127,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Playwright starts `inka serve` for the tests to run against.
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+
+      - name: Build inka
+        run: cargo build --locked -p inka-cli
 
       - name: Install the browser
         run: npx playwright install --with-deps chromium

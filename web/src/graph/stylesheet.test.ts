@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { DISCHARGE_MODES } from '../model/elements'
+import { DISCHARGE_MODES } from '../model/modes'
 import { MODE_COLORS, stylesheet } from './stylesheet'
 
 type Block = { selector: string; style: Record<string, unknown> }

@@ -88,7 +88,9 @@ cargo build -p inka-cli
 ### 4. 対話的なグラフを配信する
 
 `serve` はビューアを配信し，そこに論証を渡します。厳密に read-only で，配信されるどこからも論証・
-承認・その他の状態は変更できません。
+承認・その他の状態は変更できません。ページを読み込むたびにプロジェクトを読み直すので，編集や新しい
+承認はサーバを再起動しなくても再読み込みで反映されます。`check` に通らないプロジェクトは，直るまで
+その診断として表示されます。
 
 ```console
 inka serve tests/fixtures/aocs
@@ -100,8 +102,9 @@ inka serve tests/fixtures/aocs
 全体表示に戻ります。
 
 主なオプション: `--port`(既定 8080)，`--host`(既定はループバック。査読中の論証をネットワークに
-公開しない)，`--assets <DIR>`(内蔵のバンドルの代わりにディスク上のものを配信する)。バンドル無しで
-ビルドした `inka` でも `GET /elements.json` は応答し，これは手順 2 と同じ JSON です。
+公開しない)，`--assets <DIR>`(内蔵のバンドルの代わりにディスク上のものを配信する)。サーバは
+`GET /elements.json` に応答しなくなりました(`410 Gone` を返します)。その JSON は手順 2 の
+`inka export` で得ます。
 
 ### 5. 自分のプロジェクトを始める
 
@@ -158,7 +161,7 @@ inka fmt my-argument
 ### 次に読むもの
 
 - [`docs/`](docs/ja/index.md) — 概念，仕様，各出力の設計
-- [`web/README.md`](web/README.md) — ビューアと `inka export` の契約，および開発方法
+- [`web/README.md`](web/README.md) — ビューアと `inka serve` の契約，および開発方法
 - `inka <command> --help` — 各コマンドの全オプション
 
 ## pre-commit のセットアップ

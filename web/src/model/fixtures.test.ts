@@ -1,24 +1,36 @@
 /**
- * The checked-in fixture exports are the contract's worked examples: they must
- * validate, and the orderings the UI shows must come out of them unaided.
+ * The checked-in pages are what `inka serve` sends for the two example
+ * projects (`cargo test -p inka-core` holds them to that). Here they are held
+ * to what the viewer relies on, so a change on the Rust side that the viewer
+ * cannot draw fails this suite rather than the browser.
  */
 
 import { describe, expect, test } from 'vitest'
 
-import aocs from '../../fixtures/aocs.elements.json'
-import dogfood from '../../fixtures/dogfood.elements.json'
-import { parseElements } from './elements'
-import { buildView, namespacesOf, nodeOf, rootsOf } from './view'
+import aocsPage from '../../fixtures/aocs.page.json'
+import dogfoodPage from '../../fixtures/dogfood.page.json'
+import type { Page } from '../generated/Page'
+import type { Snapshot } from '../generated/Snapshot'
+import { namespacesOf, nodeOf, rootsOf, viewOf } from './view'
+
+/** A fixture as the page it is; JSON modules lose the literal types. */
+function snapshotOf(page: unknown): Snapshot {
+  const typed = page as Page
+  if (typed.kind !== 'argument') throw new Error('the fixture projects check')
+  return typed
+}
 
 describe.each([
-  ['aocs', aocs],
-  ['dogfood', dogfood],
-])('the %s export', (_name, elements) => {
-  const view = buildView(parseElements(elements))
+  ['aocs', aocsPage],
+  ['dogfood', dogfoodPage],
+])('the %s page', (_name, page) => {
+  const snapshot = snapshotOf(page)
+  const view = viewOf(snapshot)
 
-  test('validates and yields one entry per node', () => {
+  test('yields one entry per node', () => {
     expect(view.nodes.size).toBeGreaterThan(0)
     expect(view.order).toHaveLength(view.nodes.size)
+    expect(snapshot.total).toBe(view.nodes.size)
   })
 
   test('has exactly one objective root', () => {
@@ -26,7 +38,7 @@ describe.each([
   })
 
   test('lists every node exactly once across the namespace groups', () => {
-    const listed = view.groups.flatMap((group) => group.nodeIds)
+    const listed = view.groups.flatMap((group) => group.nodes)
 
     expect([...listed].sort()).toEqual([...view.order].sort())
   })
@@ -38,17 +50,26 @@ describe.each([
       expect(rank.get(edge.source)).toBeLessThan(rank.get(edge.target) as number)
     }
   })
+
+  test('names only nodes it defines', () => {
+    for (const edge of view.edges) {
+      expect(view.nodes.has(edge.source) && view.nodes.has(edge.target)).toBe(true)
+    }
+    for (const id of [...snapshot.queue.walk, ...snapshot.queue.groups.flatMap((group) => group.targets)]) {
+      expect(view.nodes.has(id)).toBe(true)
+    }
+  })
 })
 
-describe('the aocs export specifically', () => {
-  const view = buildView(parseElements(aocs))
+describe('the aocs page specifically', () => {
+  const view = viewOf(snapshotOf(aocsPage))
 
-  test('is the 17-node argument the design page shows', () => {
+  test('is the 17-node argument', () => {
     expect(view.nodes.size).toBe(17)
     expect(rootsOf(view).map((root) => root.id)).toEqual(['aocs_ok'])
   })
 
-  test('groups the namespaces in the order the design page shows', () => {
+  test('groups the namespaces parents-first', () => {
     expect(namespacesOf(view)).toEqual(['objective', 'safety', 'momentum', 'pointing', 'assumptions'])
   })
 
@@ -60,19 +81,19 @@ describe('the aocs export specifically', () => {
   })
 
   test('carries the evidence target and the deadline the argument declares', () => {
-    expect(nodeOf(view, 'detumble_convergence_ok').evidence).toEqual({
+    expect(nodeOf(view, 'detumble_convergence_ok').local.evidence).toMatchObject({
       kind: 'veriq',
       target: 'aocs.verify_detumble',
     })
-    expect(nodeOf(view, 'mass_properties_valid').deadline).toMatchObject({
+    expect(nodeOf(view, 'mass_properties_valid').local.deadline).toMatchObject({
       until: 'FM',
-      promote: 'bind',
+      promote: { mode: 'bind' },
     })
   })
 
   test('interpolates every value, so no `{$var}` reaches the viewer', () => {
     for (const node of view.nodes.values()) {
-      expect(node.description).not.toMatch(/\{\$/)
+      expect(node.local.description).not.toMatch(/\{\$/)
     }
   })
 })

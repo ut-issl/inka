@@ -2,21 +2,17 @@ import { act, render, screen } from '@testing-library/react'
 import cytoscape from 'cytoscape'
 import { describe, expect, test, vi } from 'vitest'
 
-import { parseElements } from '../model/elements'
-import { buildView } from '../model/view'
-import { edge, node } from '../test/factory'
+import { edge, node, view as buildView } from '../test/factory'
 import { cytoscapeElements } from './elements'
 import { HoverTooltip } from './HoverTooltip'
 
-const view = buildView(
-  parseElements([
-    node('a', { description: 'the parent contract' }),
-    node('b'),
-    node('c'),
-    edge('a', 'b', 'why b is here'),
-    edge('a', 'c'),
-  ]),
-)
+const view = buildView([
+  node('a', { description: 'the parent contract' }),
+  node('b'),
+  node('c'),
+  edge('a', 'b', 'why b is here'),
+  edge('a', 'c'),
+])
 
 /** A headless graph of `view` with the tooltip mounted over it. */
 function mounted() {

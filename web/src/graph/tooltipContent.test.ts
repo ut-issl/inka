@@ -1,19 +1,15 @@
 import { describe, expect, test } from 'vitest'
 
-import { parseElements } from '../model/elements'
-import { buildView } from '../model/view'
-import { edge, node } from '../test/factory'
+import { edge, node, view as buildView } from '../test/factory'
 import { tooltipContent } from './tooltipContent'
 
-const view = buildView(
-  parseElements([
-    node('a', { description: 'the parent contract' }),
-    node('b'),
-    node('c'),
-    edge('a', 'b', 'why b is here'),
-    edge('a', 'c'),
-  ]),
-)
+const view = buildView([
+  node('a', { description: 'the parent contract' }),
+  node('b'),
+  node('c'),
+  edge('a', 'b', 'why b is here'),
+  edge('a', 'c'),
+])
 
 describe('tooltipContent', () => {
   test('a node shows its id and its contract', () => {

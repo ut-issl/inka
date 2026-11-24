@@ -88,7 +88,9 @@ release binary already carries it.
 ### 4. Serve the interactive graph
 
 `serve` hosts the viewer and feeds it the argument. It is strictly read-only: nothing it serves can
-change the argument, approvals, or any other state.
+change the argument, approvals, or any other state. Every page load reads the project again, so an
+edit or a new approval shows on reload without restarting the server; a project that fails `check`
+is shown as its findings until it is fixed.
 
 ```console
 inka serve tests/fixtures/aocs
@@ -101,8 +103,8 @@ the whole view.
 
 Useful flags: `--port` (default 8080), `--host` (loopback by default, so an argument under review is
 not published to the network), and `--assets <DIR>` to serve a bundle from disk instead of the
-embedded one. An `inka` built without the bundle still answers `GET /elements.json`, which is the
-same JSON step 2 writes.
+embedded one. The server no longer answers `GET /elements.json` (it replies `410 Gone`); step 2's `inka export` is
+how that JSON is obtained.
 
 ### 5. Start your own project
 
@@ -160,7 +162,7 @@ lenses, and formatting with exactly the output of `inka fmt`.
 ### Next
 
 - [`docs/`](docs/en/index.md) — the concept, the specification, and the design of each output
-- [`web/README.md`](web/README.md) — the viewer's contract with `inka export`, and how to develop it
+- [`web/README.md`](web/README.md) — the viewer's contract with `inka serve`, and how to develop it
 - `inka <command> --help` — every flag of a command
 
 ## Pre-commit Setup

@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { edge, node } from '../test/factory'
-import { parseElements } from './elements'
-import { buildView } from './view'
+import { edge, node, view as buildView } from '../test/factory'
 import { isNamespaceFocused, isNodeFocused, resolveFocus, WHOLE_VIEW } from './focus'
 
 /**
@@ -12,19 +10,17 @@ import { isNamespaceFocused, isNodeFocused, resolveFocus, WHOLE_VIEW } from './f
  *      |      |
  *   low/d   low/e
  */
-const view = buildView(
-  parseElements([
-    node('a', { mode: 'objective', namespace: 'top', root: true }),
-    node('b', { namespace: 'mid' }),
-    node('c', { namespace: 'mid' }),
-    node('d', { mode: 'fiat', namespace: 'low' }),
-    node('e', { mode: 'fiat', namespace: 'low' }),
-    edge('a', 'b'),
-    edge('a', 'c'),
-    edge('b', 'd'),
-    edge('c', 'e'),
-  ]),
-)
+const view = buildView([
+  node('a', { mode: 'objective', namespace: 'top', root: true }),
+  node('b', { namespace: 'mid' }),
+  node('c', { namespace: 'mid' }),
+  node('d', { mode: 'fiat', namespace: 'low' }),
+  node('e', { mode: 'fiat', namespace: 'low' }),
+  edge('a', 'b'),
+  edge('a', 'c'),
+  edge('b', 'd'),
+  edge('c', 'e'),
+])
 
 const ids = (set: ReadonlySet<string>) => [...set].sort()
 
@@ -65,15 +61,13 @@ describe('resolveFocus', () => {
 
   test('a node both above and below a namespace reads as a parent', () => {
     // Arrange: `x` is a parent of ns/m and a child of ns/n.
-    const both = buildView(
-      parseElements([
-        node('m', { namespace: 'ns' }),
-        node('n', { namespace: 'ns' }),
-        node('x', { namespace: 'other' }),
-        edge('x', 'm'),
-        edge('n', 'x'),
-      ]),
-    )
+    const both = buildView([
+      node('m', { namespace: 'ns' }),
+      node('n', { namespace: 'ns' }),
+      node('x', { namespace: 'other' }),
+      edge('x', 'm'),
+      edge('n', 'x'),
+    ])
 
     const sets = resolveFocus(both, { kind: 'namespace', name: 'ns' })
 

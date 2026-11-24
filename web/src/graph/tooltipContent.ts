@@ -20,9 +20,9 @@ export function tooltipContent(
   if (hovered.kind === 'node') {
     if (!view.nodes.has(hovered.id)) return null
     const node = nodeOf(view, hovered.id)
-    return { title: node.id, text: node.description }
+    return { title: node.id, text: node.local.description }
   }
   const edge = view.edges.find((candidate) => candidate.id === hovered.id)
-  if (edge?.comment === undefined) return null
+  if (!edge || edge.comment === null) return null
   return { title: `${edge.source} → ${edge.target}`, text: edge.comment }
 }
