@@ -138,7 +138,8 @@ inka review --path my-argument --as alice premise --approve
 inka review --path my-argument --as alice goal --decline --comment "state a real objective"
 ```
 
-Without `--list` or a target, `review` walks the queue interactively. Every decision is appended to
+Without `--list` or a target, `review` walks the queue interactively. The queue runs from the leaves
+up, one subtree at a time, so a block comes after everything below it. Every decision is appended to
 `approvals/<approver>.jsonl` and nothing is ever rewritten. An approval covers the content it was
 given for, so editing a block makes its approval stale, and its parents' too, since they rest on its
 contract. Each block with a stale approval goes back in the queue.

@@ -5,27 +5,27 @@ expression: "String::from_utf8(output.stdout).expect(\"the queue is UTF-8\")"
 24 targets need review
 
 Unapproved (24)
-  structure:approvals_meaningful
-  fiat:approver_unforgeable
-  fiat:approvers_follow_norm
-  fiat:assumptions_surfaced
-  fiat:bind_validity_by_human
-  structure:description_is_contract
-  structure:edit_cost_proportional
-  fiat:eval_reproducible
-  fiat:git_hosting_intact
-  fiat:id_not_in_contract
-  objective:inka_ok
-  structure:invalidation_exact
-  fiat:labels_cover_reality
-  fiat:lint_flags_leaky_contracts
   fiat:local_view_binding
   fiat:local_view_hash_sound
-  fiat:log_tamper_evident
+  structure:invalidation_exact
+  fiat:id_not_in_contract
+  structure:surface_edits_free
+  structure:edit_cost_proportional
+  fiat:lint_flags_leaky_contracts
+  fiat:approvers_follow_norm
+  structure:description_is_contract
+  fiat:labels_cover_reality
   fiat:policy_is_reviewable
   fiat:queue_minimizes_friction
-  structure:records_auditable
-  structure:surface_edits_free
+  structure:approvals_meaningful
   structure:target_unswappable
-  structure:truth_validity_separated
+  fiat:approver_unforgeable
+  fiat:log_tamper_evident
+  fiat:eval_reproducible
+  fiat:git_hosting_intact
+  structure:records_auditable
   fiat:verification_truth_by_machine
+  fiat:bind_validity_by_human
+  fiat:assumptions_surfaced
+  structure:truth_validity_separated
+  objective:inka_ok

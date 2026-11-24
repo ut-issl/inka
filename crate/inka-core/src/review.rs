@@ -16,6 +16,12 @@
 //! no current view hash to approve, a veriq bind is not evaluated yet, and a
 //! node whose `until:` has expired would not be helped by a new approval.
 //! These are reported separately as blocked, never silently dropped.
+//!
+//! The queue runs from the leaves up, one subtree at a time: a node comes
+//! after everything below it, so a reviewer who follows the queue finishes a
+//! subtree before judging the claim it supports. See [`leaves_first`].
+
+use std::collections::{HashMap, HashSet};
 
 use crate::eval::{ApprovalStatus, EvalError, PhaseOrder, approval_status};
 use crate::evidence::EvidenceSet;
@@ -85,7 +91,7 @@ pub struct BlockedItem {
 }
 
 /// Everything review derives: actionable items and blocked information, both
-/// in the view's sorted block-ID order.
+/// leaves first, each subtree before the node it hangs from.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ReviewQueue {
     /// Targets a decision can be recorded on (`Declined` included, as
@@ -111,7 +117,7 @@ pub fn derive_queue(
 ) -> Result<ReviewQueue, EvalError> {
     let order = PhaseOrder::new(phases)?;
     let mut queue = ReviewQueue::default();
-    for node in &view.nodes {
+    for node in leaves_first(view) {
         match interface_hash(node, evidence)? {
             Resolution::Blocked(reason) => queue.blocked.push(BlockedItem {
                 id: node.id.clone(),
@@ -158,6 +164,54 @@ impl ReviewQueue {
             state,
         });
     }
+}
+
+/// Every node of the view in the order review visits it: depth first from
+/// each root, a node after all of its children, so a whole subtree precedes
+/// the node it supports.
+///
+/// Roots are taken in the view's order and children in the order their block
+/// declares them. A node several parents share is placed where the first of
+/// them reaches it. Nodes no root reaches follow, walked the same way in the
+/// view's node order, so nothing is left out. A child the view does not
+/// define is skipped, and a cycle in a hand-built view is cut where the walk
+/// meets a node it has already entered.
+fn leaves_first(view: &ArgumentView) -> Vec<&ViewNode> {
+    let by_id: HashMap<&str, &ViewNode> = view
+        .nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node))
+        .collect();
+    let starts = view
+        .roots
+        .iter()
+        .filter_map(|root| by_id.get(root.as_str()).copied())
+        .chain(&view.nodes);
+
+    let mut entered: HashSet<&str> = HashSet::with_capacity(view.nodes.len());
+    let mut ordered = Vec::with_capacity(view.nodes.len());
+    for start in starts {
+        if !entered.insert(start.id.as_str()) {
+            continue;
+        }
+        // Each frame is a node and its children still to walk; the node is
+        // emitted when the frame runs dry. A loop rather than recursion, so a
+        // deep argument cannot overflow the stack.
+        let mut stack = vec![(start, start.children.iter())];
+        while let Some((node, children)) = stack.last_mut() {
+            if let Some(child) = children.next() {
+                if let Some(&child) = by_id.get(child.as_str())
+                    && entered.insert(child.id.as_str())
+                {
+                    stack.push((child, child.children.iter()));
+                }
+            } else {
+                ordered.push(*node);
+                stack.pop();
+            }
+        }
+    }
+    ordered
 }
 
 /// Whether a node's current hash can be computed, and with which interface.
@@ -317,23 +371,185 @@ mod tests {
     }
 
     #[test]
-    fn every_bare_target_queues_as_missing_in_view_order() {
+    fn every_bare_target_queues_as_missing_leaves_first() {
         // Arrange & Act
         let view = chain();
         let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
             .expect("the queue derives");
 
-        // Assert: view order (sorted block IDs), every state Missing, and the
-        // hash a decision would bind to is the node's current hash.
-        assert_eq!(queued_ids(&queue), ["branch", "leaf", "root"]);
+        // Assert: leaves first, every state Missing, and the hash a decision
+        // would bind to is the node's current hash.
+        assert_eq!(queued_ids(&queue), ["leaf", "branch", "root"]);
         assert!(
             queue
                 .items
                 .iter()
                 .all(|item| item.state == QueueState::Missing)
         );
-        assert_eq!(queue.items[1].current_hash, hash_of(&view, "leaf"));
+        assert_eq!(queue.items[0].current_hash, hash_of(&view, "leaf"));
         assert_eq!(queue.blocked, []);
+    }
+
+    #[test]
+    fn a_subtree_is_queued_whole_before_the_node_it_supports() {
+        // Arrange: two subtrees whose ids sort against the tree's shape, and
+        // children declared in an order that is not alphabetical.
+        let view = view(vec![
+            node(
+                "a_root",
+                Mode::Objective,
+                "the root claim",
+                &["z_left", "b_right"],
+            ),
+            node(
+                "b_right",
+                Mode::Structure,
+                "the right claim",
+                &["c_right_leaf"],
+            ),
+            node("c_right_leaf", Mode::Fiat, "right, taken as given", &[]),
+            node("y_left_leaf", Mode::Fiat, "left, taken as given", &[]),
+            node(
+                "z_left",
+                Mode::Structure,
+                "the left claim",
+                &["y_left_leaf", "x_left_leaf"],
+            ),
+            node("x_left_leaf", Mode::Fiat, "left again, taken as given", &[]),
+        ]);
+
+        // Act
+        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
+            .expect("the queue derives");
+
+        // Assert: each structure follows its own leaves, siblings keep their
+        // declared order, and the root comes last.
+        assert_eq!(
+            queued_ids(&queue),
+            [
+                "y_left_leaf",
+                "x_left_leaf",
+                "z_left",
+                "c_right_leaf",
+                "b_right",
+                "a_root",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_shared_node_is_queued_once_under_its_first_parent() {
+        // Arrange: both branches cite the same leaf.
+        let view = view(vec![
+            node("first", Mode::Structure, "the first claim", &["shared"]),
+            node(
+                "root",
+                Mode::Objective,
+                "the root claim",
+                &["second", "first"],
+            ),
+            node(
+                "second",
+                Mode::Structure,
+                "the second claim",
+                &["own", "shared"],
+            ),
+            node("own", Mode::Fiat, "taken as given", &[]),
+            node("shared", Mode::Fiat, "cited twice", &[]),
+        ]);
+
+        // Act
+        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
+            .expect("the queue derives");
+
+        // Assert
+        assert_eq!(
+            queued_ids(&queue),
+            ["own", "shared", "second", "first", "root"]
+        );
+    }
+
+    #[test]
+    fn satisfied_nodes_leave_the_order_of_the_rest_unchanged() {
+        // Arrange: the middle of the chain is approved, its neighbours not.
+        let view = chain();
+        let records = vec![approve(
+            Mode::Structure,
+            "branch",
+            hash_of(&view, "branch"),
+            "iwata",
+        )];
+
+        // Act
+        let queue = derive_queue(&view, &phases("M1"), &records, &EvidenceSet::default())
+            .expect("the queue derives");
+
+        // Assert
+        assert_eq!(queued_ids(&queue), ["leaf", "root"]);
+    }
+
+    #[test]
+    fn nodes_no_root_reaches_follow_the_rooted_ones_leaves_first() {
+        // Arrange: an orphaned structure and its leaf beside the main chain.
+        let view = view(vec![
+            node(
+                "a_orphan",
+                Mode::Structure,
+                "nothing cites this",
+                &["b_orphan_leaf"],
+            ),
+            node("b_orphan_leaf", Mode::Fiat, "taken as given", &[]),
+            node("branch", Mode::Structure, "the branch claim", &["leaf"]),
+            node("leaf", Mode::Fiat, "taken as given", &[]),
+            node("root", Mode::Objective, "the root claim", &["branch"]),
+        ]);
+
+        // Act
+        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
+            .expect("the queue derives");
+
+        // Assert
+        assert_eq!(
+            queued_ids(&queue),
+            ["leaf", "branch", "root", "b_orphan_leaf", "a_orphan"]
+        );
+    }
+
+    #[test]
+    fn blocked_targets_are_listed_leaves_first_too() {
+        // Arrange: two undelivered binds whose ids sort against the tree.
+        let view = view(vec![
+            node("a_upper", Mode::Bind, "checked in CI", &["z_lower"]),
+            node("root", Mode::Objective, "the root claim", &["a_upper"]),
+            node("z_lower", Mode::Bind, "checked in CI", &[]),
+        ]);
+
+        // Act
+        let queue = derive_queue(&view, &phases("M1"), &[], &EvidenceSet::default())
+            .expect("the queue derives");
+
+        // Assert
+        let blocked: Vec<&str> = queue.blocked.iter().map(|item| item.id.as_str()).collect();
+        assert_eq!(blocked, ["z_lower", "a_upper"]);
+    }
+
+    #[test]
+    fn a_cycle_in_a_hand_built_view_still_lists_every_node_once() {
+        // Arrange: a checked project cannot contain a cycle; the walk must
+        // end all the same.
+        let view = view(vec![
+            node("a", Mode::Structure, "leans on b", &["b"]),
+            node("b", Mode::Structure, "leans on a", &["a"]),
+        ]);
+
+        // Act
+        let order: Vec<&str> = leaves_first(&view)
+            .into_iter()
+            .map(|node| node.id.as_str())
+            .collect();
+
+        // Assert
+        assert_eq!(order, ["b", "a"]);
     }
 
     #[test]
@@ -353,7 +569,7 @@ mod tests {
             .expect("the queue derives");
 
         // Assert: exactly the leaf and its direct parent come back, as Stale.
-        assert_eq!(queued_ids(&queue), ["branch", "leaf"]);
+        assert_eq!(queued_ids(&queue), ["leaf", "branch"]);
         assert!(queue.items.iter().all(|item| item.state
             == QueueState::Stale {
                 approvers: vec!["iwata".to_owned()],

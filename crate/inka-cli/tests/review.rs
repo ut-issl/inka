@@ -122,8 +122,8 @@ fn editing_a_description_returns_the_target_and_its_direct_parent_as_stale() {
     }
     write_argument(dir.path(), "taken as given, but edited");
 
-    // Act & Assert: exactly the leaf and its direct parent come back, stale;
-    // the root's local view is untouched, so it stays out.
+    // Act & Assert: exactly the leaf and its direct parent come back, stale
+    // and leaf first; the root's local view is untouched, so it stays out.
     inka()
         .arg("review")
         .arg("--path")
@@ -136,8 +136,8 @@ fn editing_a_description_returns_the_target_and_its_direct_parent_as_stale() {
         .stdout(predicate::str::starts_with("2 targets need review\n"))
         .stdout(predicate::str::contains(
             "Stale (2)\n  \
-             structure:branch  alice approved an earlier version\n  \
-             fiat:leaf         alice approved an earlier version\n",
+             fiat:leaf         alice approved an earlier version\n  \
+             structure:branch  alice approved an earlier version\n",
         ))
         .stdout(predicate::str::contains("root").not());
 }

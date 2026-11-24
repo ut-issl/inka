@@ -533,6 +533,13 @@ fn current_hash(
 }
 
 /// The `--list` rendering: a summary line, then one section per state.
+///
+/// The state comes first: a reader of the list wants to know what is
+/// unapproved, what went stale and what is vetoed. The queue's leaves-first
+/// order therefore holds within each section, not across them — a stale leaf
+/// is listed under `Stale` even when its unapproved parent is listed above it
+/// under `Unapproved`. The interactive walk, which does not group, follows the
+/// queue's order throughout.
 fn write_queue(queue: &ReviewQueue, screen: Screen, out: &mut impl Write) -> io::Result<()> {
     let summary = match queue.items.len() {
         0 => "nothing needs review".to_owned(),
@@ -1067,8 +1074,10 @@ mod tests {
         // Act
         let transcript = run_interactive(dir.path(), "a\na\na\n");
 
-        // Assert: queue order is sorted block IDs — branch, leaf, root.
-        assert!(transcript.contains("[1/3] structure:branch"));
+        // Assert: the queue runs leaves first — leaf, branch, root.
+        assert!(transcript.contains("[1/3] fiat:leaf"));
+        assert!(transcript.contains("[2/3] structure:branch"));
+        assert!(transcript.contains("[3/3] objective:root"));
         assert!(transcript.contains("the branch claim"));
         assert!(transcript.contains("children:"));
         assert!(transcript.contains("decisions recorded: 3; targets remaining: 0"));
@@ -1079,17 +1088,17 @@ mod tests {
     fn a_decline_demands_a_comment_until_one_is_given() {
         // Arrange & Act: decline the first target, first with a blank comment.
         let dir = scenario_project();
-        let transcript = run_interactive(dir.path(), "d\n\nthe branch claim is wrong\nq\n");
+        let transcript = run_interactive(dir.path(), "d\n\nthe leaf claim is wrong\nq\n");
 
         // Assert: the blank was refused, the decline recorded, and quit left
         // the remaining targets untouched.
         assert!(transcript.contains("a decline must say why"));
-        assert!(transcript.contains("recorded decline of structure:branch"));
+        assert!(transcript.contains("recorded decline of fiat:leaf"));
         assert!(transcript.contains("decisions recorded: 1; targets remaining: 2"));
         let lines = record_lines(dir.path());
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains("\"label\":\"decline\""));
-        assert!(lines[0].contains("the branch claim is wrong"));
+        assert!(lines[0].contains("the leaf claim is wrong"));
     }
 
     #[test]
@@ -1237,7 +1246,7 @@ fiat leaf {
         }
         assert!(
             transcript.contains(
-                "── [2/2] fiat:leaf ── stale ────────────────────────────────\n   \
+                "── [1/2] fiat:leaf ── stale ────────────────────────────────\n   \
                  alice approved an earlier version\n\n  \
                  ╔═══════════════╗\n  ║ taken, edited ║\n  ╚═══════════════╝\n\n\
                  [a]pprove  [d]ecline  [s]kip  [q]uit > "
@@ -1293,7 +1302,7 @@ fiat leaf {
     fn colour_marks_the_state_and_leaves_the_text_unchanged() {
         // Arrange: a declined leaf, so the prelude and a target both render.
         let dir = scenario_project();
-        run_interactive(dir.path(), "s\nd\nnot so\nq\n");
+        run_interactive(dir.path(), "d\nnot so\nq\n");
         let render = |color: bool| {
             let request = Request {
                 approver: "alice".to_owned(),
