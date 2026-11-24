@@ -18,7 +18,7 @@ console = "0.16"
 inka-core = { path = "crate/inka-core", version = "0.0.7" }
 inka-evidence = { path = "crate/inka-evidence", version = "0.0.7" }
 insta = "1"
-jiff = { version = "0.2", default-features = false, features = ["std"] }
+jiff = { version = "1.0", default-features = false, features = ["std"] }
 js-sys = "0.3.106"
 lsp-server = "0.10"
 lsp-types = "0.97"
