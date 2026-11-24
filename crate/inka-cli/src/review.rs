@@ -533,6 +533,13 @@ fn current_hash(
 }
 
 /// The `--list` rendering: a summary line, then one section per state.
+///
+/// The state comes first: a reader of the list wants to know what is
+/// unapproved, what went stale and what is vetoed. The queue's leaves-first
+/// order therefore holds within each section, not across them — a stale leaf
+/// is listed under `Stale` even when its unapproved parent is listed above it
+/// under `Unapproved`. The interactive walk, which does not group, follows the
+/// queue's order throughout.
 fn write_queue(queue: &ReviewQueue, screen: Screen, out: &mut impl Write) -> io::Result<()> {
     let summary = match queue.items.len() {
         0 => "nothing needs review".to_owned(),
