@@ -35,7 +35,12 @@ interface Props {
   readonly visible: readonly string[]
   readonly expanded: ReadonlySet<string>
   readonly unreachable: ReadonlySet<string>
+  /** The node whose local view is open beside the graph, if any. */
+  readonly selectedId: string | undefined
   readonly onToggle: (id: string) => void
+  readonly onSelect: (id: string) => void
+  /** A tap on the empty background. */
+  readonly onClear: () => void
 }
 
 export function CardGraph(props: Props) {
@@ -46,12 +51,14 @@ export function CardGraph(props: Props) {
   )
 }
 
-function Canvas({ nodes, visible, expanded, unreachable, onToggle }: Props) {
+function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, onSelect, onClear }: Props) {
   const flow = useReactFlow<CardNode>()
   const [cards, setCards, onCardsChange] = useNodesState<CardNode>([])
   const measured = useNodesInitialized()
   /** The set of cards the positions on screen were computed for. */
   const laidOut = useRef('')
+  const selectedRef = useRef(selectedId)
+  selectedRef.current = selectedId
 
   // The cards on the canvas follow the visible set. A card keeps the position
   // it has; a new one waits, unseen, until the layout has placed it.
@@ -70,12 +77,18 @@ function Canvas({ nodes, visible, expanded, unreachable, onToggle }: Props) {
             draggable: false,
             connectable: false,
             style: { opacity: before ? 1 : 0 },
-            data: { node, expanded: expanded.has(id), unreachable: unreachable.has(id), onToggle },
+            data: {
+              node,
+              expanded: expanded.has(id),
+              unreachable: unreachable.has(id),
+              selected: id === selectedId,
+              onToggle,
+            },
           },
         ]
       })
     })
-  }, [nodes, visible, expanded, unreachable, onToggle, setCards])
+  }, [nodes, visible, expanded, unreachable, selectedId, onToggle, setCards])
 
   const edges = useMemo<Edge[]>(() => {
     const shown = new Set(visible)
@@ -129,8 +142,16 @@ function Canvas({ nodes, visible, expanded, unreachable, onToggle }: Props) {
           style: { opacity: 1 },
         })),
       )
-      // Once the new positions are on the canvas.
-      window.setTimeout(() => void flow.fitView({ padding: 0.1, duration: 200, maxZoom: 1 }), 50)
+      // Once the new positions are on the canvas: the whole graph, or, with a
+      // node selected, that node and what surrounds it.
+      window.setTimeout(() => {
+        const focus = selectedRef.current
+        if (focus !== undefined && positions.has(focus)) {
+          void flow.fitView({ nodes: [{ id: focus }], padding: 3.5, duration: 200, maxZoom: 1 })
+        } else {
+          void flow.fitView({ padding: 0.1, duration: 200, maxZoom: 1 })
+        }
+      }, 50)
     })
     return () => {
       live = false
@@ -144,6 +165,8 @@ function Canvas({ nodes, visible, expanded, unreachable, onToggle }: Props) {
       edges={edges}
       nodeTypes={nodeTypes}
       onNodesChange={onCardsChange}
+      onNodeClick={(_event, card) => onSelect(card.id)}
+      onPaneClick={onClear}
       nodesDraggable={false}
       nodesConnectable={false}
       edgesFocusable={false}

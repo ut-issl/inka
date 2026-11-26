@@ -162,7 +162,9 @@ test('a card records nothing: the graph offers no decision and sends no write', 
   await settled(page)
 
   await expect(page.getByRole('button', { name: /approve|decline/i })).toHaveCount(0)
-  await expect(page.locator('input, textarea, form')).toHaveCount(0)
+  // The only field anywhere is the sidebar's search.
+  await expect(page.locator('textarea, form')).toHaveCount(0)
+  await expect(page.locator('input:not([type=search])')).toHaveCount(0)
   expect(writes).toEqual([])
 })
 
@@ -208,4 +210,75 @@ test('on a narrow window the toolbar wraps instead of running off the surface', 
     .evaluate((bar) => bar.scrollWidth - bar.clientWidth)
 
   expect(overflow).toBeLessThanOrEqual(1)
+
+test('selecting a card opens its local view beside the graph, which stays in place', async ({ page }) => {
+  await open(page)
+
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+
+  const panel = page.getByRole('region', { name: 'Selected node' })
+  await expect(panel.getByRole('heading', { level: 2 })).toHaveText('structure:safe_mode_ok')
+  await expect(panel.getByRole('region', { name: 'Contract content' })).toBeVisible()
+  await expect(card(page, 'safe_mode_ok')).toHaveAttribute('aria-current', 'true')
+  // Still the graph, with the same cards: no separate close-up graph replaced it.
+  await expect(page.locator('.card')).toHaveCount(5)
+  await expect(page).toHaveURL(/#\/graph\/safe_mode_ok$/)
+
+  const context = panel.getByRole('complementary', { name: 'Supplementary navigation' })
+  await expect(context.getByRole('link', { name: 'aocs_ok' })).toBeVisible()
+})
+
+test('Esc and a tap on the empty background both clear the selection', async ({ page }) => {
+  await open(page)
+  const panel = page.getByRole('region', { name: 'Selected node' })
+
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  await expect(panel).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  await expect(panel).toBeVisible()
+  await settled(page)
+  await page.locator('.react-flow__pane').click({ position: { x: 12, y: 12 } })
+  await expect(panel).toHaveCount(0)
+})
+
+test('a node found by searching is revealed by expanding a path from the root down to it', async ({ page }) => {
+  await open(page)
+  await expect(card(page, 'actuator_authority_ok')).toHaveCount(0)
+
+  await page.getByRole('searchbox').fill('actuator_authority')
+  await page.getByRole('navigation', { name: 'Search results' }).getByRole('link').first().click()
+  await settled(page)
+
+  await expect(card(page, 'actuator_authority_ok')).toHaveCount(1)
+  await expect(card(page, 'actuator_authority_ok')).toHaveAttribute('aria-current', 'true')
+  // A path was opened, not the whole graph.
+  expect(await page.locator('.card').count()).toBeLessThan(17)
+  expectNoOverlap(await boxes(page))
+})
+
+test('hovering a reference previews the node, and offers nothing to decide', async ({ page }) => {
+  await open(page)
+
+  await page.getByRole('navigation', { name: 'All nodes' }).getByRole('link', { name: /mtq_authority_ok/ }).hover()
+
+  const preview = page.getByRole('note', { name: 'Preview of mtq_authority_ok' })
+  await expect(preview).toBeVisible()
+  await expect(preview).toContainText('fiat:mtq_authority_ok')
+  await expect(preview.locator('button, input, textarea')).toHaveCount(0)
+})
+
+test('the two surfaces lead to each other for the same node', async ({ page }) => {
+  await open(page)
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+
+  await page.getByRole('region', { name: 'Selected node' }).getByRole('link', { name: 'Open in review' }).click()
+  await expect(page).toHaveURL(/#\/review\/safe_mode_ok$/)
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('structure:safe_mode_ok')
+
+  await page.getByRole('link', { name: 'Show in graph' }).click()
+  await expect(page).toHaveURL(/#\/graph\/safe_mode_ok$/)
+  await expect(card(page, 'safe_mode_ok')).toHaveAttribute('aria-current', 'true')
 })
