@@ -15,7 +15,7 @@ aarch64 Linux, x86_64 and aarch64 macOS, and x86_64 Windows.
   [Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode) or
   [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode); it bundles `inka-lsp`. The release also carries the
   `.vsix` for *Install from VSIX…*.
-- **Graph viewer.** Built into `inka`: `inka serve` needs nothing else. `--assets <DIR>` serves a bundle you built
+- **Web UI.** Built into `inka`: `inka serve` needs nothing else. `--assets <DIR>` serves a bundle you built
   yourself instead.
 - **Test evidence adapters.** `pip install inka-evidence` (pytest, [PyPI](https://pypi.org/project/inka-evidence/)) and
   `npm install --save-dev @inka-project/inka-evidence` (Vitest, [npm](https://www.npmjs.com/package/@inka-project/inka-evidence));
@@ -31,7 +31,7 @@ This repository ships two of them, so everything below runs as written from the 
 `tests/fixtures/aocs` (a satellite attitude-control argument) and `tests/fixtures/dogfood` (inka's
 argument for itself).
 
-You need a Rust toolchain for the commands, and Node.js for the graph viewer in step 3.
+You need a Rust toolchain for the commands, and Node.js for the Web UI in step 3.
 
 ### 1. Check an argument
 
@@ -56,8 +56,8 @@ The rest of this section uses that binary.
 ### 2. Export the argument
 
 `export` writes the argument to standard output as cytoscape.js `elements` JSON — inka's machine
-interface to the graph. The viewer is one consumer of it; anything that reads JSON is another, so
-the built-in UI is never the only way to read an argument.
+interface to the graph. Anything that reads JSON can consume it, so the built-in Web UI is never the
+only way to read an argument.
 
 ```console
 inka export tests/fixtures/aocs > aocs.elements.json
@@ -68,9 +68,9 @@ an objective root, evidence target, deadline and attached comments; each edge po
 to one child and carries that child entry's comment. The output is deterministic, so
 it diffs cleanly between runs. An argument that fails `check` exports nothing.
 
-### 3. Build the graph viewer
+### 3. Build the Web UI
 
-The viewer is a static front-end bundle under [`web/`](web/README.md) that `inka` embeds at compile time. Build it
+The Web UI is a static front-end bundle under [`web/`](web/README.md) that `inka` embeds at compile time. Build it
 once, then build `inka` again so it picks the bundle up:
 
 ```console
@@ -82,10 +82,10 @@ cargo build -p inka-cli
 ```
 
 This writes `crate/inka-cli/web-dist`, which the crate's build script compiles into the binary (so run
-`cargo install --locked --path crate/inka-cli` after this step, not before, to get an `inka` with the viewer). A
+`cargo install --locked --path crate/inka-cli` after this step, not before, to get an `inka` with the Web UI). A
 release binary already carries it.
 
-### 4. Serve the interactive graph
+### 4. Review and explore in the browser
 
 `serve` hosts the Web UI and feeds it the argument. Started like this it is read-only: nothing it serves
 can change the argument, approvals, or any other state. Every page load reads the project again, so an
@@ -96,10 +96,17 @@ is shown as its findings until it is fixed.
 inka serve tests/fixtures/aocs
 ```
 
-Open <http://127.0.0.1:8080>. The whole argument is laid out top-down with the objectives on top;
-click a node to focus it with its direct parents and children, click a namespace badge or a list
-header to focus that namespace, hover a node for its full description, and press `Esc` to return to
-the whole view.
+Open <http://127.0.0.1:8080>. There are two surfaces, and a sidebar on both that lists the review
+queue and every node and searches them by id and description:
+
+- **Review** walks the queue `inka review --list` prints, one target at a time. Each target is shown
+  as its local view — its description, its evidence reference, its direct children's descriptions and
+  its deadline, each with the comments attached — with descriptions rendered as Markdown.
+- **Graph** shows the whole argument as cards carrying each node's mode, id, status and description.
+  It opens with the objectives and their direct children; expand a card to go deeper, click one to
+  read its local view beside the graph, and press `Esc` to close it.
+
+Every node shows the verdict `inka eval` gives it, and the count `established n/m` is always in sight.
 
 To review in the browser, start it with an approver:
 
@@ -174,7 +181,7 @@ lenses, and formatting with exactly the output of `inka fmt`.
 ### Next
 
 - [`docs/`](docs/en/index.md) — the concept, the specification, and the design of each output
-- [`web/README.md`](web/README.md) — the viewer's contract with `inka serve`, and how to develop it
+- [`web/README.md`](web/README.md) — the Web UI's contract with `inka serve`, and how to develop it
 - `inka <command> --help` — every flag of a command
 
 ## Pre-commit Setup

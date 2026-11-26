@@ -17,6 +17,7 @@ ArgumentView {
                 "labels_cover_reality",
                 "policy_is_reviewable",
                 "queue_minimizes_friction",
+                "browser_review_sound",
             ],
             comments: NodeComments {
                 block: None,
@@ -96,6 +97,28 @@ ArgumentView {
             children: [],
             comments: NodeComments {
                 block: None,
+                properties: {},
+                children: {},
+            },
+        },
+        ViewNode {
+            id: "browser_review_sound",
+            mode: Structure,
+            namespace: "approval",
+            description: "A decision recorded from the browser is the judgement `inka review` would have recorded: taken on the whole local view, on the content that was on screen, by the approver the server was started as",
+            tags: [],
+            evidence: None,
+            deadline: None,
+            children: [
+                "web_shows_whole_local_view",
+                "web_binds_hash_on_screen",
+                "web_identity_is_servers",
+                "web_only_own_pages_record",
+            ],
+            comments: NodeComments {
+                block: Some(
+                    "Reviewing in the browser (docs/en/design/web-ui.md): `inka serve --as` records\nthe same record `inka review` writes. The four leaves are the conditions the\ndesign puts on that; each is covered by tests today and is to be bound to them.",
+                ),
                 properties: {},
                 children: {},
             },
@@ -503,6 +526,98 @@ ArgumentView {
                 children: {},
             },
         },
+        ViewNode {
+            id: "web_binds_hash_on_screen",
+            mode: Fiat,
+            namespace: "approval",
+            description: "A decision made in the browser names the view hash that was displayed, and is recorded only if that is still the target's current hash",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M4",
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+            comments: NodeComments {
+                block: Some(
+                    "Bind to the decision tests of `inka serve`.",
+                ),
+                properties: {},
+                children: {},
+            },
+        },
+        ViewNode {
+            id: "web_identity_is_servers",
+            mode: Fiat,
+            namespace: "approval",
+            description: "The approver and the key id of a decision made in the browser are fixed when the server starts; no request can choose or change them",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M4",
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
+        },
+        ViewNode {
+            id: "web_only_own_pages_record",
+            mode: Fiat,
+            namespace: "approval",
+            description: "A server that records decisions listens on a loopback address only and accepts a decision only from a page it served for that run",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M4",
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+            comments: NodeComments {
+                block: None,
+                properties: {},
+                children: {},
+            },
+        },
+        ViewNode {
+            id: "web_shows_whole_local_view",
+            mode: Fiat,
+            namespace: "approval",
+            description: "The Web UI offers a decision only under a target's whole local view, shown without any interaction and with nothing deeper; only the exact spacing of a description is read in its source",
+            tags: [],
+            evidence: None,
+            deadline: Some(
+                Deadline {
+                    until: "M4",
+                    promote: Some(
+                        Bind,
+                    ),
+                },
+            ),
+            children: [],
+            comments: NodeComments {
+                block: Some(
+                    "Bind to the review-surface browser tests.",
+                ),
+                properties: {},
+                children: {},
+            },
+        },
     ],
     edges: [
         ViewEdge {
@@ -520,6 +635,26 @@ ArgumentView {
         ViewEdge {
             parent: "approvals_meaningful",
             child: "queue_minimizes_friction",
+        },
+        ViewEdge {
+            parent: "approvals_meaningful",
+            child: "browser_review_sound",
+        },
+        ViewEdge {
+            parent: "browser_review_sound",
+            child: "web_shows_whole_local_view",
+        },
+        ViewEdge {
+            parent: "browser_review_sound",
+            child: "web_binds_hash_on_screen",
+        },
+        ViewEdge {
+            parent: "browser_review_sound",
+            child: "web_identity_is_servers",
+        },
+        ViewEdge {
+            parent: "browser_review_sound",
+            child: "web_only_own_pages_record",
         },
         ViewEdge {
             parent: "description_is_contract",

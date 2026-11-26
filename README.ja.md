@@ -15,7 +15,7 @@ Linux，x86_64 と aarch64 の macOS，x86_64 の Windows 向けに配布しま�
 - **VS Code。** [Marketplace](https://marketplace.visualstudio.com/items?itemName=inka-project.inka-vscode) または
   [Open VSX](https://open-vsx.org/extension/inka-project/inka-vscode) から `inka-project.inka-vscode` をインストールします。
   `inka-lsp` を同梱しています。リリースには *Install from VSIX…* 用の `.vsix` も添付されています。
-- **グラフビューア。** `inka` に内蔵されているので，`inka serve` に他のファイルは不要です。自分でビルドしたバンドルを
+- **Web UI。** `inka` に内蔵されているので，`inka serve` に他のファイルは不要です。自分でビルドしたバンドルを
   使うときは `--assets <DIR>` で指定します。
 - **テストエビデンスのアダプタ。** `pip install inka-evidence`(pytest，[PyPI](https://pypi.org/project/inka-evidence/))と
   `npm install --save-dev @inka-project/inka-evidence`(Vitest，[npm](https://www.npmjs.com/package/@inka-project/inka-evidence))。
@@ -31,7 +31,7 @@ inka のプロジェクトは，`inka.toml` と `argument/` 以下の `*.inka` �
 このリポジトリには 2 つ入っているので，以下はリポジトリのルートでそのまま実行できます。
 `tests/fixtures/aocs`(衛星の姿勢制御の論証)と `tests/fixtures/dogfood`(inka 自身についての論証)です。
 
-コマンドには Rust ツールチェイン，手順 3 のグラフビューアには Node.js が必要です。
+コマンドには Rust ツールチェイン，手順 3 の Web UI には Node.js が必要です。
 
 ### 1. 論証を検査する
 
@@ -56,8 +56,8 @@ cargo install --locked --path crate/inka-cli
 ### 2. 論証を書き出す
 
 `export` は論証を cytoscape.js の `elements` JSON として標準出力に書き出します。これが inka の
-機械可読なインタフェースです。ビューアはその 1 つの利用者にすぎず，JSON を読めるものなら何でも
-利用できます。つまり，論証を読む手段が内蔵 UI だけに閉じることはありません。
+機械可読なインタフェースです。JSON を読めるものなら何でも利用できるので，論証を読む手段が内蔵の
+Web UI だけに閉じることはありません。
 
 ```console
 inka export tests/fixtures/aocs > aocs.elements.json
@@ -68,9 +68,9 @@ inka export tests/fixtures/aocs > aocs.elements.json
 コメントを持ちます。出力は決定的なので，実行ごとの差分がきれいに取れます。
 `check` を通らない論証は何も書き出しません。
 
-### 3. グラフビューアをビルドする
+### 3. Web UI をビルドする
 
-ビューアは [`web/`](web/README.md) 以下の静的なフロントエンドバンドルで，`inka` がコンパイル時に埋め込みます。最初に
+Web UI は [`web/`](web/README.md) 以下の静的なフロントエンドバンドルで，`inka` がコンパイル時に埋め込みます。最初に
 一度ビルドし，その後 `inka` をビルドし直して取り込ませます。
 
 ```console
@@ -81,11 +81,11 @@ cd ..
 cargo build -p inka-cli
 ```
 
-`crate/inka-cli/web-dist` が生成され，クレートのビルドスクリプトがこれをバイナリに取り込みます(ビューア入りの `inka`
+`crate/inka-cli/web-dist` が生成され，クレートのビルドスクリプトがこれをバイナリに取り込みます(Web UI 入りの `inka`
 を得るには，`cargo install --locked --path crate/inka-cli` はこの手順の前ではなく後に実行してください)。リリースの
 バイナリには最初から入っています。
 
-### 4. 対話的なグラフを配信する
+### 4. ブラウザでレビューし，探索する
 
 `serve` は Web UI を配信し，そこに論証を渡します。このように起動した場合は read-only で，配信される
 どこからも論証・承認・その他の状態は変更できません。ページを読み込むたびにプロジェクトを読み直すので，編集や新しい
@@ -96,10 +96,17 @@ cargo build -p inka-cli
 inka serve tests/fixtures/aocs
 ```
 
-<http://127.0.0.1:8080> を開きます。全体表示は objective を最上位にしたトップダウンのレイアウトで，
-ノードをクリックすると直接の親子とともにフォーカス，namespace バッジまたは一覧の見出しをクリック
-するとその namespace をフォーカスします。ノードにホバーすると description の全文が出て，`Esc` で
-全体表示に戻ります。
+<http://127.0.0.1:8080> を開きます。面は 2 つあり，どちらにもサイドバーがあって，レビューキューと
+全ノードを一覧し，id と description で検索できます。
+
+- **Review** は `inka review --list` が出力するキューを，対象 1 つずつ辿ります。各対象は局所ビュー
+  (description，証拠への参照，直接の子の description，期限と，それぞれに付いたコメント)として表示され，
+  description は Markdown として描画されます。
+- **Graph** は論証全体を，各ノードのモード・id・ステータス・description を載せたカードとして表示
+  します。objective とその直接の子が見える状態で開き，カードを展開して深く進み，カードをクリックすると
+  その局所ビューがグラフの横に開きます。`Esc` で閉じます。
+
+すべてのノードは `inka eval` の評価結果を示し，`established n/m` の件数は常に表示されます。
 
 ブラウザでレビューするには，承認者を指定して起動します。
 
@@ -172,7 +179,7 @@ inka fmt my-argument
 ### 次に読むもの
 
 - [`docs/`](docs/ja/index.md) — 概念，仕様，各出力の設計
-- [`web/README.md`](web/README.md) — ビューアと `inka serve` の契約，および開発方法
+- [`web/README.md`](web/README.md) — Web UI と `inka serve` の契約，および開発方法
 - `inka <command> --help` — 各コマンドの全オプション
 
 ## pre-commit のセットアップ
