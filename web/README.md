@@ -7,8 +7,10 @@ This bundle is the single implementation of the Web UI invariants in
 [`docs/design/web-ui.md`](../docs/en/design/web-ui.md) — behaviour described
 there is decided here, and nowhere else.
 
-Vite + React + TypeScript. Descriptions are parsed and rendered by `react-markdown`, routing between the
-surfaces is `react-router`'s, and the graph still uses cytoscape and dagre; all are vendored into the bundle.
+Vite + React + TypeScript. What a library already does is left to it: descriptions are parsed and rendered by
+`react-markdown`, routing between the surfaces is `react-router`'s, the graph's canvas — pan, zoom, edges,
+cards as DOM elements — is React Flow's (`@xyflow/react`), and the layout is computed by `elkjs`. All are
+vendored into the bundle, with the Inter typeface, so text measures the same on every machine.
 `inka serve` ([#43](https://github.com/ut-issl/inka/issues/43)) serves the built
 files and the page that describes the argument. Nothing here parses or mutates the argument; the one
 write the UI can reach is a decision, on a server that records.
@@ -112,37 +114,34 @@ INKA_UPDATE_GENERATED=1 cargo test -p inka-core
 ```text
 src/
   generated/  the page's types, generated from Rust
-  model/      the argument, independent of any rendering
-    view      the shared view: the page's nodes by id, and its entries as edges
+  model/      the page, independent of any rendering
+    view      the page's nodes by id
     modes     the order the discharge modes are listed in
-    focus     focus targets and the sets each surface derives from them
     source    fetching the page
     session   who the server records as, and posting a decision
     wording   how a status and a review state are spelled out
   text/       neutralizing text from the argument before it is shown
   review/     the review surface: the queue, the walk over it, the decision controls
-  graph/      the graph pane
-    layout    pure layout arithmetic — ranks, ego rows, aspect matching
-    runLayout the cytoscape adapter feeding those passes
-    stylesheet, palette, elements, GraphCanvas, NamespaceBadges, HoverTooltip
-  components/ the local view, descriptions (Markdown and source), status pills;
-              and the graph surface's node list, detail panel, legend
-  hooks/      loading state
+  graph/      the graph surface
+    visibility which nodes are shown, given what is expanded
+    layout     where the cards go: the question put to ELK, and its answer
+    Card, CardGraph, GraphSurface
+  components/ the local view, descriptions (Markdown and source), status pills
+  hooks/      the page and the session
 e2e/          the same invariants, in a real browser
 ```
 
 What the argument *is* and in what order it is presented is decided in Rust and arrives in the page.
-The invariants worth stating in code here live in two places: `model/focus.ts` decides what a focus
-shows, and `graph/layout.ts` decides where things go. Neither knows about React or cytoscape, so both
-are tested directly.
+Two things are decided here, both view state, both pure functions tested without a browser:
+`graph/visibility.ts` says which nodes are on screen for a given set of expanded nodes, and
+`graph/layout.ts` says where the cards go for given sizes.
 
 ## How the invariants are covered
 
-Two suites, split by what each can see. Vitest covers everything that does not
-need a canvas — `model/` and `graph/layout.ts` sit at 100 % and 99 % statement
-coverage. The graph pane itself (cytoscape, the badge overlay, the hover
-tooltip, the layout adapter) can only be exercised in a browser, so Playwright
-covers it instead; those four files are why the overall Vitest number is ~66 %.
+Two suites, split by what each can see. Vitest covers everything that does not need a real layout engine: the
+models, the review surface, and the two graph functions above. The graph's canvas needs a browser to measure
+its cards, so Playwright covers it — and because the cards are DOM elements it asserts geometry (no two cards
+overlap, a child is below its parent), never pixels.
 
 | Invariant | Where it lives | Covered by |
 | --- | --- | --- |
@@ -156,15 +155,12 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 | A decision names the hash on screen; identity is the server's | `model/session.ts` | `session.test.ts`, `serve.rs` |
 | A decline needs a reason; one decision is one append | `review/DecisionBar.tsx` | `recording.spec.ts` |
 | Deterministic identity and ordering | `inka-core` `wire.rs` | its Rust tests; `fixtures.test.ts` |
-| One node per block; multi-parent nodes shown through edges | `model/view.ts` | `view.test.ts`, `fixtures.test.ts` |
-| Focus targets: one node, or a namespace with its one-hop neighbours | `model/focus.ts` | `focus.test.ts` |
-| Same-namespace nodes adjacent, one namespace order across ranks | `graph/layout.ts` | `layout.test.ts` |
-| Aspect ratio matches the window, short axis only | `graph/layout.ts` | `layout.test.ts`, `viewer.spec.ts` |
-| Mode encoded by shape and fill; label is the node id | `graph/stylesheet.ts` | `stylesheet.test.ts` |
-| Top-down layered DAG; ego rows on node focus | `graph/runLayout.ts` | `viewer.spec.ts` |
-| Badges on every node, hidden below a zoom threshold | `graph/NamespaceBadges.tsx` | `viewer.spec.ts` |
-| Hover reveals the full description | `graph/HoverTooltip.tsx` | `viewer.spec.ts` |
-| List grouped by namespace, both orders topological | `components/NodeList.tsx` | `NodeList.test.tsx` |
-| Contract, evidence target and deadline on selection | `components/DetailPanel.tsx` | `DetailPanel.test.tsx` |
-| Esc and background tap restore the whole view | `App.tsx`, `GraphCanvas.tsx` | `viewer.spec.ts` |
-| Read-only without `--as` | everywhere | `Decisions.test.tsx`, `viewer.spec.ts`, `review.spec.ts` |
+| One card per node; a multi-parent node appears once | `graph/visibility.ts` | `visibility.test.ts`, `graph.spec.ts` |
+| Visible iff a root or a child of an expanded, visible node | `graph/visibility.ts` | `visibility.test.ts` |
+| Unreachable nodes drawn from roots of their own | `graph/visibility.ts`, `wire.rs` | `visibility.test.ts` |
+| Layout is a function of sizes and edges; no overlap | `graph/layout.ts` | `layout.test.ts`, `graph.spec.ts` |
+| Top-down: every child below its parent | `graph/layout.ts` | `layout.test.ts`, `graph.spec.ts` |
+| A card carries mode, id, status and description | `graph/Card.tsx` | `graph.spec.ts` |
+| A collapsed node says what lies below it | `graph/Card.tsx` | `graph.spec.ts` |
+| A card records nothing | `graph/Card.tsx` | `graph.spec.ts` |
+| Read-only without `--as` | everywhere | `Decisions.test.tsx`, `graph.spec.ts`, `review.spec.ts` |

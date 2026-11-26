@@ -2,8 +2,8 @@
  * Builders for the small arguments the tests reason about.
  *
  * A test lists nodes and entries; {@link snapshot} assembles the page the
- * server would send for them. What the server works out — parents, the order,
- * the namespace groups — is filled in here in the simplest way that is right
+ * server would send for them. What the server works out — parents and the
+ * order — is filled in here in the simplest way that is right
  * for a list written parents-first, which is how the tests write theirs: the
  * order is the order of the list. The real derivations are Rust's and are
  * tested there; `fixtures/*.page.json` are their output.
@@ -126,18 +126,15 @@ export function snapshot(specs: readonly Spec[]): Snapshot {
   })
 
   const order = nodeSpecs.map((spec) => spec.id)
-  const namespaces = [...new Set(nodeSpecs.map((spec) => spec.namespace))].map((name) => ({
-    name,
-    nodes: order.filter((id) => byId.get(id)?.namespace === name),
-  }))
-
   return {
     established: 0,
     total: nodes.length,
     nodes,
     roots: sorted.filter((id) => byId.get(id)?.root),
+    unreachable_roots: sorted.filter(
+      (id) => !byId.get(id)?.root && !edgeSpecs.some((entry) => entry.target === id),
+    ),
     order,
-    namespaces,
     queue: { walk: [], groups: [] },
     warnings: [],
   }

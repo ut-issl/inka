@@ -29,9 +29,10 @@ export default defineConfig({
     // Next to the CLI crate: its build script embeds the bundle into `inka`.
     outDir: '../crate/inka-cli/web-dist',
     emptyOutDir: true,
-    // The graph library is vendored into the bundle by design, so one large
-    // chunk is the intended shape rather than something to warn about.
-    chunkSizeWarningLimit: 900,
+    // The graph and layout libraries are vendored into the bundle by design,
+    // so one large chunk is the intended shape rather than something to warn
+    // about.
+    chunkSizeWarningLimit: 2500,
   },
   test: {
     globals: true,
