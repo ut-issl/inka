@@ -3,7 +3,8 @@
 //! Every caller that presents an argument — the commands, the server — needs
 //! the same thing: a project that loads, a graph that builds, and a shape that
 //! validates. [`load_argument`] does that once and answers with data: either
-//! the [`Argument`] or the findings that [`Rejected`] it. What to do with the
+//! the [`Argument`] or the findings that [`Rejected`] it, with the stage that
+//! refused it as a typed [`RejectionCause`]. What to do with the
 //! findings — print them, send them to a browser — is the caller's business,
 //! so nothing here writes anywhere.
 //!
@@ -36,13 +37,45 @@ pub struct Argument {
 }
 
 /// Why a project has no presentable argument.
-#[derive(Debug, Clone)]
+///
+/// The findings are for a reader; [`Rejected::cause`] is for a caller that
+/// has to act on the kind of failure without parsing a message.
+#[derive(Debug)]
 pub struct Rejected {
+    /// Which stage refused the project.
+    pub cause: RejectionCause,
     /// Resolves the spans of the findings; empty when the failure is
     /// structural and nothing was parsed.
     pub source_map: SourceMap,
     /// At least one error, plus every warning the run saw before it stopped.
     pub diagnostics: Diagnostics,
+}
+
+/// The stage at which a project was refused.
+///
+/// The stages run in this order and the first to find an error ends the
+/// load, so a cause also says how far the project got.
+#[derive(Debug, thiserror::Error)]
+pub enum RejectionCause {
+    /// The project could not be read at all: a missing or invalid manifest,
+    /// values or evidence that do not load, a missing `argument/`, an
+    /// unreadable file. The loader's own error is kept whole, so its variant
+    /// and its underlying cause stay available. Never
+    /// [`LoadError::Invalid`], which is [`RejectionCause::Sources`].
+    #[error(transparent)]
+    Load(Box<LoadError>),
+    /// The files were read, but their content has syntax or interpolation
+    /// errors.
+    #[error("the argument's sources have errors")]
+    Sources,
+    /// The blocks parse, but do not form a graph: a duplicate id, or a
+    /// reference to a block that does not exist.
+    #[error("the argument's blocks do not form a graph")]
+    Graph,
+    /// The graph builds, but its shape is not an argument's: no objective,
+    /// or a dependency cycle.
+    #[error("the argument's graph is not a valid argument")]
+    Shape,
 }
 
 /// Loads and projects the project rooted at `project_dir`.
@@ -67,12 +100,19 @@ pub fn load_argument_with(project_dir: &Path, reader: &dyn ReadText) -> Result<A
     let project = match result {
         Ok(project) => project,
         Err(LoadError::Invalid { source_map, errors }) => {
-            return Err(rejected(source_map, errors, warnings));
+            return Err(rejected(
+                RejectionCause::Sources,
+                source_map,
+                errors,
+                warnings,
+            ));
         }
         Err(other) => {
+            let errors = vec![Error::unanchored(other.to_string())];
             return Err(rejected(
+                RejectionCause::Load(Box::new(other)),
                 SourceMap::new(),
-                vec![Error::unanchored(other.to_string())],
+                errors,
                 warnings,
             ));
         }
@@ -80,12 +120,24 @@ pub fn load_argument_with(project_dir: &Path, reader: &dyn ReadText) -> Result<A
 
     let graph = match Graph::build(&project.blocks) {
         Ok(graph) => graph,
-        Err(errors) => return Err(rejected(project.source_map, errors, warnings)),
+        Err(errors) => {
+            return Err(rejected(
+                RejectionCause::Graph,
+                project.source_map,
+                errors,
+                warnings,
+            ));
+        }
     };
     let shape = graph.validate();
     let warnings = [warnings, shape.warnings].concat();
     if !shape.errors.is_empty() {
-        return Err(rejected(project.source_map, shape.errors, warnings));
+        return Err(rejected(
+            RejectionCause::Shape,
+            project.source_map,
+            shape.errors,
+            warnings,
+        ));
     }
 
     let view = ArgumentView::build(&graph, &project.source_map);
@@ -98,8 +150,14 @@ pub fn load_argument_with(project_dir: &Path, reader: &dyn ReadText) -> Result<A
     })
 }
 
-fn rejected(source_map: SourceMap, errors: Vec<Error>, warnings: Vec<Warning>) -> Rejected {
+fn rejected(
+    cause: RejectionCause,
+    source_map: SourceMap,
+    errors: Vec<Error>,
+    warnings: Vec<Warning>,
+) -> Rejected {
     Rejected {
+        cause,
         source_map,
         diagnostics: Diagnostics { errors, warnings },
     }
@@ -150,6 +208,7 @@ mod tests {
         let rejected = load_argument(dir.path()).expect_err("the project is broken");
 
         // Assert
+        assert!(matches!(rejected.cause, RejectionCause::Sources));
         let error = rejected.diagnostics.errors.first().expect("an error");
         let span = error.span.expect("a syntax error is anchored");
         assert!(rejected.source_map.file(span.file_id).is_some());
@@ -166,7 +225,20 @@ mod tests {
         let rejected = load_argument(dir.path()).expect_err("the reference dangles");
 
         // Assert
+        assert!(matches!(rejected.cause, RejectionCause::Graph));
         assert!(rejected.diagnostics.has_errors());
+    }
+
+    #[test]
+    fn an_argument_without_an_objective_is_rejected_for_its_shape() {
+        // Arrange
+        let dir = project("fiat leaf {\n    ```\n    given\n    ```\n}\n");
+
+        // Act
+        let rejected = load_argument(dir.path()).expect_err("nothing to hang from");
+
+        // Assert
+        assert!(matches!(rejected.cause, RejectionCause::Shape));
     }
 
     #[test]
@@ -177,7 +249,18 @@ mod tests {
         // Act
         let rejected = load_argument(dir.path()).expect_err("there is no project");
 
-        // Assert
+        // Assert: the loader's own error is kept, not only its message.
+        let RejectionCause::Load(error) = &rejected.cause else {
+            panic!("a missing manifest is a load failure: {:?}", rejected.cause);
+        };
+        assert!(matches!(
+            &**error,
+            LoadError::Read { source, .. } if source.kind() == std::io::ErrorKind::NotFound
+        ));
+        assert_eq!(
+            rejected.diagnostics.errors[0].message,
+            rejected.cause.to_string()
+        );
         assert_eq!(rejected.diagnostics.errors.len(), 1);
         assert!(rejected.diagnostics.errors[0].span.is_none());
         assert_eq!(rejected.diagnostics.warnings, []);
