@@ -92,8 +92,16 @@ body {
   font-weight: 600;
 }
 
-.masthead__count {
+.masthead__reviewer {
   margin-left: auto;
+  color: var(--muted);
+}
+
+.masthead__reviewer strong {
+  color: var(--ink);
+}
+
+.masthead__count {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
@@ -273,6 +281,86 @@ a.reference:hover {
 .progress__moves {
   display: flex;
   gap: 8px;
+}
+
+/* ---- Decisions ----------------------------------------------------------- */
+
+.decision {
+  max-width: 920px;
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 20px 16px;
+  font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+
+.decision__reviewer,
+.decision__hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.decision__reviewer strong {
+  color: var(--ink);
+}
+
+.decision__label {
+  font-weight: 600;
+}
+
+.decision__comment {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
+}
+
+.decision__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--approve {
+  border-color: var(--state-established);
+  color: var(--state-established);
+  font-weight: 600;
+}
+
+.button--decline {
+  border-color: var(--state-declined);
+  color: var(--state-declined);
+  font-weight: 600;
+}
+
+.outcome {
+  max-width: 920px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.outcome--recorded {
+  border-color: var(--state-established);
+  color: var(--state-established);
+}
+
+.outcome--problem {
+  border-color: var(--state-declined);
+  color: var(--state-declined);
 }
 
 /* ---- Local view ---------------------------------------------------------- */

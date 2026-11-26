@@ -1,7 +1,8 @@
 # inka web UI
 
 The Web UI of an inka argument: a review surface that walks the review queue one local view at a time, and a
-graph of the whole argument. Read-only.
+graph of the whole argument. Read-only unless `inka serve` was started with an approver; then the review
+surface records decisions, and that is the only thing the Web UI can change.
 This bundle is the single implementation of the Web UI invariants in
 [`docs/design/web-ui.md`](../docs/en/design/web-ui.md) — behaviour described
 there is decided here, and nowhere else.
@@ -9,8 +10,8 @@ there is decided here, and nowhere else.
 Vite + React + TypeScript. Descriptions are parsed and rendered by `react-markdown`, routing between the
 surfaces is `react-router`'s, and the graph still uses cytoscape and dagre; all are vendored into the bundle.
 `inka serve` ([#43](https://github.com/ut-issl/inka/issues/43)) serves the built
-files and the page that describes the argument. Nothing here parses or mutates the argument, and no
-control in the UI reaches a write of any kind.
+files and the page that describes the argument. Nothing here parses or mutates the argument; the one
+write the UI can reach is a decision, on a server that records.
 
 ## Getting started
 
@@ -32,8 +33,9 @@ npm run build                    # static bundle in ../crate/inka-cli/web-dist/,
 ```
 
 Edit the project `inka serve` points at and reload the page: the server reads it again on every request.
-`npm run e2e` starts its own `inka serve` on the aocs fixture and its own dev server, each on a port of its
-own, and never reuses one that is already running.
+`npm run e2e` starts its own servers, each on a port of its own, and never reuses one that is already running:
+a read-only `inka serve` on the aocs fixture, a recording one on a throwaway copy of it, and a dev server in
+front of each.
 
 ## The interface with inka
 
@@ -73,6 +75,22 @@ and draws; it derives none of it. Descriptions arrive interpolated; no `{$var}` 
 The page is fetched on load and never cached or embedded in the served HTML: it is a reading of the repository
 at the time of the request.
 
+### Recording a decision
+
+`GET ./api/session` says who the server records as: `{ "reviewer": null }` on a read-only server, or the
+approver, the key id and a session token on one started with `--as`. On such a server a decision is one request:
+
+```jsonc
+// POST ./api/decisions, with the token in `X-Inka-Session`
+{ "target": "detumble_ok", "view_hash": "sha256:…", "decision": { "label": "approve", "comment": null } }
+// → { "outcome": "recorded" } | { "outcome": "changed" } | { "outcome": "refused", "message": "…" }
+```
+
+`view_hash` is the hash of the local view that was on screen; `changed` means the target no longer has that
+content, so nothing was written and the page asks for the current one. The request cannot say who is deciding.
+The server refuses a request that is not addressed to it or does not come from one of its own pages, so in
+development the proxy in `vite.config.ts` addresses requests to the real server and names it as their origin.
+
 ### Generated from Rust
 
 Two things here are generated from the Rust definition and never edited:
@@ -99,9 +117,10 @@ src/
     modes     the order the discharge modes are listed in
     focus     focus targets and the sets each surface derives from them
     source    fetching the page
+    session   who the server records as, and posting a decision
     wording   how a status and a review state are spelled out
   text/       neutralizing text from the argument before it is shown
-  review/     the review surface: the queue and the walk over it
+  review/     the review surface: the queue, the walk over it, the decision controls
   graph/      the graph pane
     layout    pure layout arithmetic — ranks, ego rows, aspect matching
     runLayout the cytoscape adapter feeding those passes
@@ -133,6 +152,9 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 | Control and bidirectional characters neutralized | `text/neutralize.ts` | `neutralize.test.ts` |
 | Queue as `inka review --list`; walk in queue order | `review/ReviewSurface.tsx` | `ReviewSurface.test.tsx` |
 | Status and review state spelled out, never colour alone | `model/wording.ts` | `LocalView.test.tsx` |
+| Decisions only on a recording server, under a whole local view | `review/ReviewSurface.tsx` | `Decisions.test.tsx` |
+| A decision names the hash on screen; identity is the server's | `model/session.ts` | `session.test.ts`, `serve.rs` |
+| A decline needs a reason; one decision is one append | `review/DecisionBar.tsx` | `recording.spec.ts` |
 | Deterministic identity and ordering | `inka-core` `wire.rs` | its Rust tests; `fixtures.test.ts` |
 | One node per block; multi-parent nodes shown through edges | `model/view.ts` | `view.test.ts`, `fixtures.test.ts` |
 | Focus targets: one node, or a namespace with its one-hop neighbours | `model/focus.ts` | `focus.test.ts` |
@@ -145,4 +167,4 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 | List grouped by namespace, both orders topological | `components/NodeList.tsx` | `NodeList.test.tsx` |
 | Contract, evidence target and deadline on selection | `components/DetailPanel.tsx` | `DetailPanel.test.tsx` |
 | Esc and background tap restore the whole view | `App.tsx`, `GraphCanvas.tsx` | `viewer.spec.ts` |
-| Read-only throughout | everywhere | `NodeList.test.tsx`, `viewer.spec.ts`, `review.spec.ts` |
+| Read-only without `--as` | everywhere | `Decisions.test.tsx`, `viewer.spec.ts`, `review.spec.ts` |

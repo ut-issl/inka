@@ -5,9 +5,10 @@
  * graph surface shows the whole argument. Both read the same page, so they
  * cannot disagree about what the project says.
  *
- * The whole application is read-only. Nothing here writes to the argument, to
- * approvals, or to any other inka state; the only outbound request is the one
- * that fetches the page.
+ * On a server started without an approver the whole application is read-only.
+ * On one that records, the review surface can append one approval record per
+ * decision — the only thing the Web UI can change. Nothing here edits the
+ * argument, the values, the evidence, or an existing record.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -16,18 +17,21 @@ import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router'
 import { DetailPanel } from './components/DetailPanel'
 import { Legend } from './components/Legend'
 import { NodeList } from './components/NodeList'
-import { PAGE_URL } from './config'
+import { PAGE_URL, SESSION_URL } from './config'
 import type { Finding } from './generated/Finding'
+import type { ReviewerSession } from './generated/ReviewerSession'
 import type { Snapshot } from './generated/Snapshot'
 import { GraphCanvas } from './graph/GraphCanvas'
 import { namespaceColors } from './graph/palette'
+import { useSession } from './hooks/useSession'
 import { usePage } from './hooks/useView'
 import { resolveFocus, WHOLE_VIEW, type Focus } from './model/focus'
 import { namespacesOf, type ArgumentView } from './model/view'
 import { ReviewSurface } from './review/ReviewSurface'
 
 export function App() {
-  const { state } = usePage(PAGE_URL)
+  const { state, reload } = usePage(PAGE_URL)
+  const reviewer = useSession(SESSION_URL)
 
   if (state.status === 'loading') {
     return <p className="notice">Loading the argument…</p>
@@ -48,9 +52,19 @@ export function App() {
   return (
     <HashRouter>
       <div className="shell">
-        <Masthead snapshot={state.snapshot} />
+        <Masthead snapshot={state.snapshot} reviewer={reviewer} />
         <Routes>
-          <Route path="/review/:id?" element={<ReviewSurface snapshot={state.snapshot} nodes={state.view.nodes} />} />
+          <Route
+            path="/review/:id?"
+            element={
+              <ReviewSurface
+                snapshot={state.snapshot}
+                nodes={state.view.nodes}
+                reviewer={reviewer}
+                onReload={reload}
+              />
+            }
+          />
           <Route path="/graph" element={<Viewer view={state.view} />} />
           <Route path="*" element={<Navigate to="/review" replace />} />
         </Routes>
@@ -59,8 +73,11 @@ export function App() {
   )
 }
 
-/** The surfaces, and the count `inka eval` prints, always in sight. */
-function Masthead({ snapshot }: { snapshot: Snapshot }) {
+/**
+ * The surfaces, who decisions are recorded as, and the count `inka eval`
+ * prints — always in sight.
+ */
+function Masthead({ snapshot, reviewer }: { snapshot: Snapshot; reviewer: ReviewerSession | null }) {
   return (
     <header className="masthead">
       <span className="masthead__name">inka</span>
@@ -72,6 +89,15 @@ function Masthead({ snapshot }: { snapshot: Snapshot }) {
           Graph
         </NavLink>
       </nav>
+      <span className="masthead__reviewer">
+        {reviewer ? (
+          <>
+            recording as <strong>{reviewer.approver}</strong>
+          </>
+        ) : (
+          'read-only'
+        )}
+      </span>
       <span className="masthead__count">
         established {snapshot.established}/{snapshot.total}
       </span>
