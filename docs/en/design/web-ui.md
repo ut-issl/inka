@@ -40,7 +40,9 @@ The local view is the unit both surfaces present a node in. It is what an approv
 - Nothing deeper is shown, and nothing is expanded in place: a child appears as its description only. Reading
   below a child means navigating to that child's own local view.
 - Everything that enters the view hash is on screen without a hover, a click or a scroll inside a nested box:
-  no contract content is reachable only through an interaction.
+  no contract content is reachable only through an interaction. The one exception is the exact spacing of a
+  description — the whitespace and line breaks that rendering it as Markdown folds — which is read in the
+  description's source (see [Contract text](#contract-text)).
 - The header names the target (`<mode>:<id>`) and its [status](#node-status), and, for a queued target, its
   review state.
 
@@ -63,7 +65,9 @@ The local view is the unit both surfaces present a node in. It is what an approv
   interpreted. No remote resource is loaded: an image is shown as its alternative text and destination, and a
   link shows where it leads.
 - The description's source — the interpolated, normalized text the hash is computed from — is one control away
-  from its rendering, so whitespace and line breaks that Markdown folds remain inspectable.
+  from its rendering. Rendering is for reading: every word of the description is on screen in it, but Markdown
+  folds whitespace and line breaks, and those are contract content too. The source is where they are inspected,
+  and this is the only contract content that takes an interaction to see.
 - Text from the argument is never executed or trusted as markup beyond CommonMark; control and bidirectional
   override characters are neutralized as `inka review` neutralizes them.
 
@@ -105,23 +109,28 @@ by the same code path. Nothing in the record tells the two apart.
   as in the local view. A long description may be clipped on the card; the node's local view shows it whole.
 - The four discharge modes (objective / structure / bind / fiat) are visually distinct and also named on the
   card.
-- The layout is a top-down layered DAG — objectives at the top, edges flowing downward. An edge points from a
+- The layout is a top-down layered DAG — roots at the top, edges flowing downward. An edge points from a
   parent to each of its children (arrowhead at the child), and every edge is drawn with the same weight.
 - An edge whose `children:` entry carries a comment shows that it does; the comment itself is read in the
   parent's local view.
 
 ### Exploring
 
-- The graph opens collapsed: the objectives and their direct children are visible.
+- The graph hangs from its roots: the nodes no other node names as a child. They are the objectives the
+  argument rests on and, when `inka check` warns of nodes no objective reaches, the topmost of those. Every node
+  lies below at least one root, so none is left out of the graph.
+- A root that no objective reaches is set apart from the objectives and marked as unreachable, as the warning
+  says; it and everything below it are otherwise drawn and explored like the rest.
+- The graph opens collapsed: the roots and their direct children are visible.
 - A node with children is expanded or collapsed on its own. Expanding shows its direct children; collapsing
   hides every descendant that is not also reachable through another expanded, visible node.
 - A collapsed node says that it has hidden children, how many nodes lie below it, and how many of those are
   blamed — so nothing is hidden silently, and what needs attention can be found without expanding everything.
-- A node is visible exactly when it is an objective or a child of an expanded, visible node. Whether a node is
+- A node is visible exactly when it is a root or a child of an expanded, visible node. Whether a node is
   visible never depends on the order in which things were expanded.
 - The whole graph can be expanded, and collapsed again, in one action.
 - Revealing a node from elsewhere — a search result, a queue entry, a link in a local view — expands a path
-  from an objective down to it.
+  from a root down to it.
 
 ### Selecting
 
