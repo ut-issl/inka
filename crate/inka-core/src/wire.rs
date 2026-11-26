@@ -231,6 +231,7 @@ pub fn page(project_dir: &Path) -> Page {
         Err(Rejected {
             source_map,
             diagnostics,
+            ..
         }) => {
             return Page::Rejected(Rejection {
                 findings: findings(&source_map, &diagnostics),
