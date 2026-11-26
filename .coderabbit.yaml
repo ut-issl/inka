@@ -37,7 +37,9 @@ reviews:
         the other, and translations that disagree with the English text.
 
   auto_review:
-    auto_incremental_review: true
+    # Review a pull request once when it is opened, not again on every push.
+    # A new review can still be requested with `@coderabbitai review`.
+    auto_incremental_review: false
     # Dependency-update PRs would quickly exhaust the review rate limit.
     ignore_usernames:
       - "renovate[bot]"
