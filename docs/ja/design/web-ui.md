@@ -7,11 +7,11 @@ Web UI が保つ不変条件。Web UI は 2 つの面を持つ 1 つのアプリ
 
 ## 画面
 
-![レビュー面: サイドバーにキュー、中央に対象 1 つの局所ビューと、その下に判断を記録する操作。](assets/web-ui/review.png)
+![レビュー面: サイドバーにキュー、中央に対象 1 つの局所ビューと、その下に判断を記録する操作。](https://www.space.t.u-tokyo.ac.jp/inka/design/assets/web-ui/review.png)
 
-![グラフ面: 論証をカードとして objective から下へ展開した状態。折りたたまれたカードは下にあるものを示す。](assets/web-ui/graph.png)
+![グラフ面: 論証をカードとして objective から下へ展開した状態。折りたたまれたカードは下にあるものを示す。](https://www.space.t.u-tokyo.ac.jp/inka/design/assets/web-ui/graph.png)
 
-![カードの選択: その局所ビューがグラフの横に開き、グラフはそのまま残る。](assets/web-ui/graph-selected.png)
+![カードの選択: その局所ビューがグラフの横に開き、グラフはそのまま残る。](https://www.space.t.u-tokyo.ac.jp/inka/design/assets/web-ui/graph-selected.png)
 
 ## 基盤
 
