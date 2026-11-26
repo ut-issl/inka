@@ -653,16 +653,15 @@ a.reference:hover {
 
 /* ---- Graph surface ------------------------------------------------------- */
 
+/* The three panes share the width; the dividers between them are dragged. */
 .graph-surface {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 12px;
   padding: 12px;
   min-height: 0;
 }
 
-.graph-surface--selected {
-  grid-template-columns: 300px minmax(0, 1fr) 460px;
+.graph-surface__side {
+  display: grid;
+  min-height: 0;
 }
 
 .graph-surface__main {
@@ -675,13 +674,29 @@ a.reference:hover {
   overflow: hidden;
 }
 
-.graph-surface__panel {
-  min-height: 0;
+.graph-surface__local {
+  height: 100%;
   overflow: auto;
 }
 
-.graph-surface__panel .local {
+.graph-surface__local .local {
   max-width: none;
+}
+
+.divider {
+  flex: none;
+  width: 12px;
+  border-radius: 6px;
+  cursor: col-resize;
+  background: linear-gradient(var(--line), var(--line)) center / 2px 40px no-repeat;
+}
+
+.divider:hover,
+.divider:focus-visible,
+.divider[data-separator='active'] {
+  background-color: #e0e7ff;
+  background-image: linear-gradient(var(--focus), var(--focus));
+  outline: none;
 }
 
 .card.is-selected {
@@ -696,6 +711,11 @@ a.reference:hover {
   gap: 8px;
   padding: 8px 12px;
   font-size: 13px;
+}
+
+.graph-surface__bar .button,
+.graph-surface__count {
+  white-space: nowrap;
 }
 
 .graph-surface__count {

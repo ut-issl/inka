@@ -282,3 +282,41 @@ test('the two surfaces lead to each other for the same node', async ({ page }) =
   await expect(page).toHaveURL(/#\/graph\/safe_mode_ok$/)
   await expect(card(page, 'safe_mode_ok')).toHaveAttribute('aria-current', 'true')
 })
+
+test('the local view beside the graph is widened by dragging its divider, and the width is remembered', async ({ page }) => {
+  await open(page)
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  const panel = page.getByRole('region', { name: 'Selected node' })
+  await expect(panel).toBeVisible()
+  const width = async () => Math.round((await panel.boundingBox())!.width)
+  const before = await width()
+
+  const divider = page.getByRole('separator', { name: 'Resize the local view' })
+  const handle = (await divider.boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2 - 160, handle.y + handle.height / 2, { steps: 8 })
+  await page.mouse.up()
+
+  const widened = await width()
+  expect(widened).toBeGreaterThan(before + 120)
+  // The graph gave up the room and is still a graph.
+  await settled(page)
+  await expect(page.locator('.card')).toHaveCount(5)
+
+  await page.reload()
+  await expect(panel).toBeVisible()
+  expect(Math.abs((await width()) - widened)).toBeLessThanOrEqual(4)
+})
+
+test('the sidebar is narrowed and widened the same way, by pointer or by keyboard', async ({ page }) => {
+  await open(page)
+  const sidebar = page.getByRole('complementary', { name: 'Sidebar' })
+  const before = Math.round((await sidebar.boundingBox())!.width)
+
+  const divider = page.getByRole('separator', { name: 'Resize the sidebar' })
+  await divider.focus()
+  for (let press = 0; press < 5; press += 1) await page.keyboard.press('ArrowRight')
+
+  expect(Math.round((await sidebar.boundingBox())!.width)).toBeGreaterThan(before)
+})

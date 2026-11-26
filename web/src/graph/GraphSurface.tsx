@@ -11,11 +11,17 @@
  * link in a local view — is revealed by expanding a path from a root down to
  * it. Esc, or a tap on the empty background, clears the selection.
  *
+ * The sidebar, the graph and the local view share the width, and the
+ * dividers between them can be dragged — or moved with the arrow keys — to
+ * give each the room the reader wants; the widths are remembered. Resizing
+ * and remembering are the panel library's.
+ *
  * Nothing here records anything; a queued node can be opened in the review
  * surface, which is where decisions are taken.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import { LocalView } from '../components/LocalView'
@@ -53,6 +59,10 @@ export function GraphSurface({ snapshot, nodes }: Props) {
   const select = useCallback((id: string) => void navigate(graphPath(id)), [navigate])
   const clear = useCallback(() => void navigate('/graph'), [navigate])
 
+  // The widths are kept per arrangement: with and without a local view open.
+  const panelIds = selected ? ['sidebar', 'graph', 'local'] : ['sidebar', 'graph']
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: 'inka-graph', panelIds })
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') clear()
@@ -62,9 +72,17 @@ export function GraphSurface({ snapshot, nodes }: Props) {
   }, [clear])
 
   return (
-    <div className={`graph-surface ${selected ? 'graph-surface--selected' : ''}`}>
-      <Sidebar snapshot={snapshot} nodes={nodes} surface="graph" currentId={selectedId} />
-      <div className="graph-surface__main">
+    <Group
+      className="graph-surface"
+      orientation="horizontal"
+      defaultLayout={defaultLayout}
+      onLayoutChanged={onLayoutChanged}
+    >
+      <Panel id="sidebar" className="graph-surface__side" defaultSize={300} minSize={180}>
+        <Sidebar snapshot={snapshot} nodes={nodes} surface="graph" currentId={selectedId} />
+      </Panel>
+      <Separator className="divider" aria-label="Resize the sidebar" />
+      <Panel id="graph" className="graph-surface__main" minSize={280}>
         <div className="graph-surface__bar">
           <button type="button" className="button" onClick={() => setExpanded(allExpanded(nodes))}>
             Expand all
@@ -97,9 +115,12 @@ export function GraphSurface({ snapshot, nodes }: Props) {
           onSelect={select}
           onClear={clear}
         />
-      </div>
+      </Panel>
       {selected ? (
-        <section className="graph-surface__panel" aria-label="Selected node">
+        <>
+          <Separator className="divider" aria-label="Resize the local view" />
+          <Panel id="local" className="graph-surface__panel" defaultSize={460} minSize={300}>
+            <section className="graph-surface__local" aria-label="Selected node">
           <LocalView
             node={selected}
             reference={(id) => <NodeReference node={nodes.get(id)} id={id} to={graphPath(id)} />}
@@ -116,8 +137,10 @@ export function GraphSurface({ snapshot, nodes }: Props) {
               </>
             }
           />
-        </section>
+            </section>
+          </Panel>
+        </>
       ) : null}
-    </div>
+    </Group>
   )
 }
