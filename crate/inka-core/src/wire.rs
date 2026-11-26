@@ -30,7 +30,7 @@ use crate::hash::ViewHash;
 use crate::local::LocalContent;
 use crate::record::Record;
 use crate::review::{BlockedReason, QueueState, ReviewQueue, current_hash, derive_queue};
-use crate::source::{DiagnosticRef, Diagnostics, SourceMap, Warning};
+use crate::source::{DiagnosticRef, Diagnostics, Error, SourceMap, Warning};
 use crate::view::{ArgumentView, Mode, ViewNode};
 
 /// What one request for a project answers with.
@@ -240,21 +240,24 @@ pub fn page(project_dir: &Path) -> Page {
     };
     let records = match approvals::load_dir(&project_dir.join(APPROVALS_DIR)) {
         Ok(records) => records,
-        Err(error) => return rejected(&error.to_string()),
+        Err(error) => return rejected(&argument, &error.to_string()),
     };
     match snapshot(&argument, &records) {
         Ok(snapshot) => Page::Argument(snapshot),
-        Err(error) => rejected(&error.to_string()),
+        Err(error) => rejected(&argument, &error.to_string()),
     }
 }
 
-fn rejected(message: &str) -> Page {
+/// The rejection of a project that loaded but cannot be evaluated: the one
+/// error that stopped it, after every warning the load had already raised —
+/// a rejection lists every finding of the run, not only the last.
+fn rejected(argument: &Argument, message: &str) -> Page {
+    let diagnostics = Diagnostics {
+        errors: vec![Error::unanchored(message)],
+        warnings: argument.warnings.clone(),
+    };
     Page::Rejected(Rejection {
-        findings: vec![Finding {
-            severity: Severity::Error,
-            message: message.to_owned(),
-            location: None,
-        }],
+        findings: findings(&argument.source_map, &diagnostics),
     })
 }
 
@@ -849,6 +852,138 @@ mod tests {
             assert_eq!(rejection.findings[0].severity, Severity::Error);
             assert_eq!(rejection.findings[0].location, None);
         }
+    }
+
+    #[test]
+    fn a_rejection_after_loading_keeps_the_warnings_the_load_raised() {
+        // Arrange: a node no objective reaches, which only warns, and an
+        // approvals store that cannot be read, which stops the page.
+        let dir = diamond();
+        let stray = dir.path().join("argument/c.inka");
+        fs::write(&stray, block("fiat", "stray", &[])).expect("the stray node is written");
+        fs::create_dir(dir.path().join(APPROVALS_DIR)).expect("the store is created");
+        fs::write(
+            dir.path().join(APPROVALS_DIR).join("iwata.jsonl"),
+            "not json\n",
+        )
+        .expect("the record file is written");
+
+        // Act
+        let page = page(dir.path());
+
+        // Assert: the anchored warning first, then the unanchored error.
+        let Page::Rejected(rejection) = page else {
+            panic!("an unreadable store presents nothing");
+        };
+        let severities: Vec<Severity> = rejection
+            .findings
+            .iter()
+            .map(|finding| finding.severity)
+            .collect();
+        assert_eq!(severities, [Severity::Warning, Severity::Error]);
+        assert!(rejection.findings[0].message.contains("stray"));
+        let location = rejection.findings[0]
+            .location
+            .as_ref()
+            .expect("the warning points at the node");
+        assert!(location.path.ends_with("c.inka"));
+        assert_eq!(rejection.findings[1].location, None);
+    }
+
+    #[test]
+    fn a_warning_does_not_keep_the_argument_from_presenting() {
+        // Arrange
+        let dir = diamond();
+        fs::write(
+            dir.path().join("argument/c.inka"),
+            block("fiat", "stray", &[]),
+        )
+        .expect("the stray node is written");
+
+        // Act
+        let snapshot = snapshot_of(dir.path());
+
+        // Assert
+        assert_eq!(snapshot.warnings.len(), 1);
+        assert_eq!(snapshot.warnings[0].severity, Severity::Warning);
+        assert!(snapshot.nodes.iter().any(|node| node.id == "stray"));
+    }
+
+    #[test]
+    fn an_approval_of_earlier_content_reads_as_stale_and_stays_in_the_walk() {
+        // Arrange: approve the leaf, then reword it.
+        let dir = diamond();
+        approve(dir.path(), &["lonely"]);
+        let file = dir.path().join("argument/b.inka");
+        let reworded = fs::read_to_string(&file)
+            .expect("the file reads")
+            .replace("lonely holds", "lonely holds, reworded");
+        fs::write(&file, reworded).expect("the file is rewritten");
+
+        // Act
+        let snapshot = snapshot_of(dir.path());
+
+        // Assert
+        let lonely = node(&snapshot, "lonely");
+        assert_eq!(
+            lonely.review,
+            Some(ReviewState::Stale {
+                approvers: vec!["iwata".to_owned()],
+            })
+        );
+        assert_eq!(
+            lonely.status,
+            Status::Blamed {
+                reasons: vec![BlameReason::StaleApproval {
+                    approvers: vec!["iwata".to_owned()],
+                }],
+            }
+        );
+        assert!(snapshot.queue.walk.contains(&"lonely".to_owned()));
+        assert!(snapshot.queue.groups.contains(&QueueGroup {
+            state: ReviewGroup::Stale,
+            targets: vec!["lonely".to_owned()],
+        }));
+    }
+
+    #[test]
+    fn a_node_past_its_deadline_is_blocked_out_of_the_walk_and_keeps_its_hash() {
+        // Arrange: the current phase is past the leaf's `until:`.
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        fs::write(
+            dir.path().join("inka.toml"),
+            MANIFEST
+                .replace("[\"M1\"]", "[\"M1\", \"M2\"]")
+                .replace("current = \"M1\"", "current = \"M2\""),
+        )
+        .expect("the manifest is written");
+        fs::create_dir(dir.path().join("argument")).expect("the argument directory is created");
+        fs::write(
+            dir.path().join("argument/a.inka"),
+            block("objective", "root", &["debt"])
+                + "fiat debt {\n    ```\n    debt holds\n    ```\n    until: M1\n}\n",
+        )
+        .expect("the argument is written");
+
+        // Act
+        let snapshot = snapshot_of(dir.path());
+
+        // Assert
+        let debt = node(&snapshot, "debt");
+        assert_eq!(
+            debt.review,
+            Some(ReviewState::Blocked {
+                reason: BlockedReason::UntilExpired {
+                    until: "M1".to_owned(),
+                },
+            })
+        );
+        assert!(debt.view_hash.is_some());
+        assert_eq!(snapshot.queue.walk, ["root"]);
+        assert!(snapshot.queue.groups.contains(&QueueGroup {
+            state: ReviewGroup::Blocked,
+            targets: vec!["debt".to_owned()],
+        }));
     }
 
     #[test]
