@@ -8,7 +8,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 /** Waits until the graph has been laid out and the fit animation has settled. */
 async function ready(page: Page): Promise<void> {
-  await page.goto('/')
+  await page.goto('/#/graph')
   await expect(page.locator('.node-list__item').first()).toBeVisible()
   await expect(page.locator('.graph__canvas canvas').first()).toBeVisible()
   await page.waitForTimeout(1200)
@@ -186,7 +186,8 @@ test('nothing in the viewer can change the argument', async ({ page }) => {
 
   await page.click('.node-list__item:has-text("safe_mode_ok")')
 
-  await expect(page.locator('a')).toHaveCount(0)
+  // The only links are the masthead's, which switch surface.
+  await expect(page.locator('main a')).toHaveCount(0)
   await expect(page.locator('input, textarea, form')).toHaveCount(0)
   // Every request the page makes is a read of the argument bundle.
   const methods: string[] = []

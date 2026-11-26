@@ -1,27 +1,33 @@
 /**
- * The viewer shell: node list, graph, detail — three surfaces over one shared
- * view, holding one piece of state between them (the current focus).
+ * The application shell: one page from the server, two surfaces over it.
+ *
+ * The review surface walks the review queue one local view at a time; the
+ * graph surface shows the whole argument. Both read the same page, so they
+ * cannot disagree about what the project says.
  *
  * The whole application is read-only. Nothing here writes to the argument, to
  * approvals, or to any other inka state; the only outbound request is the one
- * that fetched the argument.
+ * that fetches the page.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router'
 
-import type { Finding } from './generated/Finding'
 import { DetailPanel } from './components/DetailPanel'
 import { Legend } from './components/Legend'
 import { NodeList } from './components/NodeList'
 import { PAGE_URL } from './config'
+import type { Finding } from './generated/Finding'
+import type { Snapshot } from './generated/Snapshot'
 import { GraphCanvas } from './graph/GraphCanvas'
 import { namespaceColors } from './graph/palette'
-import { useView } from './hooks/useView'
+import { usePage } from './hooks/useView'
 import { resolveFocus, WHOLE_VIEW, type Focus } from './model/focus'
 import { namespacesOf, type ArgumentView } from './model/view'
+import { ReviewSurface } from './review/ReviewSurface'
 
 export function App() {
-  const state = useView(PAGE_URL)
+  const { state } = usePage(PAGE_URL)
 
   if (state.status === 'loading') {
     return <p className="notice">Loading the argument…</p>
@@ -37,7 +43,40 @@ export function App() {
   if (state.status === 'rejected') {
     return <Findings findings={state.findings} />
   }
-  return <Viewer view={state.view} />
+  // The hash carries the route, so the bundle works wherever it is mounted
+  // and the server needs to know nothing about the surfaces.
+  return (
+    <HashRouter>
+      <div className="shell">
+        <Masthead snapshot={state.snapshot} />
+        <Routes>
+          <Route path="/review/:id?" element={<ReviewSurface snapshot={state.snapshot} nodes={state.view.nodes} />} />
+          <Route path="/graph" element={<Viewer view={state.view} />} />
+          <Route path="*" element={<Navigate to="/review" replace />} />
+        </Routes>
+      </div>
+    </HashRouter>
+  )
+}
+
+/** The surfaces, and the count `inka eval` prints, always in sight. */
+function Masthead({ snapshot }: { snapshot: Snapshot }) {
+  return (
+    <header className="masthead">
+      <span className="masthead__name">inka</span>
+      <nav className="masthead__surfaces" aria-label="Surfaces">
+        <NavLink to="/review" className="masthead__surface">
+          Review
+        </NavLink>
+        <NavLink to="/graph" className="masthead__surface">
+          Graph
+        </NavLink>
+      </nav>
+      <span className="masthead__count">
+        established {snapshot.established}/{snapshot.total}
+      </span>
+    </header>
+  )
 }
 
 /**

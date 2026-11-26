@@ -1,11 +1,13 @@
 # inka web UI
 
-The interactive graph viewer: a read-only visualization of an inka argument.
+The Web UI of an inka argument: a review surface that walks the review queue one local view at a time, and a
+graph of the whole argument. Read-only.
 This bundle is the single implementation of the Web UI invariants in
 [`docs/design/web-ui.md`](../docs/en/design/web-ui.md) — behaviour described
 there is decided here, and nowhere else.
 
-Vite + React + TypeScript, with cytoscape and dagre vendored into the bundle.
+Vite + React + TypeScript. Descriptions are parsed and rendered by `react-markdown`, routing between the
+surfaces is `react-router`'s, and the graph still uses cytoscape and dagre; all are vendored into the bundle.
 `inka serve` ([#43](https://github.com/ut-issl/inka/issues/43)) serves the built
 files and the page that describes the argument. Nothing here parses or mutates the argument, and no
 control in the UI reaches a write of any kind.
@@ -97,11 +99,15 @@ src/
     modes     the order the discharge modes are listed in
     focus     focus targets and the sets each surface derives from them
     source    fetching the page
+    wording   how a status and a review state are spelled out
+  text/       neutralizing text from the argument before it is shown
+  review/     the review surface: the queue and the walk over it
   graph/      the graph pane
     layout    pure layout arithmetic — ranks, ego rows, aspect matching
     runLayout the cytoscape adapter feeding those passes
     stylesheet, palette, elements, GraphCanvas, NamespaceBadges, HoverTooltip
-  components/ node list, detail panel, legend
+  components/ the local view, descriptions (Markdown and source), status pills;
+              and the graph surface's node list, detail panel, legend
   hooks/      loading state
 e2e/          the same invariants, in a real browser
 ```
@@ -121,6 +127,12 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 
 | Invariant | Where it lives | Covered by |
 | --- | --- | --- |
+| Local view: the content and order `inka review` prints, nothing deeper | `components/LocalView.tsx` | `LocalView.test.tsx`, `review.spec.ts` |
+| Markdown never hides content: raw HTML as text, no remote resource, link destinations shown | `components/Markdown.tsx` | `Markdown.test.tsx` |
+| A description's source is one control away | `components/Description.tsx` | `LocalView.test.tsx`, `review.spec.ts` |
+| Control and bidirectional characters neutralized | `text/neutralize.ts` | `neutralize.test.ts` |
+| Queue as `inka review --list`; walk in queue order; any target opens directly | `review/ReviewSurface.tsx` | `ReviewSurface.test.tsx`, `review.spec.ts` |
+| Status and review state spelled out, never colour alone | `model/wording.ts`, `components/StatusBadge.tsx` | `LocalView.test.tsx` |
 | Deterministic identity and ordering | `inka-core` `wire.rs` | its Rust tests; `fixtures.test.ts` |
 | One node per block; multi-parent nodes shown through edges | `model/view.ts` | `view.test.ts`, `fixtures.test.ts` |
 | Focus targets: one node, or a namespace with its one-hop neighbours | `model/focus.ts` | `focus.test.ts` |
@@ -133,4 +145,4 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 | List grouped by namespace, both orders topological | `components/NodeList.tsx` | `NodeList.test.tsx` |
 | Contract, evidence target and deadline on selection | `components/DetailPanel.tsx` | `DetailPanel.test.tsx` |
 | Esc and background tap restore the whole view | `App.tsx`, `GraphCanvas.tsx` | `viewer.spec.ts` |
-| Read-only throughout | everywhere | `NodeList.test.tsx`, `viewer.spec.ts` |
+| Read-only throughout | everywhere | `NodeList.test.tsx`, `viewer.spec.ts`, `review.spec.ts` |
