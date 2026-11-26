@@ -16,9 +16,12 @@ The bundle is always developed against a real `inka serve`: the dev server forwa
 nothing about the argument itself. Start one from the repository root, then the dev server:
 
 ```sh
-cargo run -p inka-cli -- serve tests/fixtures/aocs   # http://127.0.0.1:8080, in one terminal
+# In one terminal, from the repository root:
+cargo run -p inka-cli -- serve tests/fixtures/aocs   # http://127.0.0.1:8080
+
+# In another, from web/ — as every npm command below:
 npm install
-npm run dev                      # http://localhost:5173, in another
+npm run dev                      # http://localhost:5173
 INKA_SERVE=http://127.0.0.1:9000 npm run dev   # when `inka serve` listens elsewhere
 npm test                         # unit and component tests
 npm run coverage
@@ -27,7 +30,8 @@ npm run build                    # static bundle in ../crate/inka-cli/web-dist/,
 ```
 
 Edit the project `inka serve` points at and reload the page: the server reads it again on every request.
-`npm run e2e` starts its own `inka serve` on the aocs fixture, on a port of its own.
+`npm run e2e` starts its own `inka serve` on the aocs fixture and its own dev server, each on a port of its
+own, and never reuses one that is already running.
 
 ## The interface with inka
 
