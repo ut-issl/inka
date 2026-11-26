@@ -131,8 +131,8 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 | Markdown never hides content: raw HTML as text, no remote resource, link destinations shown | `components/Markdown.tsx` | `Markdown.test.tsx` |
 | A description's source is one control away | `components/Description.tsx` | `LocalView.test.tsx`, `review.spec.ts` |
 | Control and bidirectional characters neutralized | `text/neutralize.ts` | `neutralize.test.ts` |
-| Queue as `inka review --list`; any target opens directly | `review/ReviewSurface.tsx` | `ReviewSurface.test.tsx`, `review.spec.ts` |
-| Status and review state spelled out, never colour alone | `model/wording.ts`, `components/StatusBadge.tsx` | `LocalView.test.tsx` |
+| Queue as `inka review --list`; walk in queue order; any target opens directly | `review/ReviewSurface.tsx` | `ReviewSurface.test.tsx` |
+| Status and review state spelled out, never colour alone | `model/wording.ts` | `LocalView.test.tsx` |
 | Deterministic identity and ordering | `inka-core` `wire.rs` | its Rust tests; `fixtures.test.ts` |
 | One node per block; multi-parent nodes shown through edges | `model/view.ts` | `view.test.ts`, `fixtures.test.ts` |
 | Focus targets: one node, or a namespace with its one-hop neighbours | `model/focus.ts` | `focus.test.ts` |
