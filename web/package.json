@@ -4,7 +4,7 @@
   "license": "MIT OR Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "Read-only viewer for an inka argument graph, served by `inka serve`.",
+  "description": "Web UI for an inka argument, served by `inka serve`.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --build && vite build",
@@ -20,7 +20,9 @@
     "cytoscape": "^3.34.3",
     "cytoscape-dagre": "^4.0.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "react-router": "^7.18.7"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
