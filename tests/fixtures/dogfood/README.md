@@ -17,7 +17,7 @@ Japanese version: [README_ja.md](README_ja.md)
 | `argument/` | The argument itself; every `*.inka` under it is read by convention |
 | `argument/objective.inka` | Root: decomposition into four branches |
 | `argument/editing.inka` | Branch 1: edit cost is proportional to interface change (§3, §11) |
-| `argument/approval.inka` | Branch 2: approvals do not degenerate into ritual (§4, §5, §7) |
+| `argument/approval.inka` | Branch 2: approvals do not degenerate into ritual (§4, §5, §7), in the browser too |
 | `argument/audit.inka` | Branch 3: records are auditable (§9); includes a `{$sig_scheme}` interpolation example |
 | `argument/truth-validity.inka` | Branch 4: truth/validity separation (§6) |
 | `argument/assumptions.inka` | Environment assumptions (plain fiat propositions) |

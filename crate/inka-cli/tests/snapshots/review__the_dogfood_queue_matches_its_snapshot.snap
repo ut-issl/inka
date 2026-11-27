@@ -2,9 +2,9 @@
 source: crate/inka-cli/tests/review.rs
 expression: "String::from_utf8(output.stdout).expect(\"the queue is UTF-8\")"
 ---
-24 targets need review
+29 targets need review
 
-Unapproved (24)
+Unapproved (29)
   fiat:local_view_binding
   fiat:local_view_hash_sound
   structure:invalidation_exact
@@ -17,6 +17,11 @@ Unapproved (24)
   fiat:labels_cover_reality
   fiat:policy_is_reviewable
   fiat:queue_minimizes_friction
+  fiat:web_shows_whole_local_view
+  fiat:web_binds_hash_on_screen
+  fiat:web_identity_is_servers
+  fiat:web_only_own_pages_record
+  structure:browser_review_sound
   structure:approvals_meaningful
   structure:target_unswappable
   fiat:approver_unforgeable

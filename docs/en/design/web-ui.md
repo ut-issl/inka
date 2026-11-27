@@ -5,6 +5,14 @@ other output: a **review surface**, where an approver walks the review queue and
 `inka review` does, and a **graph surface**, where the whole argument is explored.
 Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/design/web-ui/).
 
+## Screens
+
+![Review surface: the queue in the sidebar, and one target's local view with the controls that record a decision under it.](assets/web-ui/review.png)
+
+![Graph surface: the argument as cards, expanded from the objective down; collapsed cards say what lies below them.](assets/web-ui/graph.png)
+
+![A selected card: its local view opens beside the graph, which stays in place.](assets/web-ui/graph-selected.png)
+
 ## Foundation
 
 - The Web UI shows the shared argument view — the same projection every other output is built on — together

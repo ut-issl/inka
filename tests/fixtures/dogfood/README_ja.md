@@ -16,7 +16,7 @@ inka 自身の設計主張を inka DSL で書いたもの(ut-issl/inka#6)。
 | `argument/` | 論証本体。規約で配下の `*.inka` がすべて読まれる |
 | `argument/objective.inka` | ルート: 4本の枝への分解 |
 | `argument/editing.inka` | 枝1: 編集コストが界面の差分に比例する(§3, §11) |
-| `argument/approval.inka` | 枝2: 承認が儀式化しない(§4, §5, §7) |
+| `argument/approval.inka` | 枝2: 承認が儀式化しない(§4, §5, §7)。ブラウザでのレビューを含む |
 | `argument/audit.inka` | 枝3: 記録の監査可能性(§9)。`{$sig_scheme}` の値埋め込み例を含む |
 | `argument/truth-validity.inka` | 枝4: 真実性と妥当性の分離(§6) |
 | `argument/assumptions.inka` | 環境仮定(ただの fiat 命題) |

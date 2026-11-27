@@ -66,6 +66,19 @@ expression: "export(\"dogfood\")"
   },
   {
     "data": {
+      "id": "browser_review_sound",
+      "mode": "structure",
+      "namespace": "approval",
+      "description": "A decision recorded from the browser is the judgement `inka review` would have recorded: taken on the whole local view, on the content that was on screen, by the approver the server was started as",
+      "tags": [],
+      "root": false,
+      "comments": {
+        "block": "Reviewing in the browser (docs/en/design/web-ui.md): `inka serve --as` records\nthe same record `inka review` writes. The four leaves are the conditions the\ndesign puts on that; each is covered by tests today and is to be bound to them."
+      }
+    }
+  },
+  {
+    "data": {
       "id": "description_is_contract",
       "mode": "structure",
       "namespace": "approval",
@@ -320,6 +333,68 @@ expression: "export(\"dogfood\")"
   },
   {
     "data": {
+      "id": "web_binds_hash_on_screen",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "A decision made in the browser names the view hash that was displayed, and is recorded only if that is still the target's current hash",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M4",
+        "promote": "bind"
+      },
+      "comments": {
+        "block": "Bind to the decision tests of `inka serve`."
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "web_identity_is_servers",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "The approver and the key id of a decision made in the browser are fixed when the server starts; no request can choose or change them",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M4",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "web_only_own_pages_record",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "A server that records decisions listens on a loopback address only and accepts a decision only from a page it served for that run",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M4",
+        "promote": "bind"
+      }
+    }
+  },
+  {
+    "data": {
+      "id": "web_shows_whole_local_view",
+      "mode": "fiat",
+      "namespace": "approval",
+      "description": "The Web UI offers a decision only under a target's whole local view, shown without any interaction and with nothing deeper; only the exact spacing of a description is read in its source",
+      "tags": [],
+      "root": false,
+      "deadline": {
+        "until": "M4",
+        "promote": "bind"
+      },
+      "comments": {
+        "block": "Bind to the review-surface browser tests."
+      }
+    }
+  },
+  {
+    "data": {
       "id": "approvals_meaningful->description_is_contract",
       "source": "approvals_meaningful",
       "target": "description_is_contract"
@@ -344,6 +419,41 @@ expression: "export(\"dogfood\")"
       "id": "approvals_meaningful->queue_minimizes_friction",
       "source": "approvals_meaningful",
       "target": "queue_minimizes_friction"
+    }
+  },
+  {
+    "data": {
+      "id": "approvals_meaningful->browser_review_sound",
+      "source": "approvals_meaningful",
+      "target": "browser_review_sound"
+    }
+  },
+  {
+    "data": {
+      "id": "browser_review_sound->web_shows_whole_local_view",
+      "source": "browser_review_sound",
+      "target": "web_shows_whole_local_view"
+    }
+  },
+  {
+    "data": {
+      "id": "browser_review_sound->web_binds_hash_on_screen",
+      "source": "browser_review_sound",
+      "target": "web_binds_hash_on_screen"
+    }
+  },
+  {
+    "data": {
+      "id": "browser_review_sound->web_identity_is_servers",
+      "source": "browser_review_sound",
+      "target": "web_identity_is_servers"
+    }
+  },
+  {
+    "data": {
+      "id": "browser_review_sound->web_only_own_pages_record",
+      "source": "browser_review_sound",
+      "target": "web_only_own_pages_record"
     }
   },
   {

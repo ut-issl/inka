@@ -1,7 +1,7 @@
 {
   "kind": "argument",
   "established": 1,
-  "total": 25,
+  "total": 30,
   "nodes": [
     {
       "id": "approvals_meaningful",
@@ -16,10 +16,11 @@
         "description_is_contract",
         "labels_cover_reality",
         "policy_is_reviewable",
-        "queue_minimizes_friction"
+        "queue_minimizes_friction",
+        "browser_review_sound"
       ],
-      "below": 6,
-      "blamed_below": 6,
+      "below": 11,
+      "blamed_below": 11,
       "status": {
         "state": "blamed",
         "reasons": [
@@ -31,7 +32,7 @@
       "review": {
         "state": "unapproved"
       },
-      "view_hash": "sha256:cabcfff2f5994533284e5f59aaf102f74796b6f1763c120fead878632508aaaf",
+      "view_hash": "sha256:2fe9053c4dbd03bb778b0d4998e0007090bad06c2a53771e20a9ba9086b4e86c",
       "local": {
         "id": "approvals_meaningful",
         "mode": "structure",
@@ -60,6 +61,11 @@
               "id": "queue_minimizes_friction",
               "comment": null,
               "description": "An approver is presented with only the unapproved or stale local views the policy demands of them, together with a diff against the local view they last approved"
+            },
+            {
+              "id": "browser_review_sound",
+              "comment": null,
+              "description": "A decision recorded from the browser is the judgement `inka review` would have recorded: taken on the whole local view, on the content that was on screen, by the approver the server was started as"
             }
           ]
         },
@@ -213,6 +219,69 @@
         "description": "The correspondence between a proposition and its verification (validity) is judged by a human within the local view, as a bind approval",
         "evidence": null,
         "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "browser_review_sound",
+      "mode": "structure",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "approvals_meaningful"
+      ],
+      "children": [
+        "web_shows_whole_local_view",
+        "web_binds_hash_on_screen",
+        "web_identity_is_servers",
+        "web_only_own_pages_record"
+      ],
+      "below": 4,
+      "blamed_below": 4,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:9c52964e32e8fa1cbd46c8a63f7e596af295dae8f41f5b7b092adc5d6dae1a1e",
+      "local": {
+        "id": "browser_review_sound",
+        "mode": "structure",
+        "comment": "Reviewing in the browser (docs/en/design/web-ui.md): `inka serve --as` records\nthe same record `inka review` writes. The four leaves are the conditions the\ndesign puts on that; each is covered by tests today and is to be bound to them.",
+        "description": "A decision recorded from the browser is the judgement `inka review` would have recorded: taken on the whole local view, on the content that was on screen, by the approver the server was started as",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "web_shows_whole_local_view",
+              "comment": null,
+              "description": "The Web UI offers a decision only under a target's whole local view, shown without any interaction and with nothing deeper; only the exact spacing of a description is read in its source"
+            },
+            {
+              "id": "web_binds_hash_on_screen",
+              "comment": null,
+              "description": "A decision made in the browser names the view hash that was displayed, and is recorded only if that is still the target's current hash"
+            },
+            {
+              "id": "web_identity_is_servers",
+              "comment": null,
+              "description": "The approver and the key id of a decision made in the browser are fixed when the server starts; no request can choose or change them"
+            },
+            {
+              "id": "web_only_own_pages_record",
+              "comment": null,
+              "description": "A server that records decisions listens on a loopback address only and accepts a decision only from a page it served for that run"
+            }
+          ]
+        },
         "deadline": null
       }
     },
@@ -471,8 +540,8 @@
         "records_auditable",
         "truth_validity_separated"
       ],
-      "below": 24,
-      "blamed_below": 23,
+      "below": 29,
+      "blamed_below": 28,
       "status": {
         "state": "blamed",
         "reasons": [
@@ -1120,6 +1189,170 @@
           }
         }
       }
+    },
+    {
+      "id": "web_binds_hash_on_screen",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "browser_review_sound"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:c4274b746dd568357c552b23a917c9ad04df89cc85f80af6cf8ea857abf41498",
+      "local": {
+        "id": "web_binds_hash_on_screen",
+        "mode": "fiat",
+        "comment": "Bind to the decision tests of `inka serve`.",
+        "description": "A decision made in the browser names the view hash that was displayed, and is recorded only if that is still the target's current hash",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M4",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "web_identity_is_servers",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "browser_review_sound"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:347c383562ec10fbaee8798c9ab8bc05c0365662fab93858fa7aac97ed7957ae",
+      "local": {
+        "id": "web_identity_is_servers",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The approver and the key id of a decision made in the browser are fixed when the server starts; no request can choose or change them",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M4",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "web_only_own_pages_record",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "browser_review_sound"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:8409d9a9afc04ee4c305096c179b4613da7f03f48e2adf866039c017c7764f1a",
+      "local": {
+        "id": "web_only_own_pages_record",
+        "mode": "fiat",
+        "comment": null,
+        "description": "A server that records decisions listens on a loopback address only and accepts a decision only from a page it served for that run",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M4",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "web_shows_whole_local_view",
+      "mode": "fiat",
+      "namespace": "approval",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "browser_review_sound"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:846262640bf82627b46073140e5b4e8ced868bf0e2120a712545ccbf7261f940",
+      "local": {
+        "id": "web_shows_whole_local_view",
+        "mode": "fiat",
+        "comment": "Bind to the review-surface browser tests.",
+        "description": "The Web UI offers a decision only under a target's whole local view, shown without any interaction and with nothing deeper; only the exact spacing of a description is read in its source",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "M4",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
     }
   ],
   "roots": [
@@ -1129,6 +1362,7 @@
   "order": [
     "inka_ok",
     "approvals_meaningful",
+    "browser_review_sound",
     "description_is_contract",
     "approvers_follow_norm",
     "edit_cost_proportional",
@@ -1151,7 +1385,11 @@
     "truth_validity_separated",
     "assumptions_surfaced",
     "bind_validity_by_human",
-    "verification_truth_by_machine"
+    "verification_truth_by_machine",
+    "web_binds_hash_on_screen",
+    "web_identity_is_servers",
+    "web_only_own_pages_record",
+    "web_shows_whole_local_view"
   ],
   "queue": {
     "walk": [
@@ -1167,6 +1405,11 @@
       "labels_cover_reality",
       "policy_is_reviewable",
       "queue_minimizes_friction",
+      "web_shows_whole_local_view",
+      "web_binds_hash_on_screen",
+      "web_identity_is_servers",
+      "web_only_own_pages_record",
+      "browser_review_sound",
       "approvals_meaningful",
       "target_unswappable",
       "approver_unforgeable",
@@ -1196,6 +1439,11 @@
           "labels_cover_reality",
           "policy_is_reviewable",
           "queue_minimizes_friction",
+          "web_shows_whole_local_view",
+          "web_binds_hash_on_screen",
+          "web_identity_is_servers",
+          "web_only_own_pages_record",
+          "browser_review_sound",
           "approvals_meaningful",
           "target_unswappable",
           "approver_unforgeable",

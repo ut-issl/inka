@@ -5,6 +5,14 @@ Web UI が保つ不変条件。Web UI は 2 つの面を持つ 1 つのアプリ
 記録する。**グラフ面**では論証全体を探索する。
 英語版(正): [English](https://www.space.t.u-tokyo.ac.jp/inka/design/web-ui/)
 
+## 画面
+
+![レビュー面: サイドバーにキュー、中央に対象 1 つの局所ビューと、その下に判断を記録する操作。](https://www.space.t.u-tokyo.ac.jp/inka/design/assets/web-ui/review.png)
+
+![グラフ面: 論証をカードとして objective から下へ展開した状態。折りたたまれたカードは下にあるものを示す。](https://www.space.t.u-tokyo.ac.jp/inka/design/assets/web-ui/graph.png)
+
+![カードの選択: その局所ビューがグラフの横に開き、グラフはそのまま残る。](https://www.space.t.u-tokyo.ac.jp/inka/design/assets/web-ui/graph-selected.png)
+
 ## 基盤
 
 - Web UI は共有の論証ビュー(他のすべての出力と同じ投影)と、core がそこから導くレビューキューおよび評価を
