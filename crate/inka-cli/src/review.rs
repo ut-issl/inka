@@ -39,6 +39,7 @@ use std::path::Path;
 use console::{Alignment, Style, measure_text_width, pad_str};
 use inka_core::approvals::{self, APPROVALS_DIR};
 use inka_core::argument::Argument;
+use inka_core::eval::BlameReason;
 use inka_core::evidence::EvidenceSet;
 use inka_core::local::{ChildrenContent, LocalContent};
 use inka_core::record::Timestamp;
@@ -1019,10 +1020,24 @@ const fn status_name(status: &Status) -> &'static str {
 /// What a child's status says beyond its name: each reason it is blamed, in
 /// the words of `inka eval`, or how many of the nodes below it are. Which
 /// nodes those are is read in the child's own local view.
+///
+/// A declined structure says who declined it and not why. The comment on
+/// such a decline argues about how the structure is built from its own
+/// children, which the parent's local view does not show: quoted there it
+/// would read as a remark on the parent's content. It is read in the
+/// structure's own local view.
 fn status_detail(node: &NodeData) -> Vec<String> {
     match &node.status {
         Status::Established => Vec::new(),
-        Status::Blamed { reasons } => reasons.iter().map(ToString::to_string).collect(),
+        Status::Blamed { reasons } => reasons
+            .iter()
+            .map(|reason| match reason {
+                BlameReason::Declined { by, .. } if node.mode == Mode::Structure => {
+                    format!("declined by {by}")
+                }
+                reason => reason.to_string(),
+            })
+            .collect(),
         Status::Unestablished => vec![match node.blamed_below {
             1 => "1 node below it is blamed".to_owned(),
             count => format!("{count} nodes below it are blamed"),
@@ -1609,6 +1624,36 @@ fiat leaf {
         for line in root.lines().filter(|line| line.starts_with("  ")) {
             assert!(measure_text_width(line) <= PLAIN.width, "{line}");
         }
+    }
+
+    #[test]
+    fn a_declined_structure_says_who_declined_it_and_not_why() {
+        // Arrange
+        let dir = scenario_project();
+
+        // Act: leave the leaf, decline the branch, then look at the root.
+        let transcript = run_interactive(dir.path(), "s\nd\nthe leaf does not carry it\ns\n");
+
+        // Assert: the comment is about what lies below the branch, which the
+        // root's local view does not show, so the root does not quote it.
+        let root = transcript
+            .split("objective:root")
+            .nth(1)
+            .expect("the root is the last target");
+        assert!(
+            root.contains(
+                "\
+  children:
+  └─ ╭─ branch ── blamed ─╮
+     │ the branch claim   │
+     ├────────────────────┤
+     │ declined by alice  │
+     ╰────────────────────╯
+"
+            ),
+            "{transcript}"
+        );
+        assert!(!root.contains("the leaf does not carry it"), "{transcript}");
     }
 
     #[test]
