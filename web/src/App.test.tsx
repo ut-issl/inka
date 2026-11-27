@@ -22,4 +22,23 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(screen.getByText(/could not reach/i)).toBeInTheDocument()
   })
+
+  test('shows the findings of a project that does not check, each with where it points', async () => {
+    const findings = [
+      {
+        severity: 'error',
+        message: 'expected a description fence',
+        location: { path: 'argument/a.inka', line: 3, column: 5 },
+      },
+      { severity: 'error', message: 'no objective block found', location: null },
+    ]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ kind: 'rejected', findings })))
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.getByText('argument/a.inka:3:5')).toBeInTheDocument()
+    expect(screen.getByText('expected a description fence')).toBeInTheDocument()
+    expect(screen.getByText('no objective block found')).toBeInTheDocument()
+  })
 })

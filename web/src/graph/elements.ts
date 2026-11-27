@@ -1,7 +1,7 @@
 /**
  * Turns the shared view into cytoscape elements.
  *
- * The graph is built from the view rather than from the raw export, so the
+ * The graph is built from the view rather than from the raw page, so the
  * graph and the node list cannot drift: both read the same nodes, in the same
  * order, with the same neighbours.
  */
@@ -28,7 +28,7 @@ export function cytoscapeElements(view: ArgumentView): ElementDefinition[] {
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      commented: edge.comment !== undefined,
+      commented: edge.comment !== null,
     },
   }))
   return [...nodes, ...edges]

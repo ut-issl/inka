@@ -2,24 +2,21 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 
-import { edge, node } from '../test/factory'
+import { edge, node, view as buildView } from '../test/factory'
 import { namespaceColors } from '../graph/palette'
-import { parseElements } from '../model/elements'
 import { resolveFocus, WHOLE_VIEW, type Focus } from '../model/focus'
-import { buildView, namespacesOf } from '../model/view'
+import { namespacesOf } from '../model/view'
 import { NodeList } from './NodeList'
 
-const view = buildView(
-  parseElements([
-    node('a', { mode: 'objective', namespace: 'top', root: true }),
-    node('b', { namespace: 'mid' }),
-    node('c', { namespace: 'mid' }),
-    node('d', { mode: 'fiat', namespace: 'low' }),
-    edge('a', 'b'),
-    edge('a', 'c'),
-    edge('b', 'd'),
-  ]),
-)
+const view = buildView([
+  node('a', { mode: 'objective', namespace: 'top', root: true }),
+  node('b', { namespace: 'mid' }),
+  node('c', { namespace: 'mid' }),
+  node('d', { mode: 'fiat', namespace: 'low' }),
+  edge('a', 'b'),
+  edge('a', 'c'),
+  edge('b', 'd'),
+])
 
 function renderList(focus: Focus = WHOLE_VIEW) {
   const onFocusNode = vi.fn()

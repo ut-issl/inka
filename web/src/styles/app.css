@@ -307,6 +307,41 @@ body {
   white-space: pre-wrap;
 }
 
+.findings {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.findings__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.findings__severity {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.findings__item--error .findings__severity {
+  color: #b91c1c;
+}
+
+.findings__item--warning .findings__severity {
+  color: #b45309;
+}
+
+.findings__location {
+  font-size: 12px;
+  color: var(--ink-soft, inherit);
+}
+
 /* ---- Narrow windows ------------------------------------------------------ */
 
 @media (max-width: 1200px) {

@@ -1,6 +1,6 @@
 /** How to read the graph: the four discharge modes and the focus colours. */
 
-import { DISCHARGE_MODES } from '../model/elements'
+import { DISCHARGE_MODES } from '../model/modes'
 import { MODE_COLORS } from '../graph/stylesheet'
 
 export function Legend() {

@@ -9,10 +9,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import type { Finding } from './generated/Finding'
 import { DetailPanel } from './components/DetailPanel'
 import { Legend } from './components/Legend'
 import { NodeList } from './components/NodeList'
-import { ELEMENTS_URL } from './config'
+import { PAGE_URL } from './config'
 import { GraphCanvas } from './graph/GraphCanvas'
 import { namespaceColors } from './graph/palette'
 import { useView } from './hooks/useView'
@@ -20,7 +21,7 @@ import { resolveFocus, WHOLE_VIEW, type Focus } from './model/focus'
 import { namespacesOf, type ArgumentView } from './model/view'
 
 export function App() {
-  const state = useView(ELEMENTS_URL)
+  const state = useView(PAGE_URL)
 
   if (state.status === 'loading') {
     return <p className="notice">Loading the argument…</p>
@@ -33,7 +34,35 @@ export function App() {
       </div>
     )
   }
+  if (state.status === 'rejected') {
+    return <Findings findings={state.findings} />
+  }
   return <Viewer view={state.view} />
+}
+
+/**
+ * A project that does not check, as the findings `inka check` reports. There
+ * is no argument to draw until they are fixed; reloading the page asks again.
+ */
+function Findings({ findings }: { findings: readonly Finding[] }) {
+  return (
+    <div className="notice notice--error" role="alert">
+      <p>The project does not check, so there is no argument to show.</p>
+      <ul className="findings">
+        {findings.map((finding, index) => (
+          <li key={index} className={`findings__item findings__item--${finding.severity}`}>
+            <span className="findings__severity">{finding.severity}</span>
+            {finding.location ? (
+              <code className="findings__location">
+                {finding.location.path}:{finding.location.line}:{finding.location.column}
+              </code>
+            ) : null}
+            <span className="findings__message">{finding.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 function Viewer({ view }: { view: ArgumentView }) {

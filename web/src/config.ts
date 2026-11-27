@@ -2,12 +2,11 @@
  * Presentation parameters and the one wiring constant.
  *
  * Everything here is tuning — spacing, zoom thresholds, animation — except
- * {@link ELEMENTS_URL}, which is where the bundle asks `inka serve` for the
- * argument when the page did not already carry it.
+ * {@link PAGE_URL}, which is where the bundle asks `inka serve` for the page.
  */
 
-/** Endpoint serving `inka export` output, relative to the page. */
-export const ELEMENTS_URL: string = import.meta.env.VITE_INKA_ELEMENTS ?? './elements.json'
+/** Endpoint answering with the page, relative to wherever the bundle is mounted. */
+export const PAGE_URL = './api/page'
 
 /** Zoom below which namespace badges are hidden. */
 export const BADGE_MIN_ZOOM = 0.75

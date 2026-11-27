@@ -1,48 +1,22 @@
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-
 import react from '@vitejs/plugin-react'
-import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
 /**
- * Path the viewer fetches its cytoscape elements from.
+ * The `inka serve` the dev server forwards API requests to.
  *
- * In production `inka serve` answers it; in development the plugin below
- * answers it from a checked-in fixture so the UI runs without the Rust side.
+ * The bundle never answers for the argument itself: every surface is developed
+ * against the real server, so what the page shows in development is what an
+ * installed `inka` would send. Start one first, for example
+ * `cargo run -p inka-cli -- serve tests/fixtures/aocs` from the repository
+ * root, and point `INKA_SERVE` elsewhere if it listens on another address.
  */
-const ELEMENTS_PATH = '/elements.json'
-
-/** Fixture project the dev server answers with; `aocs` unless overridden. */
-const DEV_FIXTURE = process.env.INKA_FIXTURE ?? 'aocs'
-const DEV_FIXTURE_FILE = fileURLToPath(
-  new URL(`./fixtures/${DEV_FIXTURE}.elements.json`, import.meta.url),
-)
-
-/** Serves the development fixture at {@link ELEMENTS_PATH}; dev server only. */
-function devElements(): Plugin {
-  return {
-    name: 'inka-dev-elements',
-    apply: 'serve',
-    configureServer(server) {
-      server.middlewares.use(ELEMENTS_PATH, (_request, response) => {
-        // Read per request so editing the fixture needs no server restart.
-        try {
-          const body = readFileSync(DEV_FIXTURE_FILE, 'utf8')
-          response.setHeader('Content-Type', 'application/json')
-          response.end(body)
-        } catch (error) {
-          response.statusCode = 500
-          response.setHeader('Content-Type', 'application/json')
-          response.end(JSON.stringify({ error: `dev fixture unreadable: ${String(error)}` }))
-        }
-      })
-    },
-  }
-}
+const INKA_SERVE = process.env.INKA_SERVE ?? 'http://127.0.0.1:8080'
 
 export default defineConfig({
-  plugins: [react(), devElements()],
+  plugins: [react()],
+  server: {
+    proxy: { '/api': INKA_SERVE },
+  },
   // Relative asset URLs: `inka serve` may mount the bundle under a sub-path.
   base: './',
   build: {

@@ -1,86 +1,43 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { edge, node } from '../test/factory'
-import { fetchElements, INJECTED_ELEMENT_ID, loadView, readInjected, SourceError } from './source'
+import { node, snapshot } from '../test/factory'
+import { loadPage, SourceError } from './source'
 
-function inject(text: string): void {
-  const script = document.createElement('script')
-  script.type = 'application/json'
-  script.id = INJECTED_ELEMENT_ID
-  script.textContent = text
-  document.body.append(script)
-}
+afterEach(() => vi.unstubAllGlobals())
 
-afterEach(() => {
-  document.getElementById(INJECTED_ELEMENT_ID)?.remove()
-  vi.unstubAllGlobals()
-})
+describe('loadPage', () => {
+  test('returns the page of a successful response', async () => {
+    const page = { kind: 'argument', ...snapshot([node('a')]) }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(page)))
 
-describe('readInjected', () => {
-  test('returns null when the page carries no payload', () => {
-    expect(readInjected()).toBeNull()
+    await expect(loadPage('./api/page')).resolves.toEqual(page)
   })
 
-  test('reads a payload injected by the server', () => {
-    inject(JSON.stringify([node('a')]))
+  test('returns a rejected project as its findings, not as a failure', async () => {
+    const page = { kind: 'rejected', findings: [{ severity: 'error', message: 'broken', location: null }] }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(page)))
 
-    expect(readInjected()).toEqual([node('a')])
-  })
-
-  test('reports an injected payload that is not JSON', () => {
-    inject('{ nope')
-
-    expect(() => readInjected()).toThrow(SourceError)
-  })
-})
-
-describe('fetchElements', () => {
-  test('returns the parsed body of a successful response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([node('a')])))
-
-    await expect(fetchElements('/elements.json')).resolves.toEqual([node('a')])
+    await expect(loadPage('./api/page')).resolves.toEqual(page)
   })
 
   test('reports the status of a failed response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 404 })))
 
-    await expect(fetchElements('/elements.json')).rejects.toThrow(/404/)
+    await expect(loadPage('./api/page')).rejects.toThrow(/404/)
   })
 
   test('reports a response that is not JSON', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>', { status: 200 })))
 
-    await expect(fetchElements('/elements.json')).rejects.toThrow(/did not answer JSON/)
+    await expect(loadPage('./api/page')).rejects.toThrow(/did not answer JSON/)
   })
 
-  test('reports an unreachable endpoint', async () => {
+  test('reports an unreachable server', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 
-    await expect(fetchElements('/elements.json')).rejects.toThrow(/could not reach/)
-  })
-})
+    const failure = loadPage('./api/page')
 
-describe('loadView', () => {
-  test('prefers the injected payload over the endpoint', async () => {
-    inject(JSON.stringify([node('a'), node('b'), edge('a', 'b')]))
-    const fetcher = vi.fn()
-    vi.stubGlobal('fetch', fetcher)
-
-    const view = await loadView('/elements.json')
-
-    expect(view.order).toEqual(['a', 'b'])
-    expect(fetcher).not.toHaveBeenCalled()
-  })
-
-  test('falls back to the endpoint when nothing is injected', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([node('a')])))
-
-    await expect(loadView('/elements.json')).resolves.toMatchObject({ order: ['a'] })
-  })
-
-  test('surfaces a malformed export rather than rendering half an argument', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([{ data: { id: 'a' } }])))
-
-    await expect(loadView('/elements.json')).rejects.toThrow(/malformed inka export/)
+    await expect(failure).rejects.toThrow(SourceError)
+    await expect(failure).rejects.toThrow(/could not reach/)
   })
 })

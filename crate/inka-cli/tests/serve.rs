@@ -2,7 +2,7 @@
 //! HTTP.
 //!
 //! The unit tests in the command drive the router directly; what they cannot
-//! show is that the binary binds, projects the right argument, and answers a
+//! show is that the binary binds, reads the right project, and answers a
 //! browser. That is the closing condition of the server, so it is tested
 //! against both fixture projects here.
 //!
@@ -12,6 +12,7 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
 use serde_json::Value;
@@ -23,15 +24,22 @@ use common::{local_fixture, workspace_fixture};
 struct Server {
     process: Child,
     address: String,
+    /// What the server wrote to stderr before it reported its address.
+    startup: String,
 }
 
 impl Server {
     /// Starts the server on an operating-system-chosen port and waits until it
     /// reports the address it bound.
     fn start(fixture: &str) -> Self {
+        Self::start_in(&workspace_fixture(fixture))
+    }
+
+    /// As [`Server::start`], on any project directory.
+    fn start_in(project: &Path) -> Self {
         let mut process = Command::new(env!("CARGO_BIN_EXE_inka"))
             .arg("serve")
-            .arg(workspace_fixture(fixture))
+            .arg(project)
             .args(["--port", "0"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -40,6 +48,7 @@ impl Server {
 
         let stderr = process.stderr.take().expect("stderr should be piped");
         let mut lines = BufReader::new(stderr).lines();
+        let mut startup = String::new();
         let address = loop {
             let line = lines
                 .next()
@@ -48,9 +57,15 @@ impl Server {
             if let Some(url) = line.strip_prefix("inka serve: http://") {
                 break url.to_owned();
             }
+            startup.push_str(&line);
+            startup.push('\n');
         };
 
-        Self { process, address }
+        Self {
+            process,
+            address,
+            startup,
+        }
     }
 
     /// Sends one request and returns the raw response.
@@ -88,13 +103,20 @@ impl Drop for Server {
     }
 }
 
-/// Node elements in a served argument.
-fn node_count(body: &str) -> usize {
-    let elements: Vec<Value> = serde_json::from_str(body).expect("the body should be JSON");
-    elements
+/// The page a server answers with.
+fn page(server: &Server) -> Value {
+    let (status, body) = server.get("/api/page");
+    assert!(status.contains("200 OK"), "{status}");
+    serde_json::from_str(&body).expect("the page should be JSON")
+}
+
+fn node_ids(page: &Value) -> Vec<&str> {
+    page["nodes"]
+        .as_array()
+        .expect("a page lists its nodes")
         .iter()
-        .filter(|element| element["data"].get("source").is_none())
-        .count()
+        .map(|node| node["id"].as_str().expect("a node has an id"))
+        .collect()
 }
 
 #[test]
@@ -103,30 +125,31 @@ fn serves_the_aocs_argument_to_a_browser() {
     let server = Server::start("aocs");
 
     // Act
-    let (status, body) = server.get("/elements.json");
+    let page = page(&server);
 
-    // Assert: the whole argument, as the viewer expects to read it.
-    assert!(status.contains("200 OK"), "{status}");
-    assert_eq!(node_count(&body), 17);
-    assert!(body.contains("aocs_ok"));
+    // Assert: the whole argument, evaluated, as the viewer expects to read it.
+    assert_eq!(page["kind"], "argument");
+    assert_eq!(node_ids(&page).len(), 17);
+    assert!(node_ids(&page).contains(&"aocs_ok"));
+    assert_eq!(page["total"], 17);
 }
 
 #[test]
 fn serves_the_dogfood_argument_to_a_browser() {
     let server = Server::start("dogfood");
 
-    let (status, body) = server.get("/elements.json");
+    let page = page(&server);
 
-    assert!(status.contains("200 OK"), "{status}");
-    assert!(node_count(&body) > 0);
-    assert!(body.contains("inka_ok"));
+    assert_eq!(page["kind"], "argument");
+    assert!(node_ids(&page).contains(&"inka_ok"));
+    assert_eq!(page["roots"][0], "inka_ok");
 }
 
 #[test]
-fn declares_the_argument_as_json() {
+fn declares_the_page_as_json() {
     let server = Server::start("aocs");
 
-    let response = server.request("GET", "/elements.json");
+    let response = server.request("GET", "/api/page");
 
     assert!(response.contains("content-type: application/json"));
 }
@@ -137,7 +160,7 @@ fn refuses_a_request_that_would_write() {
     // server accepts a method that could change anything.
     let server = Server::start("aocs");
 
-    let response = server.request("POST", "/elements.json");
+    let response = server.request("POST", "/api/page");
 
     assert!(response.contains("405 Method Not Allowed"), "{response}");
 }
@@ -160,20 +183,33 @@ fn serves_the_viewer_or_says_how_to_get_one() {
 }
 
 #[test]
-fn a_project_that_fails_the_check_is_never_served() {
-    // Arrange & Act: a fixture `inka check` rejects. The server must refuse to
-    // come up rather than answer for an argument it cannot stand behind.
-    let output = Command::new(env!("CARGO_BIN_EXE_inka"))
-        .current_dir(local_fixture("no-objective"))
-        .args(["serve", ".", "--port", "0"])
-        .output()
-        .expect("the inka binary should run");
+fn a_project_that_fails_the_check_is_served_as_its_findings() {
+    // Arrange & Act: a fixture `inka check` rejects. The server comes up and
+    // says so on the page, because the page is where the fix will be seen.
+    let server = Server::start_in(&local_fixture("no-objective"));
+    let (status, body) = server.get("/api/page");
 
     // Assert
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("no objective block found"), "{stderr}");
-    assert!(!stderr.contains("inka serve: http://"), "{stderr}");
+    assert!(status.contains("200 OK"), "{status}");
+    let page: Value = serde_json::from_str(&body).expect("the page should be JSON");
+    assert_eq!(page["kind"], "rejected");
+    assert!(
+        page["findings"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("no objective block found")),
+        "{page}"
+    );
+}
+
+#[test]
+fn a_project_that_fails_the_check_is_reported_to_the_operator_at_startup() {
+    let server = Server::start_in(&local_fixture("no-objective"));
+
+    assert!(
+        server.startup.contains("no objective block found"),
+        "{}",
+        server.startup
+    );
 }
 
 #[test]

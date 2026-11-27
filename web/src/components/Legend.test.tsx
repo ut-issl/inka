@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 
-import { DISCHARGE_MODES } from '../model/elements'
+import { DISCHARGE_MODES } from '../model/modes'
 import { Legend } from './Legend'
 
 describe('Legend', () => {

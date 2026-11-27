@@ -54,7 +54,7 @@ export function NodeList({ view, focus, sets, colors, onFocusNode, onFocusNamesp
           >
             {group.name}
           </button>
-          {group.nodeIds.map((id) => {
+          {group.nodes.map((id) => {
             const node = nodeOf(view, id)
             return (
               <button

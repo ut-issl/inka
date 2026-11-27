@@ -30,6 +30,7 @@ export function DetailPanel({ view, focus, sets }: Props) {
 
 function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
   const node = nodeOf(view, id)
+  const local = node.local
   return (
     <section className="detail">
       <h2 className="detail__title">{node.id}</h2>
@@ -41,21 +42,21 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
           </span>
         ))}
       </p>
-      <Comment text={node.comments.block} />
+      <Comment text={local.comment} />
 
-      {node.evidence ? (
+      {local.evidence ? (
         <p className="detail__row">
-          <span className="detail__label">Verified by</span> {node.evidence.kind}:{' '}
-          <code>{node.evidence.target}</code>
-          <Comment text={node.comments[node.evidence.kind]} />
+          <span className="detail__label">Verified by</span> {local.evidence.kind}:{' '}
+          <code>{local.evidence.target}</code>
+          <Comment text={local.evidence.comment} />
         </p>
       ) : null}
 
-      <ChildrenRow view={view} node={node} />
+      <ChildrenRow node={node} />
       <DeadlineRows node={node} />
 
       <p className="detail__label">Contract</p>
-      <p className="detail__contract">{node.description}</p>
+      <p className="detail__contract">{local.description}</p>
     </section>
   )
 }
@@ -64,17 +65,18 @@ function NodeDetail({ view, id }: { view: ArgumentView; id: string }) {
  * The children, each with the comment on its `children:` entry — the same
  * comment hovering the edge reveals, readable here without a pointer.
  */
-function ChildrenRow({ view, node }: { view: ArgumentView; node: ArgumentNode }) {
-  if (node.children.length === 0) return null
+function ChildrenRow({ node }: { node: ArgumentNode }) {
+  const children = node.local.children
+  if (!children) return null
   return (
     <div className="detail__row">
       <span className="detail__label">Children</span>
-      <Comment text={node.comments.children} />
+      <Comment text={children.comment} />
       <ul className="detail__children">
-        {node.children.map((child) => (
-          <li key={child}>
-            {child}
-            <Comment text={entryComment(view, node.id, child)} />
+        {children.entries.map((child) => (
+          <li key={child.id}>
+            {child.id}
+            <Comment text={child.comment} />
           </li>
         ))}
       </ul>
@@ -84,33 +86,30 @@ function ChildrenRow({ view, node }: { view: ArgumentView; node: ArgumentNode })
 
 /** `until:` and `promote:` on rows of their own, each under its comment. */
 function DeadlineRows({ node }: { node: ArgumentNode }) {
-  if (!node.deadline) return null
+  const deadline = node.local.deadline
+  if (!deadline) return null
   return (
     <>
       <p className="detail__row detail__row--deadline">
-        <span className="detail__label">Until</span> {node.deadline.until}
-        <Comment text={node.comments.until} />
+        <span className="detail__label">Until</span> {deadline.until}
+        <Comment text={deadline.until_comment} />
       </p>
-      {node.deadline.promote ? (
+      {deadline.promote ? (
         <p className="detail__row detail__row--deadline">
-          <span className="detail__label">Promote to</span> {node.deadline.promote}
-          <Comment text={node.comments.promote} />
+          <span className="detail__label">Promote to</span> {deadline.promote.mode}
+          <Comment text={deadline.promote.comment} />
         </p>
       ) : null}
     </>
   )
 }
 
-function entryComment(view: ArgumentView, parent: string, child: string): string | undefined {
-  return view.edges.find((edge) => edge.source === parent && edge.target === child)?.comment
-}
-
 /**
  * A comment attached to the element it follows, or nothing. Set apart from
  * the row's own text for assistive technology as well as visually.
  */
-function Comment({ text }: { text: string | undefined }) {
-  if (text === undefined) return null
+function Comment({ text }: { text: string | null }) {
+  if (text === null) return null
   return (
     <span className="detail__comment">
       <span className="visually-hidden">Comment: </span>

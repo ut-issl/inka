@@ -1,40 +1,36 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 
-import { edge, node } from '../test/factory'
+import { edge, node, view as buildView } from '../test/factory'
 import { resolveFocus, WHOLE_VIEW, type Focus } from '../model/focus'
-import { parseElements } from '../model/elements'
-import { buildView } from '../model/view'
 import { DetailPanel } from './DetailPanel'
 
-const view = buildView(
-  parseElements([
-    node('a', {
-      mode: 'objective',
-      namespace: 'top',
-      root: true,
-      description: 'the objective',
-      comments: { children: 'one per branch' },
-    }),
-    node('b', {
-      mode: 'bind',
-      namespace: 'mid',
-      description: 'the contract text',
-      tags: ['safety'],
-      evidence: { kind: 'veriq', target: 'pkg.verify_thing' },
-      deadline: { until: 'FM', promote: 'bind' },
-      comments: {
-        block: 'shared with the thermal argument',
-        veriq: 'the shipped check',
-        until: 'revisit at CDR\nonce the model lands',
-        promote: 'once the rig exists',
-      },
-    }),
-    node('c', { mode: 'fiat', namespace: 'mid' }),
-    edge('a', 'b', 'why b is listed'),
-    edge('a', 'c'),
-  ]),
-)
+const view = buildView([
+  node('a', {
+    mode: 'objective',
+    namespace: 'top',
+    root: true,
+    description: 'the objective',
+    comments: { children: 'one per branch' },
+  }),
+  node('b', {
+    mode: 'bind',
+    namespace: 'mid',
+    description: 'the contract text',
+    tags: ['safety'],
+    evidence: { kind: 'veriq', target: 'pkg.verify_thing' },
+    deadline: { until: 'FM', promote: 'bind' },
+    comments: {
+      block: 'shared with the thermal argument',
+      veriq: 'the shipped check',
+      until: 'revisit at CDR\nonce the model lands',
+      promote: 'once the rig exists',
+    },
+  }),
+  node('c', { mode: 'fiat', namespace: 'mid' }),
+  edge('a', 'b', 'why b is listed'),
+  edge('a', 'c'),
+])
 
 function renderPanel(focus: Focus) {
   render(<DetailPanel view={view} focus={focus} sets={resolveFocus(view, focus)} />)

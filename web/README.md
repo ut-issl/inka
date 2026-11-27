@@ -7,93 +7,79 @@ there is decided here, and nowhere else.
 
 Vite + React + TypeScript, with cytoscape and dagre vendored into the bundle.
 `inka serve` ([#43](https://github.com/ut-issl/inka/issues/43)) serves the built
-files and the argument JSON. Nothing here parses or mutates the argument, and no
+files and the page that describes the argument. Nothing here parses or mutates the argument, and no
 control in the UI reaches a write of any kind.
 
 ## Getting started
 
+The bundle is always developed against a real `inka serve`: the dev server forwards `/api` to it and answers
+nothing about the argument itself. Start one from the repository root, then the dev server:
+
 ```sh
+# In one terminal, from the repository root:
+cargo run -p inka-cli -- serve tests/fixtures/aocs   # http://127.0.0.1:8080
+
+# In another, from web/ — as every npm command below:
 npm install
-npm run dev                      # http://localhost:5173, on the aocs fixture
-INKA_FIXTURE=dogfood npm run dev # the dogfood fixture instead
+npm run dev                      # http://localhost:5173
+INKA_SERVE=http://127.0.0.1:9000 npm run dev   # when `inka serve` listens elsewhere
 npm test                         # unit and component tests
 npm run coverage
 npm run e2e                      # browser tests (needs `npx playwright install chromium`)
 npm run build                    # static bundle in ../crate/inka-cli/web-dist/, embedded by `inka`
 ```
 
-`npm run dev` needs no Rust side: the dev server answers `/elements.json` from
-`fixtures/<project>.elements.json`.
+Edit the project `inka serve` points at and reload the page: the server reads it again on every request.
+`npm run e2e` starts its own `inka serve` on the aocs fixture and its own dev server, each on a port of its
+own, and never reuses one that is already running.
 
 ## The interface with inka
 
-The viewer consumes one payload: the cytoscape `elements` array that
-`inka export` ([#49](https://github.com/ut-issl/inka/issues/49)) writes, built
-from the shared view model ([#48](https://github.com/ut-issl/inka/issues/48)).
-[`src/model/elements.ts`](src/model/elements.ts) is its executable
-specification — the schema there is what the viewer accepts, and every payload
-is validated against it before anything is drawn.
+The viewer consumes one payload: the **page** `inka serve` answers `GET ./api/page` with. Its definition is in
+Rust — `crate/inka-core/src/wire.rs` — and nowhere else. A page is either the argument or, for a project that
+fails `inka check`, the findings that rejected it:
 
 ```jsonc
-[
-  { "data": { "id": "detumble_ok", "mode": "structure", "namespace": "safety",
-              "description": "…", "tags": ["safety"], "root": false } },
-  { "data": { "id": "detumble_convergence_ok", "mode": "bind", "namespace": "safety",
-              "description": "…", "tags": [], "root": false,
-              "evidence": { "kind": "veriq", "target": "aocs.verify_detumble" } } },
-  { "data": { "id": "mtq_authority_ok", "mode": "fiat", "namespace": "safety",
-              "description": "…", "tags": [], "root": false,
-              "deadline": { "until": "FM", "promote": "bind" },
-              "comments": { "until": "…" } } },
-  { "data": { "id": "detumble_ok->mtq_authority_ok",
-              "source": "detumble_ok", "target": "mtq_authority_ok",
-              "comment": "…" } }
-]
+{ "kind": "argument",
+  "established": 1, "total": 17,
+  "nodes": [
+    { "id": "detumble_ok", "mode": "structure", "namespace": "safety", "tags": ["safety"], "root": false,
+      "parents": ["aocs_ok"], "children": ["detumble_convergence_ok", "mtq_authority_ok"],
+      "below": 3, "blamed_below": 3,
+      "status": { "state": "blamed", "reasons": [{ "cause": "missing_approval" }] },
+      "review": { "state": "unapproved" },
+      "view_hash": "sha256:…",
+      "local": { "description": "…", "children": { "comment": null, "entries": [ … ] }, … } }
+  ],
+  "roots": ["aocs_ok"],
+  "order": ["aocs_ok", "detumble_ok", … ],
+  "namespaces": [{ "name": "objective", "nodes": ["aocs_ok"] }, … ],
+  "queue": { "walk": [ … ], "groups": [{ "state": "unapproved", "targets": [ … ] }] },
+  "warnings": [] }
 ```
 
-Two properties of the array are load-bearing, and hold by construction on the
-Rust side:
-
-- node elements come in **sorted block-ID order**. Every deterministic ordering
-  in the UI — the topological order, the node list's groups, the namespace
-  palette — derives from it, so the same project always renders the same graph;
-- edge elements come in each parent's **declaration order**.
-
-There is no `label` field: a node's label *is* its id, so the graph reads
-`data(id)` and that invariant cannot drift. Descriptions arrive interpolated;
-no `{$var}` reaches the viewer.
-
-### Delivery
-
-The viewer accepts the payload either way and prefers the first; `inka serve`
-uses the second, so the served bundle stays byte-for-byte what was built:
-
-1. **injected** into the served HTML, saving a round trip:
-   `<script type="application/json" id="inka-elements">[ … ]</script>`;
-2. **fetched** from `./elements.json`, relative to the page. Override the path
-   with `VITE_INKA_ELEMENTS` at build time.
-
-### Fixtures
-
-`fixtures/*.elements.json` are the two example projects as `inka export` writes
-them, checked in so the UI runs and is tested without the Rust side. They are
-generated, never edited — regenerate them from the repository root:
-
-```sh
-cargo run -p inka-cli -- export tests/fixtures/aocs > web/fixtures/aocs.elements.json
-cargo run -p inka-cli -- export tests/fixtures/dogfood > web/fixtures/dogfood.elements.json
+```jsonc
+{ "kind": "rejected",
+  "findings": [{ "severity": "error", "message": "…",
+                 "location": { "path": "argument/a.inka", "line": 3, "column": 5 } }] }
 ```
 
-`src/model/fixtures.test.ts` holds them to the contract, so drift between the
-exporter and this bundle fails the test suite rather than the browser.
+Everything that carries meaning arrives worked out: each node's parents, the parents-first `order`, the
+namespace groups, the verdict of `inka eval`, the review queue, and each node's local view. The bundle indexes
+and draws; it derives none of it. Descriptions arrive interpolated; no `{$var}` reaches the viewer.
 
-## Generated from Rust
+The page is fetched on load and never cached or embedded in the served HTML: it is a reading of the repository
+at the time of the request.
 
-The data the Web UI is moving to has one definition, in Rust: `crate/inka-core/src/wire.rs`. Two things here
-are generated from it and never edited:
+### Generated from Rust
 
-- `src/generated/*.ts` — the TypeScript types of that data, one file per Rust type;
-- `fixtures/*.page.json` — the page the server would send for each of the two example projects.
+Two things here are generated from the Rust definition and never edited:
+
+- `src/generated/*.ts` — the TypeScript types of the page, one file per Rust type. The bundle is embedded in
+  the `inka` that answers it, so the two always match, and nothing in `src/` re-states or re-validates the
+  shape.
+- `fixtures/*.page.json` — the page for each of the two example projects, which the unit tests read.
+  `src/model/fixtures.test.ts` holds them to what the viewer relies on.
 
 `cargo test -p inka-core` fails when either is out of date. Regenerate both from the repository root:
 
@@ -101,17 +87,16 @@ are generated from it and never edited:
 INKA_UPDATE_GENERATED=1 cargo test -p inka-core
 ```
 
-The viewer does not read these yet; it still consumes the `inka export` payload described above.
-
 ## Layout
 
 ```text
 src/
+  generated/  the page's types, generated from Rust
   model/      the argument, independent of any rendering
-    elements  the `inka export` contract and its validation
-    view      the shared view: nodes, neighbours, topological order, groups
+    view      the shared view: the page's nodes by id, and its entries as edges
+    modes     the order the discharge modes are listed in
     focus     focus targets and the sets each surface derives from them
-    source    where the payload comes from (injected or fetched)
+    source    fetching the page
   graph/      the graph pane
     layout    pure layout arithmetic — ranks, ego rows, aspect matching
     runLayout the cytoscape adapter feeding those passes
@@ -121,10 +106,10 @@ src/
 e2e/          the same invariants, in a real browser
 ```
 
-The invariants worth stating in code live in two places: `model/` decides what
-the argument *is* and in what order it is presented, and `graph/layout.ts`
-decides where things go. Neither knows about React or cytoscape, so both are
-tested directly.
+What the argument *is* and in what order it is presented is decided in Rust and arrives in the page.
+The invariants worth stating in code here live in two places: `model/focus.ts` decides what a focus
+shows, and `graph/layout.ts` decides where things go. Neither knows about React or cytoscape, so both
+are tested directly.
 
 ## How the invariants are covered
 
@@ -136,8 +121,8 @@ covers it instead; those four files are why the overall Vitest number is ~66 %.
 
 | Invariant | Where it lives | Covered by |
 | --- | --- | --- |
-| Deterministic identity and ordering | `model/view.ts` | `view.test.ts`, `fixtures.test.ts` |
-| One node per block; multi-parent nodes shown through edges | `model/view.ts` | `view.test.ts` |
+| Deterministic identity and ordering | `inka-core` `wire.rs` | its Rust tests; `fixtures.test.ts` |
+| One node per block; multi-parent nodes shown through edges | `model/view.ts` | `view.test.ts`, `fixtures.test.ts` |
 | Focus targets: one node, or a namespace with its one-hop neighbours | `model/focus.ts` | `focus.test.ts` |
 | Same-namespace nodes adjacent, one namespace order across ranks | `graph/layout.ts` | `layout.test.ts` |
 | Aspect ratio matches the window, short axis only | `graph/layout.ts` | `layout.test.ts`, `viewer.spec.ts` |
