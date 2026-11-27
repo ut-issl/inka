@@ -5,6 +5,45 @@ Each `## v<version>` section becomes the body of its GitHub Release, and `CHANGE
 GitHub Releases keep line breaks, so write one sentence per line.
 See [RELEASING.md](RELEASING.md) for how a release is cut.
 
+## v0.0.8
+
+This release brings `inka review` to the browser and redraws the graph as cards.
+`inka serve` now hosts a Web UI with two surfaces: one that walks the review queue, and one that explores the whole argument.
+
+### Breaking changes
+
+- `inka serve` no longer answers `GET /elements.json`; `inka export` is the way to get the cytoscape `elements` JSON.
+- `inka serve` starts on a project that fails `inka check` and shows its findings in the page, where it used to exit with an error.
+
+### Web UI (`inka serve`)
+
+- The review surface walks the queue `inka review --list` prints, one target at a time.
+- Each target is shown as its local view: its description, evidence reference, direct children and deadline, each with the comments attached.
+- Descriptions are rendered as Markdown, and the source text the hash is computed from is one click away.
+- `inka serve --as <approver>` records approve and decline from the browser, as the same record `inka review` writes.
+- A recording server listens on a loopback address only and accepts a decision only from its own pages.
+- A decision is recorded only if the target still has the content that was on screen.
+- The graph shows every node as a card with its mode, id, status and description.
+- The graph opens with the objectives and their direct children, and each card expands or collapses on its own.
+- A collapsed card says how many nodes lie below it and how many of them are blamed.
+- Clicking a card opens its local view beside the graph, and the panes can be resized by dragging.
+- A sidebar on both surfaces lists the review queue and every node, and searches them by id and description.
+- Hovering a reference to a node previews it.
+- Every node shows the verdict `inka eval` gives it, and the count of established nodes is always in sight.
+- Nodes that no objective reaches are drawn as roots of their own and marked as unreachable.
+- The page reads the project again on every load, so an edit or a new approval shows without restarting the server.
+
+### Command line (`inka`)
+
+- `inka review` lists and walks its targets from the leaves up, so a subtree is finished before the claim it supports.
+
+### Development
+
+- The data the Web UI receives is defined in Rust (`inka_core::wire`), and its TypeScript types are generated from it.
+- The Web UI is developed against a running `inka serve`; the Vite dev server no longer answers from fixtures.
+- `scripts/release.py prepare` stops before the commit, so the release notes are written before the pull request opens.
+- CodeRabbit reviews a pull request when it is opened, not on every push.
+
 ## v0.0.7
 
 This release makes the output of `inka review` easier to read, with colour and a clearer layout.
