@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
 
+import type { NodeData } from '../generated/NodeData'
 import { edge, node, snapshot } from '../test/factory'
 import { LocalView } from './LocalView'
 
@@ -114,6 +115,22 @@ describe('LocalView', () => {
     expect(within(zeta!).getByText('no imported test evidence provides `tests/zeta.rs`')).toBeInTheDocument()
     expect(within(alpha!).getByText('not established')).toBeInTheDocument()
     expect(within(alpha!).getByText('2 nodes below it are blamed')).toBeInTheDocument()
+  })
+
+  test('says who declined a structure child and not why, and quotes the comment on any other', () => {
+    const declined: NodeData['status'] = {
+      state: 'blamed',
+      reasons: [{ cause: 'declined', by: 'sato', comment: 'the split is wrong' }],
+    }
+    const nodes = new Map(page.nodes.map((candidate) => [candidate.id, candidate]))
+    nodes.set('zeta', { ...nodes.get('zeta')!, mode: 'structure', status: declined })
+    nodes.set('alpha', { ...nodes.get('alpha')!, mode: 'fiat', status: declined })
+
+    render(<LocalView node={parent} nodes={nodes} />)
+
+    const [zeta, alpha] = within(screen.getByRole('region', { name: 'Contract content' })).getAllByRole('listitem')
+    expect(within(zeta!).getByText('declined by sato')).toBeInTheDocument()
+    expect(within(alpha!).getByText('declined by sato: the split is wrong')).toBeInTheDocument()
   })
 
   test('gives an established child its status and nothing more', () => {

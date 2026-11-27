@@ -43,13 +43,19 @@ export function statusDetail(status: Status): string[] {
  * names it, as `inka review` words it: each reason it is blamed, or how many
  * of the nodes below it are. Which nodes those are is read in the child's own
  * local view.
+ *
+ * A declined structure says who declined it and not why: the comment argues
+ * about how the structure is built from its own children, which the parent's
+ * local view does not show. It is read in the structure's own local view.
  */
 export function childStatusDetail(child: NodeData): string[] {
   switch (child.status.state) {
     case 'established':
       return []
     case 'blamed':
-      return child.status.reasons.map(blameReason)
+      return child.status.reasons.map((reason) =>
+        reason.cause === 'declined' && child.mode === 'structure' ? `declined by ${reason.by}` : blameReason(reason),
+      )
     case 'unestablished':
       return [
         child.blamed_below === 1

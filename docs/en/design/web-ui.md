@@ -53,6 +53,9 @@ The local view is the unit both surfaces present a node in. It is what an approv
   child is never offered at all, so without this a reviewer could not tell why a parent turned up before the
   claims under it. `inka review` writes the same in the child's frame. The status is not contract content — no
   approval binds to it — and it is set apart from the child's description.
+- A declined child that is a structure says who declined it and not why. The comment on such a decline argues
+  about how the structure is built from its own children, which the parent's local view does not show; quoted
+  there it would read as a remark on the parent's content. It is read in the structure's own local view.
 - Everything that enters the view hash is on screen without a hover, a click or a scroll inside a nested box:
   no contract content is reachable only through an interaction. The one exception is the exact spacing of a
   description — the whitespace and line breaks that rendering it as Markdown folds — which is read in the
