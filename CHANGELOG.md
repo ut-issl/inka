@@ -8,17 +8,19 @@ See [RELEASING.md](RELEASING.md) for how a release is cut.
 ## v0.0.8
 
 This release brings `inka review` to the browser and redraws the graph as cards.
-`inka serve` now hosts a Web UI with two surfaces: one that walks the review queue, and one that explores the whole argument.
+`inka serve` now hosts a Web UI with two surfaces: one walks the review queue, the other explores the whole argument.
 
 ### Breaking changes
 
 - `inka serve` no longer answers `GET /elements.json`; `inka export` is the way to get the cytoscape `elements` JSON.
-- `inka serve` starts on a project that fails `inka check` and shows its findings in the page, where it used to exit with an error.
+- `inka serve` starts on a project that fails `inka check` and shows its findings in the page.
+  It used to exit with an error.
 
 ### Web UI (`inka serve`)
 
 - The review surface walks the queue `inka review --list` prints, one target at a time.
-- Each target is shown as its local view: its description, evidence reference, direct children and deadline, each with the comments attached.
+- Each target is shown as its local view: its description, evidence reference, direct children and deadline.
+- Every comment is shown with what it is attached to.
 - Descriptions are rendered as Markdown, and the source text the hash is computed from is one click away.
 - `inka serve --as <approver>` records approve and decline from the browser, as the same record `inka review` writes.
 - A recording server listens on a loopback address only and accepts a decision only from its own pages.
