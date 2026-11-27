@@ -8,8 +8,9 @@
  * blamed, so nothing is hidden silently and what needs attention can be found
  * without expanding everything.
  *
- * Selecting a card opens the node's local view beside the graph. A card
- * records nothing: it offers no decision.
+ * Selecting a card — a click anywhere on it, or its id activated from the
+ * keyboard — opens the node's local view beside the graph. A card records
+ * nothing: it offers no decision.
  */
 
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
@@ -27,12 +28,13 @@ export interface CardData extends Record<string, unknown> {
   /** Whether this node's local view is open beside the graph. */
   readonly selected: boolean
   readonly onToggle: (id: string) => void
+  readonly onSelect: (id: string) => void
 }
 
 export type CardNode = Node<CardData, 'card'>
 
 export function Card({ data }: NodeProps<CardNode>) {
-  const { node, expanded, unreachable, selected, onToggle } = data
+  const { node, expanded, unreachable, selected, onToggle, onSelect } = data
   const hasChildren = node.children.length > 0
   return (
     <div
@@ -46,7 +48,18 @@ export function Card({ data }: NodeProps<CardNode>) {
         <StatusBadge status={node.status} />
       </header>
       <p className="card__name">
-        <span className="card__id">{neutralize(node.id)}</span>
+        {/* A real control, so the keyboard opens the local view as a click does. */}
+        <button
+          type="button"
+          className="card__open nodrag nopan"
+          aria-label={`Open the local view of ${node.id}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelect(node.id)
+          }}
+        >
+          <span className="card__id">{neutralize(node.id)}</span>
+        </button>
         <span className="card__namespace">{neutralize(node.namespace)}</span>
       </p>
       {unreachable ? <p className="card__unreachable">unreachable from any objective</p> : null}

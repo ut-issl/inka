@@ -5,3 +5,13 @@ import '@testing-library/jest-dom/vitest'
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
+
+// Nor does it observe sizes. The resizable panes ask for a `ResizeObserver`;
+// one that never reports is true to an environment where nothing has a size.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+}

@@ -210,6 +210,7 @@ test('on a narrow window the toolbar wraps instead of running off the surface', 
     .evaluate((bar) => bar.scrollWidth - bar.clientWidth)
 
   expect(overflow).toBeLessThanOrEqual(1)
+})
 
 test('selecting a card opens its local view beside the graph, which stays in place', async ({ page }) => {
   await open(page)
@@ -240,7 +241,18 @@ test('Esc and a tap on the empty background both clear the selection', async ({ 
   await card(page, 'safe_mode_ok').locator('.card__id').click()
   await expect(panel).toBeVisible()
   await settled(page)
-  await page.locator('.react-flow__pane').click({ position: { x: 12, y: 12 } })
+  // A point of the background that nothing is drawn on.
+  const empty = await page.locator('.react-flow').evaluate((canvas) => {
+    const box = canvas.getBoundingClientRect()
+    for (let x = box.left + 8; x < box.right; x += 24) {
+      for (let y = box.top + 8; y < box.bottom; y += 24) {
+        if (document.elementFromPoint(x, y)?.classList.contains('react-flow__pane')) return { x, y }
+      }
+    }
+    return null
+  })
+  expect(empty).not.toBeNull()
+  await page.mouse.click(empty!.x, empty!.y)
   await expect(panel).toHaveCount(0)
 })
 
@@ -319,4 +331,62 @@ test('the sidebar is narrowed and widened the same way, by pointer or by keyboar
   for (let press = 0; press < 5; press += 1) await page.keyboard.press('ArrowRight')
 
   expect(Math.round((await sidebar.boundingBox())!.width)).toBeGreaterThan(before)
+})
+
+test('a card is opened from the keyboard as it is by a click', async ({ page }) => {
+  await open(page)
+
+  await card(page, 'safe_mode_ok').getByRole('button', { name: 'Open the local view of safe_mode_ok' }).focus()
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByRole('region', { name: 'Selected node' }).getByRole('heading', { level: 2 })).toHaveText(
+    'structure:safe_mode_ok',
+  )
+  // The card's own control keeps working from the keyboard too.
+  await card(page, 'safe_mode_ok').locator('.card__toggle').focus()
+  await page.keyboard.press('Enter')
+  await expect(card(page, 'safe_mode_ok').locator('.card__toggle')).toHaveAttribute('aria-expanded', 'true')
+})
+
+/** Whether the card lies wholly inside the canvas, where it can be seen. */
+async function inView(page: Page, id: string): Promise<boolean> {
+  const canvas = (await page.locator('.react-flow').boundingBox())!
+  const box = (await card(page, id).boundingBox())!
+  return (
+    box.x >= canvas.x &&
+    box.y >= canvas.y &&
+    box.x + box.width <= canvas.x + canvas.width &&
+    box.y + box.height <= canvas.y + canvas.height
+  )
+}
+
+test('choosing a node that is already drawn but out of sight brings it into view', async ({ page }) => {
+  await open(page)
+  await page.getByRole('button', { name: 'Expand all' }).click()
+  await settled(page)
+  // Zoom in on the top of the graph, leaving the leaves outside the window.
+  await card(page, 'aocs_ok').locator('.card__id').click()
+  await settled(page)
+  expect(await inView(page, 'unloading_plan_ok')).toBe(false)
+
+  await page.getByRole('navigation', { name: 'All nodes' }).getByRole('link', { name: /unloading_plan_ok/ }).click()
+  await settled(page)
+
+  await expect(card(page, 'unloading_plan_ok')).toHaveAttribute('aria-current', 'true')
+  expect(await inView(page, 'unloading_plan_ok')).toBe(true)
+})
+
+test('the selected card stays in view when the local view is widened', async ({ page }) => {
+  await open(page)
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  await settled(page)
+
+  const divider = (await page.getByRole('separator', { name: 'Resize the local view' }).boundingBox())!
+  await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(divider.x - 320, divider.y + divider.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await settled(page)
+
+  expect(await inView(page, 'safe_mode_ok')).toBe(true)
 })

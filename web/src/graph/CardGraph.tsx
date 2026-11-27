@@ -19,7 +19,7 @@ import {
   useReactFlow,
   type Edge,
 } from '@xyflow/react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import '@xyflow/react/dist/style.css'
 
@@ -41,6 +41,8 @@ interface Props {
   readonly onSelect: (id: string) => void
   /** A tap on the empty background. */
   readonly onClear: () => void
+  /** Changes whenever the room the canvas has changes, so the view is framed again. */
+  readonly frame?: unknown
 }
 
 export function CardGraph(props: Props) {
@@ -51,7 +53,7 @@ export function CardGraph(props: Props) {
   )
 }
 
-function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, onSelect, onClear }: Props) {
+function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, onSelect, onClear, frame }: Props) {
   const flow = useReactFlow<CardNode>()
   const [cards, setCards, onCardsChange] = useNodesState<CardNode>([])
   const measured = useNodesInitialized()
@@ -83,12 +85,13 @@ function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, o
               unreachable: unreachable.has(id),
               selected: id === selectedId,
               onToggle,
+              onSelect,
             },
           },
         ]
       })
     })
-  }, [nodes, visible, expanded, unreachable, selectedId, onToggle, setCards])
+  }, [nodes, visible, expanded, unreachable, selectedId, onToggle, onSelect, setCards])
 
   const edges = useMemo<Edge[]>(() => {
     const shown = new Set(visible)
@@ -113,6 +116,30 @@ function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, o
         }))
     })
   }, [nodes, visible, expanded])
+
+  /**
+   * Frames the view: the whole graph, or, with a node selected, that node
+   * and what surrounds it.
+   */
+  const reframe = useCallback(() => {
+    const focus = selectedRef.current
+    if (focus !== undefined && flow.getNode(focus)) {
+      void flow.fitView({ nodes: [{ id: focus }], padding: 3.5, duration: 200, maxZoom: 1 })
+    } else {
+      void flow.fitView({ padding: 0.1, duration: 200, maxZoom: 1 })
+    }
+  }, [flow])
+
+  // A selection made elsewhere — the sidebar, a link in a local view — may be
+  // of a card that is already placed but out of sight, and the room the
+  // canvas has may change under it. Neither moves a card, so no layout runs;
+  // the view is framed again all the same. A card still waiting for its
+  // layout is framed when that layout lands.
+  useEffect(() => {
+    if (selectedId === undefined) return
+    const card = flow.getNode(selectedId)
+    if (card && card.style?.opacity !== 0) reframe()
+  }, [selectedId, frame, flow, reframe])
 
   // Once every card on the canvas has been measured, place them.
   useEffect(() => {
@@ -142,16 +169,8 @@ function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, o
           style: { opacity: 1 },
         })),
       )
-      // Once the new positions are on the canvas: the whole graph, or, with a
-      // node selected, that node and what surrounds it.
-      window.setTimeout(() => {
-        const focus = selectedRef.current
-        if (focus !== undefined && positions.has(focus)) {
-          void flow.fitView({ nodes: [{ id: focus }], padding: 3.5, duration: 200, maxZoom: 1 })
-        } else {
-          void flow.fitView({ padding: 0.1, duration: 200, maxZoom: 1 })
-        }
-      }, 50)
+      // Once the new positions are on the canvas.
+      window.setTimeout(reframe, 50)
     })
     return () => {
       live = false
@@ -168,6 +187,7 @@ function Canvas({ nodes, visible, expanded, unreachable, selectedId, onToggle, o
       onNodeClick={(_event, card) => onSelect(card.id)}
       onPaneClick={onClear}
       nodesDraggable={false}
+      nodesFocusable={false}
       nodesConnectable={false}
       edgesFocusable={false}
       minZoom={0.1}

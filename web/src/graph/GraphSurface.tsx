@@ -16,7 +16,7 @@
  * give each the room the reader wants; the widths are remembered. Resizing
  * and remembering are the panel library's.
  *
- * Nothing here records anything; a queued node can be opened in the review
+ * Nothing here records anything; any node can be opened in the review
  * surface, which is where decisions are taken.
  */
 
@@ -62,6 +62,8 @@ export function GraphSurface({ snapshot, nodes }: Props) {
   // The widths are kept per arrangement: with and without a local view open.
   const panelIds = selected ? ['sidebar', 'graph', 'local'] : ['sidebar', 'graph']
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: 'inka-graph', panelIds })
+  // Counts the times the panes were resized, so the canvas frames its view again.
+  const [resized, setResized] = useState(0)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -76,7 +78,10 @@ export function GraphSurface({ snapshot, nodes }: Props) {
       className="graph-surface"
       orientation="horizontal"
       defaultLayout={defaultLayout}
-      onLayoutChanged={onLayoutChanged}
+      onLayoutChanged={(layout, meta) => {
+        onLayoutChanged(layout, meta)
+        setResized((count) => count + 1)
+      }}
     >
       <Panel id="sidebar" className="graph-surface__side" defaultSize={300} minSize={180}>
         <Sidebar snapshot={snapshot} nodes={nodes} surface="graph" currentId={selectedId} />
@@ -114,6 +119,7 @@ export function GraphSurface({ snapshot, nodes }: Props) {
           onToggle={toggle}
           onSelect={select}
           onClear={clear}
+          frame={resized}
         />
       </Panel>
       {selected ? (
@@ -126,11 +132,9 @@ export function GraphSurface({ snapshot, nodes }: Props) {
             reference={(id) => <NodeReference node={nodes.get(id)} id={id} to={graphPath(id)} />}
             actions={
               <>
-                {selected.review ? (
-                  <Link className="button" to={reviewPath(selected.id)}>
-                    Open in review
-                  </Link>
-                ) : null}
+                <Link className="button" to={reviewPath(selected.id)}>
+                  Open in review
+                </Link>
                 <button type="button" className="button" onClick={clear}>
                   Close
                 </button>
