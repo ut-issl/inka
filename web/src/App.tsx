@@ -58,7 +58,7 @@ export function App() {
               />
             }
           />
-          <Route path="/graph" element={<GraphSurface snapshot={state.snapshot} nodes={state.view.nodes} />} />
+          <Route path="/graph/:id?" element={<GraphSurface snapshot={state.snapshot} nodes={state.view.nodes} />} />
           <Route path="*" element={<Navigate to="/review" replace />} />
         </Routes>
       </div>

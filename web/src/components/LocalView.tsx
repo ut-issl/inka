@@ -11,6 +11,9 @@
  * description only, and reading below it means opening that child's own local
  * view. Everything here is on screen without a hover or a click; the one
  * exception is the exact spacing of a description, read in its source.
+ *
+ * Below the contract content, and set apart from it, comes what only helps
+ * to move around: the node's parents, and whatever the surface adds.
  */
 
 import type { ReactNode } from 'react'
@@ -25,9 +28,11 @@ interface Props {
   readonly node: NodeData
   /** Draws a reference to another node; a plain id unless the surface links it. */
   readonly reference?: (id: string) => ReactNode
+  /** Further navigation the surface offers from this node, set apart with the parents. */
+  readonly actions?: ReactNode
 }
 
-export function LocalView({ node, reference = plainReference }: Props) {
+export function LocalView({ node, reference = plainReference, actions }: Props) {
   const local = node.local
   const review = node.review
   return (
@@ -93,6 +98,25 @@ export function LocalView({ node, reference = plainReference }: Props) {
           </>
         ) : null}
       </section>
+
+      {/* Supplementary: not part of what an approval binds to, and drawn apart from it. */}
+      {node.parents.length > 0 || actions ? (
+        <aside className="local__context" aria-label="Supplementary navigation">
+          {node.parents.length > 0 ? (
+            <p className="local__parents">
+              <span className="local__context-label">
+                {node.parents.length === 1 ? 'Parent' : 'Parents'} (not part of this local view)
+              </span>
+              {node.parents.map((parent) => (
+                <span key={parent} className="local__parent">
+                  {reference(parent)}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {actions ? <p className="local__actions">{actions}</p> : null}
+        </aside>
+      ) : null}
     </article>
   )
 }

@@ -33,19 +33,20 @@ test('approving records the decision: the target leaves the queue and the walk m
   await page.goto('/')
   const target = (await page.getByRole('heading', { level: 2 }).textContent()) ?? ''
   const id = target.split(':')[1] ?? ''
-  const before = await page.locator('.queue__target').count()
+  const queue = page.getByRole('navigation', { name: 'Review queue' })
+  const before = await queue.locator('.queue__target').count()
 
   await page.getByRole('button', { name: 'Approve' }).click()
 
   await expect(page.getByRole('status')).toHaveText(`Recorded approve of ${target}.`)
   await expect(page.getByRole('heading', { level: 2 })).not.toHaveText(target)
-  await expect(page.locator('.queue__target')).toHaveCount(before - 1)
-  await expect(page.locator('.queue__id', { hasText: new RegExp(`^${id}$`) })).toHaveCount(0)
+  await expect(queue.locator('.queue__target')).toHaveCount(before - 1)
+  await expect(queue.locator('.queue__id', { hasText: new RegExp(`^${id}$`) })).toHaveCount(0)
 
   // The record is in the project, not in the page: a fresh load agrees, and
   // the approved leaf now counts as established.
   await page.reload()
-  await expect(page.locator('.queue__target')).toHaveCount(before - 1)
+  await expect(queue.locator('.queue__target')).toHaveCount(before - 1)
   await page.goto(`/#/review/${id}`)
   await expect(page.locator('.local__header')).toContainText('established')
   await expect(page.getByRole('form', { name: 'Decision' })).toHaveCount(0)

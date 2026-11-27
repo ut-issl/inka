@@ -164,18 +164,105 @@ a.reference:hover {
   min-height: 0;
 }
 
-.queue,
+.sidebar,
 .review__main {
   min-height: 0;
   overflow: auto;
 }
 
-.queue {
+.sidebar {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px;
   font-size: 13px;
+}
+
+.sidebar__input {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.nodes {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.nodes__heading {
+  margin: 0 4px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.queue__target.nodes__entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.nodes__entry .pill {
+  flex: none;
+  font-size: 10px;
+  padding: 0 6px;
+}
+
+.nodes__name {
+  min-width: 0;
+}
+
+.nodes__namespace,
+.card__namespace {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* ---- Previews ------------------------------------------------------------ */
+
+.preview {
+  z-index: 50;
+  width: 360px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 15%);
+  font-size: 13px;
+}
+
+.preview__target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.preview__mode {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.preview__id {
+  color: var(--id);
+  overflow-wrap: anywhere;
+}
+
+.preview__namespace {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .queue__summary {
@@ -448,6 +535,27 @@ a.reference:hover {
   gap: 10px;
 }
 
+/* Set apart from the contract content: this is navigation, not contract. */
+.local__context {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-size: 13px;
+}
+
+.local__parents,
+.local__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.local__context-label {
+  color: var(--muted);
+}
+
 .local__child-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -545,10 +653,55 @@ a.reference:hover {
 
 /* ---- Graph surface ------------------------------------------------------- */
 
+/* The three panes share the width; the dividers between them are dragged. */
 .graph-surface {
+  padding: 12px;
+  min-height: 0;
+}
+
+.graph-surface__side {
+  display: grid;
+  min-height: 0;
+}
+
+.graph-surface__main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.graph-surface__local {
+  height: 100%;
+  overflow: auto;
+}
+
+.graph-surface__local .local {
+  max-width: none;
+}
+
+.divider {
+  flex: none;
+  width: 12px;
+  border-radius: 6px;
+  cursor: col-resize;
+  background: linear-gradient(var(--line), var(--line)) center / 2px 40px no-repeat;
+}
+
+.divider:hover,
+.divider:focus-visible,
+.divider[data-separator='active'] {
+  background-color: #e0e7ff;
+  background-image: linear-gradient(var(--focus), var(--focus));
+  outline: none;
+}
+
+.card.is-selected {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .graph-surface__bar {
@@ -558,6 +711,11 @@ a.reference:hover {
   gap: 8px;
   padding: 8px 12px;
   font-size: 13px;
+}
+
+.graph-surface__bar .button,
+.graph-surface__count {
+  white-space: nowrap;
 }
 
 .graph-surface__count {
@@ -642,11 +800,30 @@ a.reference:hover {
   text-transform: uppercase;
 }
 
-.card__id {
+.card__name {
   margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.card__id {
   color: var(--id);
   font-weight: 700;
-  overflow-wrap: anywhere;
+}
+
+/* The id is the card's own control; it looks like the text it is. */
+.card__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card__open:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .card__unreachable {

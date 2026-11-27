@@ -162,7 +162,9 @@ test('a card records nothing: the graph offers no decision and sends no write', 
   await settled(page)
 
   await expect(page.getByRole('button', { name: /approve|decline/i })).toHaveCount(0)
-  await expect(page.locator('input, textarea, form')).toHaveCount(0)
+  // The only field anywhere is the sidebar's search.
+  await expect(page.locator('textarea, form')).toHaveCount(0)
+  await expect(page.locator('input:not([type=search])')).toHaveCount(0)
   expect(writes).toEqual([])
 })
 
@@ -208,4 +210,183 @@ test('on a narrow window the toolbar wraps instead of running off the surface', 
     .evaluate((bar) => bar.scrollWidth - bar.clientWidth)
 
   expect(overflow).toBeLessThanOrEqual(1)
+})
+
+test('selecting a card opens its local view beside the graph, which stays in place', async ({ page }) => {
+  await open(page)
+
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+
+  const panel = page.getByRole('region', { name: 'Selected node' })
+  await expect(panel.getByRole('heading', { level: 2 })).toHaveText('structure:safe_mode_ok')
+  await expect(panel.getByRole('region', { name: 'Contract content' })).toBeVisible()
+  await expect(card(page, 'safe_mode_ok')).toHaveAttribute('aria-current', 'true')
+  // Still the graph, with the same cards: no separate close-up graph replaced it.
+  await expect(page.locator('.card')).toHaveCount(5)
+  await expect(page).toHaveURL(/#\/graph\/safe_mode_ok$/)
+
+  const context = panel.getByRole('complementary', { name: 'Supplementary navigation' })
+  await expect(context.getByRole('link', { name: 'aocs_ok' })).toBeVisible()
+})
+
+test('Esc and a tap on the empty background both clear the selection', async ({ page }) => {
+  await open(page)
+  const panel = page.getByRole('region', { name: 'Selected node' })
+
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  await expect(panel).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  await expect(panel).toBeVisible()
+  await settled(page)
+  // A point of the background that nothing is drawn on.
+  const empty = await page.locator('.react-flow').evaluate((canvas) => {
+    const box = canvas.getBoundingClientRect()
+    for (let x = box.left + 8; x < box.right; x += 24) {
+      for (let y = box.top + 8; y < box.bottom; y += 24) {
+        if (document.elementFromPoint(x, y)?.classList.contains('react-flow__pane')) return { x, y }
+      }
+    }
+    return null
+  })
+  expect(empty).not.toBeNull()
+  await page.mouse.click(empty!.x, empty!.y)
+  await expect(panel).toHaveCount(0)
+})
+
+test('a node found by searching is revealed by expanding a path from the root down to it', async ({ page }) => {
+  await open(page)
+  await expect(card(page, 'actuator_authority_ok')).toHaveCount(0)
+
+  await page.getByRole('searchbox').fill('actuator_authority')
+  await page.getByRole('navigation', { name: 'Search results' }).getByRole('link').first().click()
+  await settled(page)
+
+  await expect(card(page, 'actuator_authority_ok')).toHaveCount(1)
+  await expect(card(page, 'actuator_authority_ok')).toHaveAttribute('aria-current', 'true')
+  // A path was opened, not the whole graph.
+  expect(await page.locator('.card').count()).toBeLessThan(17)
+  expectNoOverlap(await boxes(page))
+})
+
+test('hovering a reference previews the node, and offers nothing to decide', async ({ page }) => {
+  await open(page)
+
+  await page.getByRole('navigation', { name: 'All nodes' }).getByRole('link', { name: /mtq_authority_ok/ }).hover()
+
+  const preview = page.getByRole('note', { name: 'Preview of mtq_authority_ok' })
+  await expect(preview).toBeVisible()
+  await expect(preview).toContainText('fiat:mtq_authority_ok')
+  await expect(preview.locator('button, input, textarea')).toHaveCount(0)
+})
+
+test('the two surfaces lead to each other for the same node', async ({ page }) => {
+  await open(page)
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+
+  await page.getByRole('region', { name: 'Selected node' }).getByRole('link', { name: 'Open in review' }).click()
+  await expect(page).toHaveURL(/#\/review\/safe_mode_ok$/)
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('structure:safe_mode_ok')
+
+  await page.getByRole('link', { name: 'Show in graph' }).click()
+  await expect(page).toHaveURL(/#\/graph\/safe_mode_ok$/)
+  await expect(card(page, 'safe_mode_ok')).toHaveAttribute('aria-current', 'true')
+})
+
+test('the local view beside the graph is widened by dragging its divider, and the width is remembered', async ({ page }) => {
+  await open(page)
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  const panel = page.getByRole('region', { name: 'Selected node' })
+  await expect(panel).toBeVisible()
+  const width = async () => Math.round((await panel.boundingBox())!.width)
+  const before = await width()
+
+  const divider = page.getByRole('separator', { name: 'Resize the local view' })
+  const handle = (await divider.boundingBox())!
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2 - 160, handle.y + handle.height / 2, { steps: 8 })
+  await page.mouse.up()
+
+  const widened = await width()
+  expect(widened).toBeGreaterThan(before + 120)
+  // The graph gave up the room and is still a graph.
+  await settled(page)
+  await expect(page.locator('.card')).toHaveCount(5)
+
+  await page.reload()
+  await expect(panel).toBeVisible()
+  expect(Math.abs((await width()) - widened)).toBeLessThanOrEqual(4)
+})
+
+test('the sidebar is narrowed and widened the same way, by pointer or by keyboard', async ({ page }) => {
+  await open(page)
+  const sidebar = page.getByRole('complementary', { name: 'Sidebar' })
+  const before = Math.round((await sidebar.boundingBox())!.width)
+
+  const divider = page.getByRole('separator', { name: 'Resize the sidebar' })
+  await divider.focus()
+  for (let press = 0; press < 5; press += 1) await page.keyboard.press('ArrowRight')
+
+  expect(Math.round((await sidebar.boundingBox())!.width)).toBeGreaterThan(before)
+})
+
+test('a card is opened from the keyboard as it is by a click', async ({ page }) => {
+  await open(page)
+
+  await card(page, 'safe_mode_ok').getByRole('button', { name: 'Open the local view of safe_mode_ok' }).focus()
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByRole('region', { name: 'Selected node' }).getByRole('heading', { level: 2 })).toHaveText(
+    'structure:safe_mode_ok',
+  )
+  // The card's own control keeps working from the keyboard too.
+  await card(page, 'safe_mode_ok').locator('.card__toggle').focus()
+  await page.keyboard.press('Enter')
+  await expect(card(page, 'safe_mode_ok').locator('.card__toggle')).toHaveAttribute('aria-expanded', 'true')
+})
+
+/** Whether the card lies wholly inside the canvas, where it can be seen. */
+async function inView(page: Page, id: string): Promise<boolean> {
+  const canvas = (await page.locator('.react-flow').boundingBox())!
+  const box = (await card(page, id).boundingBox())!
+  return (
+    box.x >= canvas.x &&
+    box.y >= canvas.y &&
+    box.x + box.width <= canvas.x + canvas.width &&
+    box.y + box.height <= canvas.y + canvas.height
+  )
+}
+
+test('choosing a node that is already drawn but out of sight brings it into view', async ({ page }) => {
+  await open(page)
+  await page.getByRole('button', { name: 'Expand all' }).click()
+  await settled(page)
+  // Zoom in on the top of the graph, leaving the leaves outside the window.
+  await card(page, 'aocs_ok').locator('.card__id').click()
+  await settled(page)
+  expect(await inView(page, 'unloading_plan_ok')).toBe(false)
+
+  await page.getByRole('navigation', { name: 'All nodes' }).getByRole('link', { name: /unloading_plan_ok/ }).click()
+  await settled(page)
+
+  await expect(card(page, 'unloading_plan_ok')).toHaveAttribute('aria-current', 'true')
+  expect(await inView(page, 'unloading_plan_ok')).toBe(true)
+})
+
+test('the selected card stays in view when the local view is widened', async ({ page }) => {
+  await open(page)
+  await card(page, 'safe_mode_ok').locator('.card__id').click()
+  await settled(page)
+
+  const divider = (await page.getByRole('separator', { name: 'Resize the local view' }).boundingBox())!
+  await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(divider.x - 320, divider.y + divider.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await settled(page)
+
+  expect(await inView(page, 'safe_mode_ok')).toBe(true)
 })

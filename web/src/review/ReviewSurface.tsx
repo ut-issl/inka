@@ -17,14 +17,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import { LocalView } from '../components/LocalView'
-import { ReviewBadge } from '../components/StatusBadge'
+import { NodeReference } from '../components/NodeReference'
+import { Sidebar } from '../components/Sidebar'
 import { DECISIONS_URL } from '../config'
 import type { DecisionData } from '../generated/DecisionData'
 import type { NodeData } from '../generated/NodeData'
 import type { ReviewerSession } from '../generated/ReviewerSession'
 import type { Snapshot } from '../generated/Snapshot'
 import { recordDecision } from '../model/session'
-import { groupHeading, reviewDetail, takesDecision } from '../model/wording'
+import { takesDecision } from '../model/wording'
+import { graphPath, reviewPath } from '../paths'
 import { neutralize } from '../text/neutralize'
 import { DecisionBar } from './DecisionBar'
 
@@ -124,7 +126,7 @@ export function ReviewSurface({ snapshot, nodes, reviewer = null, onReload }: Pr
 
   return (
     <div className="review">
-      <Queue snapshot={snapshot} nodes={nodes} currentId={current?.id} />
+      <Sidebar snapshot={snapshot} nodes={nodes} surface="review" currentId={current?.id} />
       <section ref={main} className="review__main" aria-label="Review target">
         {outcome ? (
           <p className={`outcome outcome--${outcome.kind}`} role={outcome.kind === 'problem' ? 'alert' : 'status'}>
@@ -134,7 +136,15 @@ export function ReviewSurface({ snapshot, nodes, reviewer = null, onReload }: Pr
         {current ? (
           <>
             <Progress walk={walk} currentId={current.id} />
-            <LocalView node={current} reference={(id) => <TargetLink id={id} />} />
+            <LocalView
+              node={current}
+              reference={(id) => <NodeReference node={nodes.get(id)} id={id} to={reviewPath(id)} />}
+              actions={
+                <Link className="button" to={graphPath(current.id)}>
+                  Show in graph
+                </Link>
+              }
+            />
             {decidable ? <DecisionBar key={`${current.id}@${hash}`} reviewer={reviewer} onDecide={decide} /> : null}
           </>
         ) : (
@@ -142,65 +152,6 @@ export function ReviewSurface({ snapshot, nodes, reviewer = null, onReload }: Pr
         )}
       </section>
     </div>
-  )
-}
-
-/** Where to find a target on this surface. */
-export function reviewPath(id: string): string {
-  return `/review/${encodeURIComponent(id)}`
-}
-
-function TargetLink({ id }: { id: string }) {
-  return (
-    <Link className="reference" to={reviewPath(id)}>
-      {neutralize(id)}
-    </Link>
-  )
-}
-
-/** The queue as `inka review --list` prints it: one section per state. */
-function Queue({
-  snapshot,
-  nodes,
-  currentId,
-}: Pick<Props, 'snapshot' | 'nodes'> & { currentId: string | undefined }) {
-  const groups = snapshot.queue.groups
-  const total = groups
-    .filter((group) => group.state !== 'blocked')
-    .reduce((sum, group) => sum + group.targets.length, 0)
-  return (
-    <nav className="queue" aria-label="Review queue">
-      <p className="queue__summary">
-        {total === 0 ? 'nothing needs review' : `${total} target${total === 1 ? '' : 's'} need${total === 1 ? 's' : ''} review`}
-      </p>
-      {groups.map((group) => (
-        <section key={group.state} className="queue__group">
-          <h3 className={`queue__heading queue__heading--${group.state}`}>
-            {groupHeading(group.state)} ({group.targets.length})
-          </h3>
-          <ul className="queue__targets">
-            {group.targets.map((id) => {
-              const node = nodes.get(id)
-              if (!node) return null
-              const detail = node.review ? reviewDetail(node.review) : null
-              return (
-                <li key={id}>
-                  <Link
-                    to={reviewPath(id)}
-                    className={`queue__target ${id === currentId ? 'is-current' : ''}`}
-                    aria-current={id === currentId ? 'true' : undefined}
-                  >
-                    <span className="queue__mode">{node.mode}:</span>
-                    <span className="queue__id">{neutralize(id)}</span>
-                    {detail ? <span className="queue__detail">{neutralize(detail)}</span> : null}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      ))}
-    </nav>
   )
 }
 
@@ -241,9 +192,4 @@ function Empty({ requested, queued }: { requested: string | undefined; queued: n
     )
   }
   return <p className="notice">{queued === 0 ? 'Nothing needs a decision.' : null}</p>
-}
-
-/** The review state of a node as a badge, for surfaces that list targets. */
-export function QueueBadge({ node }: { node: NodeData }) {
-  return node.review ? <ReviewBadge state={node.review} /> : null
 }

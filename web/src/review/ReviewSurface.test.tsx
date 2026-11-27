@@ -101,11 +101,12 @@ describe('ReviewSurface', () => {
     const user = userEvent.setup()
     renderAt('/review', queued())
 
-    await user.click(screen.getByRole('link', { name: /structure:vetoed/ }))
+    const queue = screen.getByRole('navigation', { name: 'Review queue' })
+    await user.click(within(queue).getByRole('link', { name: /structure:vetoed/ }))
 
     expect(screen.getByRole('heading', { name: 'structure:vetoed' })).toBeInTheDocument()
     expect(screen.getByText('Not in the walk · 3 targets can take a decision')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /structure:vetoed/ })).toHaveAttribute('aria-current', 'true')
+    expect(within(queue).getByRole('link', { name: /structure:vetoed/ })).toHaveAttribute('aria-current', 'true')
   })
 
   test('follows a child to that child’s own local view', async () => {
@@ -115,6 +116,23 @@ describe('ReviewSurface', () => {
     await user.click(within(screen.getByRole('region', { name: 'Contract content' })).getByRole('link', { name: 'other' }))
 
     expect(screen.getByRole('heading', { name: 'structure:other' })).toBeInTheDocument()
+  })
+
+  test('lists the node’s parents apart from the contract content, each leading to its own local view', async () => {
+    const user = userEvent.setup()
+    renderAt('/review/leaf', queued())
+
+    const context = screen.getByRole('complementary', { name: 'Supplementary navigation' })
+    expect(within(screen.getByRole('region', { name: 'Contract content' })).queryByText('root')).toBeNull()
+    await user.click(within(context).getByRole('link', { name: 'root' }))
+
+    expect(screen.getByRole('heading', { name: 'objective:root' })).toBeInTheDocument()
+  })
+
+  test('offers the way to the same node in the graph', () => {
+    renderAt('/review/leaf', queued())
+
+    expect(screen.getByRole('link', { name: 'Show in graph' })).toHaveAttribute('href', '/graph/leaf')
   })
 
   test('says so when asked for a target the argument does not have', () => {

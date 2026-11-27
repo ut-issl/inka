@@ -9,7 +9,9 @@ there is decided here, and nowhere else.
 
 Vite + React + TypeScript. What a library already does is left to it: descriptions are parsed and rendered by
 `react-markdown`, routing between the surfaces is `react-router`'s, the graph's canvas — pan, zoom, edges,
-cards as DOM elements — is React Flow's (`@xyflow/react`), and the layout is computed by `elkjs`. All are
+cards as DOM elements — is React Flow's (`@xyflow/react`), the layout is computed by `elkjs`, the hover
+previews are opened, closed and placed by Radix (`@radix-ui/react-hover-card`), and the graph surface's panes
+are resized by `react-resizable-panels`. All are
 vendored into the bundle, with the Inter typeface, so text measures the same on every machine.
 `inka serve` ([#43](https://github.com/ut-issl/inka/issues/43)) serves the built
 files and the page that describes the argument. Nothing here parses or mutates the argument; the one
@@ -126,7 +128,9 @@ src/
     visibility which nodes are shown, given what is expanded
     layout     where the cards go: the question put to ELK, and its answer
     Card, CardGraph, GraphSurface
-  components/ the local view, descriptions (Markdown and source), status pills
+  components/ the local view, descriptions (Markdown and source), status pills,
+              the sidebar (queue, all nodes, search), node references with their previews
+  paths       where a node is found on each surface
   hooks/      the page and the session
 e2e/          the same invariants, in a real browser
 ```
@@ -163,4 +167,12 @@ overlap, a child is below its parent), never pixels.
 | A card carries mode, id, status and description | `graph/Card.tsx` | `graph.spec.ts` |
 | A collapsed node says what lies below it | `graph/Card.tsx` | `graph.spec.ts` |
 | A card records nothing | `graph/Card.tsx` | `graph.spec.ts` |
+| Selecting a card opens its local view beside the graph | `graph/GraphSurface.tsx` | `graph.spec.ts` |
+| Esc and a background tap clear the selection | `graph/GraphSurface.tsx` | `graph.spec.ts` |
+| The panes' widths are dragged, and remembered | `graph/GraphSurface.tsx` | `graph.spec.ts` |
+| Revealing a node expands a path from a root down to it | `graph/visibility.ts` | `visibility.test.ts` |
+| Parents are navigation, set apart from contract content | `components/LocalView.tsx` | `ReviewSurface.test.tsx` |
+| Sidebar: queue, every node, search by id and description | `components/Sidebar.tsx` | `Sidebar.test.tsx` |
+| A preview offers no decision | `components/NodeReference.tsx` | `NodeReference.test.tsx` |
+| Each surface leads to the same node on the other | both surfaces | `graph.spec.ts` |
 | Read-only without `--as` | everywhere | `Decisions.test.tsx`, `graph.spec.ts`, `review.spec.ts` |
