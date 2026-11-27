@@ -41,6 +41,7 @@ use crate::source::SourceMap;
 /// Doubles as the promotion target of a deadline: `promote:` names the mode a
 /// node is to become, and the modes it may name are a subset of these.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Objective,
@@ -65,6 +66,7 @@ impl Mode {
 
 /// The scheme of a bind block's evidence reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[serde(rename_all = "lowercase")]
 pub enum EvidenceKind {
     Veriq,

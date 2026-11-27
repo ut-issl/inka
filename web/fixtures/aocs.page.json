@@ -1,0 +1,899 @@
+{
+  "kind": "argument",
+  "established": 0,
+  "total": 17,
+  "nodes": [
+    {
+      "id": "actuator_authority_ok",
+      "mode": "bind",
+      "namespace": "pointing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "momentum_ok",
+        "pointing_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "veriq_not_evaluated"
+          }
+        ]
+      },
+      "review": {
+        "state": "blocked",
+        "reason": {
+          "cause": "veriq_not_evaluated"
+        }
+      },
+      "view_hash": null,
+      "local": {
+        "id": "actuator_authority_ok",
+        "mode": "bind",
+        "comment": "actuator_authority_ok is a shared node: also referenced from momentum_ok\n(momentum.inka).",
+        "description": "Reaction-wheel torque and momentum capacity carry a margin of at least 30 % against sustained worst-case disturbance torque",
+        "evidence": {
+          "kind": "veriq",
+          "target": "aocs.verify_momentum_budget",
+          "comment": null
+        },
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "aocs_ok",
+      "mode": "objective",
+      "namespace": "objective",
+      "tags": [],
+      "root": true,
+      "parents": [],
+      "children": [
+        "pointing_ok",
+        "detumble_ok",
+        "safe_mode_ok",
+        "momentum_ok"
+      ],
+      "below": 16,
+      "blamed_below": 16,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:b02a21ae43cf1065c0957b89cc1464b854b7c97718f6d38930f4d6448ea4da40",
+      "local": {
+        "id": "aocs_ok",
+        "mode": "objective",
+        "comment": null,
+        "description": "Throughout the mission, the attitude control subsystem maintains the pointing performance required for observation operations and the safety of the vehicle, including under anomalies",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "pointing_ok",
+              "comment": null,
+              "description": "In steady-state observation mode, the pointing control error is at most 0.05 deg (3σ)"
+            },
+            {
+              "id": "detumble_ok",
+              "comment": null,
+              "description": "From both post-separation and FDIR re-entry conditions, the satellite completes detumbling and reaches safe mode without external intervention"
+            },
+            {
+              "id": "safe_mode_ok",
+              "comment": null,
+              "description": "In safe mode, the satellite maintains, without external intervention, a state satisfying all of the following:\n\n- The angle between the solar-array normal and the sun direction stays within 30 deg (positive power balance)\n- Mode transition completes within 10 min of anomaly detection\n- All mission equipment is off and every unit stays within its thermal safety range"
+            },
+            {
+              "id": "momentum_ok",
+              "comment": null,
+              "description": "Throughout the mission, accumulated reaction-wheel momentum never reaches saturation, and interruptions to observation operations stay within the planned unloading schedule"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "attitude_knowledge_ok",
+      "mode": "bind",
+      "namespace": "pointing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "pointing_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "veriq_not_evaluated"
+          }
+        ]
+      },
+      "review": {
+        "state": "blocked",
+        "reason": {
+          "cause": "veriq_not_evaluated"
+        }
+      },
+      "view_hash": null,
+      "local": {
+        "id": "attitude_knowledge_ok",
+        "mode": "bind",
+        "comment": null,
+        "description": "The attitude determination error in steady-state observation mode is at most 0.01 deg (3σ)",
+        "evidence": {
+          "kind": "veriq",
+          "target": "aocs.verify_attitude_knowledge",
+          "comment": null
+        },
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "control_law_ok",
+      "mode": "bind",
+      "namespace": "pointing",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "pointing_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "veriq_not_evaluated"
+          }
+        ]
+      },
+      "review": {
+        "state": "blocked",
+        "reason": {
+          "cause": "veriq_not_evaluated"
+        }
+      },
+      "view_hash": null,
+      "local": {
+        "id": "control_law_ok",
+        "mode": "bind",
+        "comment": null,
+        "description": "The observation-mode control law achieves a pointing control error of at most 0.05 deg (3σ) in the presence of attitude determination error 0.01 deg (3σ) and disturbance torques",
+        "evidence": {
+          "kind": "veriq",
+          "target": "aocs.verify_pointing_control",
+          "comment": null
+        },
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "detumble_convergence_ok",
+      "mode": "bind",
+      "namespace": "safety",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "detumble_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "veriq_not_evaluated"
+          }
+        ]
+      },
+      "review": {
+        "state": "blocked",
+        "reason": {
+          "cause": "veriq_not_evaluated"
+        }
+      },
+      "view_hash": null,
+      "local": {
+        "id": "detumble_convergence_ok",
+        "mode": "bind",
+        "comment": null,
+        "description": "Starting from the maximum tip-off rate 10 deg/s, B-dot control damps the body rate to a safe-mode-transition level within 2 orbits",
+        "evidence": {
+          "kind": "veriq",
+          "target": "aocs.verify_detumble",
+          "comment": null
+        },
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "detumble_ok",
+      "mode": "structure",
+      "namespace": "safety",
+      "tags": [
+        "safety"
+      ],
+      "root": false,
+      "parents": [
+        "aocs_ok"
+      ],
+      "children": [
+        "detumble_convergence_ok",
+        "mtq_authority_ok",
+        "rate_sensor_available"
+      ],
+      "below": 3,
+      "blamed_below": 3,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:3264a366c225e7e0224ac2a564191b4aedeb222ccdadaecf694462671578351d",
+      "local": {
+        "id": "detumble_ok",
+        "mode": "structure",
+        "comment": null,
+        "description": "From both post-separation and FDIR re-entry conditions, the satellite completes detumbling and reaches safe mode without external intervention",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "detumble_convergence_ok",
+              "comment": null,
+              "description": "Starting from the maximum tip-off rate 10 deg/s, B-dot control damps the body rate to a safe-mode-transition level within 2 orbits"
+            },
+            {
+              "id": "mtq_authority_ok",
+              "comment": null,
+              "description": "The magnetorquer dipole moment provides sufficient control torque for B-dot control across the geomagnetic field strengths of the target orbit (500-600 km altitude)"
+            },
+            {
+              "id": "rate_sensor_available",
+              "comment": null,
+              "description": "The rate information required for detumbling remains available under gyro failure, from redundant sensing including estimation with coarse sun sensors and magnetometers"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "disturbance_model_valid",
+      "mode": "fiat",
+      "namespace": "assumptions",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "momentum_ok",
+        "pointing_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:465980ab36dadcb5442f5a1ea937ef03b15d50a33cd7a4933665d692271251a9",
+      "local": {
+        "id": "disturbance_model_valid",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The disturbance torque model (gravity gradient, aerodynamic, solar radiation pressure, residual magnetic moment) envelopes the disturbances actually acting in the target orbit (500-600 km altitude)",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "fdir_transition_ok",
+      "mode": "fiat",
+      "namespace": "safety",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "safe_mode_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:8a1cae3a0e41cdb05528bc3b215df08ff0b968024102cae8873967a4a9e3e1c5",
+      "local": {
+        "id": "fdir_transition_ok",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The detection conditions and transition sequence for attitude anomalies (rate exceedance, loss of attitude determination, wheel failure) guarantee safe-mode arrival within 10 min of detection",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "FM",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "mass_properties_valid",
+      "mode": "fiat",
+      "namespace": "assumptions",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "pointing_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:c064d45125a473bbe0f80c0955a60c0c3106532d20b6e683f288dbe39489a3ce",
+      "local": {
+        "id": "mass_properties_valid",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The inertia tensor and mass properties used for control design deviate from the real vehicle within the control system's stability margins",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "FM",
+          "until_comment": "promote to a veriq verification once the mass-properties test has measured the real vehicle",
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "momentum_ok",
+      "mode": "structure",
+      "namespace": "momentum",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "aocs_ok"
+      ],
+      "children": [
+        "actuator_authority_ok",
+        "unloading_plan_ok",
+        "disturbance_model_valid"
+      ],
+      "below": 3,
+      "blamed_below": 3,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:b3e4eb93a2a9a70fa325b6544ec8160b2c3ee07c8e0d646082f62e45f58bf1c2",
+      "local": {
+        "id": "momentum_ok",
+        "mode": "structure",
+        "comment": null,
+        "description": "Throughout the mission, accumulated reaction-wheel momentum never reaches saturation, and interruptions to observation operations stay within the planned unloading schedule",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "actuator_authority_ok",
+              "comment": null,
+              "description": "Reaction-wheel torque and momentum capacity carry a margin of at least 30 % against sustained worst-case disturbance torque"
+            },
+            {
+              "id": "unloading_plan_ok",
+              "comment": null,
+              "description": "Periodic magnetorquer unloading has an unloading capacity exceeding the disturbance momentum accumulation rate, and is compatible with the observation schedule"
+            },
+            {
+              "id": "disturbance_model_valid",
+              "comment": null,
+              "description": "The disturbance torque model (gravity gradient, aerodynamic, solar radiation pressure, residual magnetic moment) envelopes the disturbances actually acting in the target orbit (500-600 km altitude)"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "mtq_authority_ok",
+      "mode": "fiat",
+      "namespace": "safety",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "detumble_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:0b944ceaaa53b43c0bc705e257ce82f11ab75e281bf507805ecdf252e8f1534c",
+      "local": {
+        "id": "mtq_authority_ok",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The magnetorquer dipole moment provides sufficient control torque for B-dot control across the geomagnetic field strengths of the target orbit (500-600 km altitude)",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "FM",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    },
+    {
+      "id": "pointing_ok",
+      "mode": "structure",
+      "namespace": "pointing",
+      "tags": [
+        "mission"
+      ],
+      "root": false,
+      "parents": [
+        "aocs_ok"
+      ],
+      "children": [
+        "attitude_knowledge_ok",
+        "control_law_ok",
+        "actuator_authority_ok",
+        "disturbance_model_valid",
+        "mass_properties_valid"
+      ],
+      "below": 5,
+      "blamed_below": 5,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:8a9950d3fe9461e8869636c28651d0653c7d1080587c0bdde55afd545f536b75",
+      "local": {
+        "id": "pointing_ok",
+        "mode": "structure",
+        "comment": null,
+        "description": "In steady-state observation mode, the pointing control error is at most 0.05 deg (3σ)",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "attitude_knowledge_ok",
+              "comment": null,
+              "description": "The attitude determination error in steady-state observation mode is at most 0.01 deg (3σ)"
+            },
+            {
+              "id": "control_law_ok",
+              "comment": null,
+              "description": "The observation-mode control law achieves a pointing control error of at most 0.05 deg (3σ) in the presence of attitude determination error 0.01 deg (3σ) and disturbance torques"
+            },
+            {
+              "id": "actuator_authority_ok",
+              "comment": null,
+              "description": "Reaction-wheel torque and momentum capacity carry a margin of at least 30 % against sustained worst-case disturbance torque"
+            },
+            {
+              "id": "disturbance_model_valid",
+              "comment": null,
+              "description": "The disturbance torque model (gravity gradient, aerodynamic, solar radiation pressure, residual magnetic moment) envelopes the disturbances actually acting in the target orbit (500-600 km altitude)"
+            },
+            {
+              "id": "mass_properties_valid",
+              "comment": "still a fiat until the mass-properties test measures the real vehicle",
+              "description": "The inertia tensor and mass properties used for control design deviate from the real vehicle within the control system's stability margins"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "rate_sensor_available",
+      "mode": "fiat",
+      "namespace": "safety",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "detumble_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:e8f94570141982cd46a7248d898f3c949cfc2a8cc3a12be389612a516604348d",
+      "local": {
+        "id": "rate_sensor_available",
+        "mode": "fiat",
+        "comment": null,
+        "description": "The rate information required for detumbling remains available under gyro failure, from redundant sensing including estimation with coarse sun sensors and magnetometers",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "safe_mode_ok",
+      "mode": "structure",
+      "namespace": "safety",
+      "tags": [
+        "safety"
+      ],
+      "root": false,
+      "parents": [
+        "aocs_ok"
+      ],
+      "children": [
+        "sun_pointing_stable",
+        "fdir_transition_ok",
+        "safemode_power_positive"
+      ],
+      "below": 3,
+      "blamed_below": 3,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:6e8345742207d3068c86289af5aa52fb7a6a539d77c513d73d1b587355a61866",
+      "local": {
+        "id": "safe_mode_ok",
+        "mode": "structure",
+        "comment": null,
+        "description": "In safe mode, the satellite maintains, without external intervention, a state satisfying all of the following:\n\n- The angle between the solar-array normal and the sun direction stays within 30 deg (positive power balance)\n- Mode transition completes within 10 min of anomaly detection\n- All mission equipment is off and every unit stays within its thermal safety range",
+        "evidence": null,
+        "children": {
+          "comment": null,
+          "entries": [
+            {
+              "id": "sun_pointing_stable",
+              "comment": null,
+              "description": "Safe-mode sun pointing acquires the sun starting from the residual rates left after detumbling, and thereafter keeps the sun angle within 30 deg"
+            },
+            {
+              "id": "fdir_transition_ok",
+              "comment": null,
+              "description": "The detection conditions and transition sequence for attitude anomalies (rate exceedance, loss of attitude determination, wheel failure) guarantee safe-mode arrival within 10 min of detection"
+            },
+            {
+              "id": "safemode_power_positive",
+              "comment": null,
+              "description": "In the safe-mode configuration (all mission equipment off, sun angle within 30 deg), generated power exceeds the configuration's consumption under all orbit conditions including eclipse"
+            }
+          ]
+        },
+        "deadline": null
+      }
+    },
+    {
+      "id": "safemode_power_positive",
+      "mode": "fiat",
+      "namespace": "safety",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "safe_mode_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:58b24baf3376b5fb6fe3162ed1ea3198f02225e99cb7ea5017e3de7930801e99",
+      "local": {
+        "id": "safemode_power_positive",
+        "mode": "fiat",
+        "comment": "Ideally shared with a power-domain argument; kept local in this\nsingle-domain example (see README on namespaces).",
+        "description": "In the safe-mode configuration (all mission equipment off, sun angle within 30 deg), generated power exceeds the configuration's consumption under all orbit conditions including eclipse",
+        "evidence": null,
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "sun_pointing_stable",
+      "mode": "bind",
+      "namespace": "safety",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "safe_mode_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "veriq_not_evaluated"
+          }
+        ]
+      },
+      "review": {
+        "state": "blocked",
+        "reason": {
+          "cause": "veriq_not_evaluated"
+        }
+      },
+      "view_hash": null,
+      "local": {
+        "id": "sun_pointing_stable",
+        "mode": "bind",
+        "comment": null,
+        "description": "Safe-mode sun pointing acquires the sun starting from the residual rates left after detumbling, and thereafter keeps the sun angle within 30 deg",
+        "evidence": {
+          "kind": "veriq",
+          "target": "aocs.verify_sun_pointing",
+          "comment": null
+        },
+        "children": null,
+        "deadline": null
+      }
+    },
+    {
+      "id": "unloading_plan_ok",
+      "mode": "fiat",
+      "namespace": "momentum",
+      "tags": [],
+      "root": false,
+      "parents": [
+        "momentum_ok"
+      ],
+      "children": [],
+      "below": 0,
+      "blamed_below": 0,
+      "status": {
+        "state": "blamed",
+        "reasons": [
+          {
+            "cause": "missing_approval"
+          }
+        ]
+      },
+      "review": {
+        "state": "unapproved"
+      },
+      "view_hash": "sha256:2598ba92893a737d4ffd2a1b602a750d8a366b26347efd8bba4d423abf477f76",
+      "local": {
+        "id": "unloading_plan_ok",
+        "mode": "fiat",
+        "comment": null,
+        "description": "Periodic magnetorquer unloading has an unloading capacity exceeding the disturbance momentum accumulation rate, and is compatible with the observation schedule",
+        "evidence": null,
+        "children": null,
+        "deadline": {
+          "until": "FM",
+          "until_comment": null,
+          "promote": {
+            "mode": "bind",
+            "comment": null
+          }
+        }
+      }
+    }
+  ],
+  "roots": [
+    "aocs_ok"
+  ],
+  "order": [
+    "aocs_ok",
+    "detumble_ok",
+    "detumble_convergence_ok",
+    "momentum_ok",
+    "mtq_authority_ok",
+    "pointing_ok",
+    "actuator_authority_ok",
+    "attitude_knowledge_ok",
+    "control_law_ok",
+    "disturbance_model_valid",
+    "mass_properties_valid",
+    "rate_sensor_available",
+    "safe_mode_ok",
+    "fdir_transition_ok",
+    "safemode_power_positive",
+    "sun_pointing_stable",
+    "unloading_plan_ok"
+  ],
+  "namespaces": [
+    {
+      "name": "objective",
+      "nodes": [
+        "aocs_ok"
+      ]
+    },
+    {
+      "name": "safety",
+      "nodes": [
+        "detumble_ok",
+        "detumble_convergence_ok",
+        "mtq_authority_ok",
+        "rate_sensor_available",
+        "safe_mode_ok",
+        "fdir_transition_ok",
+        "safemode_power_positive",
+        "sun_pointing_stable"
+      ]
+    },
+    {
+      "name": "momentum",
+      "nodes": [
+        "momentum_ok",
+        "unloading_plan_ok"
+      ]
+    },
+    {
+      "name": "pointing",
+      "nodes": [
+        "pointing_ok",
+        "actuator_authority_ok",
+        "attitude_knowledge_ok",
+        "control_law_ok"
+      ]
+    },
+    {
+      "name": "assumptions",
+      "nodes": [
+        "disturbance_model_valid",
+        "mass_properties_valid"
+      ]
+    }
+  ],
+  "queue": {
+    "walk": [
+      "disturbance_model_valid",
+      "mass_properties_valid",
+      "pointing_ok",
+      "mtq_authority_ok",
+      "rate_sensor_available",
+      "detumble_ok",
+      "fdir_transition_ok",
+      "safemode_power_positive",
+      "safe_mode_ok",
+      "unloading_plan_ok",
+      "momentum_ok",
+      "aocs_ok"
+    ],
+    "groups": [
+      {
+        "state": "unapproved",
+        "targets": [
+          "disturbance_model_valid",
+          "mass_properties_valid",
+          "pointing_ok",
+          "mtq_authority_ok",
+          "rate_sensor_available",
+          "detumble_ok",
+          "fdir_transition_ok",
+          "safemode_power_positive",
+          "safe_mode_ok",
+          "unloading_plan_ok",
+          "momentum_ok",
+          "aocs_ok"
+        ]
+      },
+      {
+        "state": "blocked",
+        "targets": [
+          "attitude_knowledge_ok",
+          "control_law_ok",
+          "actuator_authority_ok",
+          "detumble_convergence_ok",
+          "sun_pointing_stable"
+        ]
+      }
+    ]
+  },
+  "warnings": []
+}

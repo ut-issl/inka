@@ -22,6 +22,7 @@ pub mod review;
 pub mod source;
 pub mod values;
 pub mod view;
+pub mod wire;
 
 /// Returns the version of the inka core library.
 #[must_use]
