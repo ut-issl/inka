@@ -146,13 +146,19 @@ function ChildStatus({ child }: { child: NodeData | undefined }) {
 /**
  * What a child's status says beyond its name, at the foot of its card and
  * under a rule: it is where the child stands, not what the child claims.
+ *
+ * It is labelled as a note rather than with visually hidden text: hidden text
+ * is clipped, and nothing inside the contract content may be.
  */
 function ChildStatusDetail({ child }: { child: NodeData | undefined }) {
   const details = child ? childStatusDetail(child) : []
   if (!child || details.length === 0) return null
   return (
-    <div className={`local__child-status local__child-status--${child.status.state}`}>
-      <span className="visually-hidden">Status of {neutralize(child.id)}: </span>
+    <div
+      className={`local__child-status local__child-status--${child.status.state}`}
+      role="note"
+      aria-label={`Status of ${neutralize(child.id)}`}
+    >
       {details.map((detail) => (
         <p key={detail}>{neutralize(detail)}</p>
       ))}

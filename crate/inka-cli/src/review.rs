@@ -1561,7 +1561,7 @@ fiat leaf {
     }
 
     #[test]
-    fn a_childs_frame_names_its_status_and_every_reason_it_is_blamed() {
+    fn a_child_frame_names_its_status_and_every_reason_it_is_blamed() {
         // Arrange: a root over children that fail in every way there is,
         // three of them blocked and so never offered as targets themselves.
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unestablished");
@@ -1659,7 +1659,7 @@ fiat leaf {
     }
 
     #[test]
-    fn colour_repeats_a_childs_status_and_never_carries_it_alone() {
+    fn colour_repeats_a_child_status_and_never_carries_it_alone() {
         // Arrange
         let dir = scenario_project();
         let request = Request {
