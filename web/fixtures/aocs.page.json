@@ -787,6 +787,7 @@
   "roots": [
     "aocs_ok"
   ],
+  "unreachable_roots": [],
   "order": [
     "aocs_ok",
     "detumble_ok",
@@ -805,50 +806,6 @@
     "safemode_power_positive",
     "sun_pointing_stable",
     "unloading_plan_ok"
-  ],
-  "namespaces": [
-    {
-      "name": "objective",
-      "nodes": [
-        "aocs_ok"
-      ]
-    },
-    {
-      "name": "safety",
-      "nodes": [
-        "detumble_ok",
-        "detumble_convergence_ok",
-        "mtq_authority_ok",
-        "rate_sensor_available",
-        "safe_mode_ok",
-        "fdir_transition_ok",
-        "safemode_power_positive",
-        "sun_pointing_stable"
-      ]
-    },
-    {
-      "name": "momentum",
-      "nodes": [
-        "momentum_ok",
-        "unloading_plan_ok"
-      ]
-    },
-    {
-      "name": "pointing",
-      "nodes": [
-        "pointing_ok",
-        "actuator_authority_ok",
-        "attitude_knowledge_ok",
-        "control_law_ok"
-      ]
-    },
-    {
-      "name": "assumptions",
-      "nodes": [
-        "disturbance_model_valid",
-        "mass_properties_valid"
-      ]
-    }
   ],
   "queue": {
     "walk": [

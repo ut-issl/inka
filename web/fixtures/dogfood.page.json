@@ -1125,6 +1125,7 @@
   "roots": [
     "inka_ok"
   ],
+  "unreachable_roots": [],
   "order": [
     "inka_ok",
     "approvals_meaningful",
@@ -1151,63 +1152,6 @@
     "assumptions_surfaced",
     "bind_validity_by_human",
     "verification_truth_by_machine"
-  ],
-  "namespaces": [
-    {
-      "name": "objective",
-      "nodes": [
-        "inka_ok"
-      ]
-    },
-    {
-      "name": "approval",
-      "nodes": [
-        "approvals_meaningful",
-        "description_is_contract",
-        "labels_cover_reality",
-        "lint_flags_leaky_contracts",
-        "policy_is_reviewable",
-        "queue_minimizes_friction"
-      ]
-    },
-    {
-      "name": "assumptions",
-      "nodes": [
-        "approvers_follow_norm",
-        "git_hosting_intact"
-      ]
-    },
-    {
-      "name": "editing",
-      "nodes": [
-        "edit_cost_proportional",
-        "invalidation_exact",
-        "hash_vectors_replay",
-        "local_view_binding",
-        "surface_edits_free",
-        "id_not_in_contract",
-        "local_view_hash_sound"
-      ]
-    },
-    {
-      "name": "audit",
-      "nodes": [
-        "records_auditable",
-        "approver_unforgeable",
-        "eval_reproducible",
-        "log_tamper_evident",
-        "target_unswappable"
-      ]
-    },
-    {
-      "name": "truth-validity",
-      "nodes": [
-        "truth_validity_separated",
-        "assumptions_surfaced",
-        "bind_validity_by_human",
-        "verification_truth_by_machine"
-      ]
-    }
   ],
   "queue": {
     "walk": [

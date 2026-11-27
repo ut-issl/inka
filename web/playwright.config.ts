@@ -3,10 +3,11 @@ import { defineConfig, devices } from '@playwright/test'
 /**
  * End-to-end configuration.
  *
- * The graph pane can only be exercised in a real browser — cytoscape draws to a
- * canvas — so the invariants that live there (the layouts, the badges, the
- * hover description, background-tap and Esc) are covered here rather than in
- * the jsdom suite.
+ * The graph's canvas has to measure its cards before it can place them, which
+ * only a real browser does, so the invariants that live there — no overlap,
+ * children below parents, what expanding and collapsing show — are covered
+ * here rather than in the jsdom suite, together with the two surfaces end to
+ * end.
  *
  * Two pairs of servers run for it, each pair as in development — an
  * `inka serve` and the dev server that forwards `/api` to it:

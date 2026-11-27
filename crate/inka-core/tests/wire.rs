@@ -185,11 +185,5 @@ fn every_node_is_ordered_once_after_its_parents() {
                 assert!(position(parent) < position(&node.id));
             }
         }
-        let grouped: usize = snapshot
-            .namespaces
-            .iter()
-            .map(|group| group.nodes.len())
-            .sum();
-        assert_eq!(grouped, snapshot.nodes.len());
     }
 }

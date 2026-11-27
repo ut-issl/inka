@@ -59,12 +59,15 @@ pub struct Snapshot {
     pub nodes: Vec<NodeData>,
     /// The objectives the argument hangs from, in sorted block-ID order.
     pub roots: Vec<String>,
+    /// The topmost of the nodes no objective reaches — the ones `inka check`
+    /// warns about — in sorted block-ID order: every node that has no parent
+    /// and is not one of [`Snapshot::roots`]. Together with the roots these
+    /// are where a drawing of the whole graph starts, so that it leaves no
+    /// node out.
+    pub unreachable_roots: Vec<String>,
     /// Every node id with parents before children; among nodes that are
     /// ready together, sorted block-ID order decides.
     pub order: Vec<String>,
-    /// The nodes grouped by namespace: groups in the order their first member
-    /// appears in [`Snapshot::order`], members in that order too.
-    pub namespaces: Vec<NamespaceGroup>,
     pub queue: QueueData,
     /// Suspicions raised while loading; the argument stands despite them.
     pub warnings: Vec<Finding>,
@@ -173,14 +176,6 @@ pub struct QueueData {
 pub struct QueueGroup {
     pub state: ReviewGroup,
     pub targets: Vec<String>,
-}
-
-/// The nodes of one namespace.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-pub struct NamespaceGroup {
-    pub name: String,
-    pub nodes: Vec<String>,
 }
 
 /// Why a project has no presentable argument.
@@ -451,7 +446,15 @@ pub fn snapshot(argument: &Argument, records: &[Record]) -> Result<Snapshot, Eva
         total: count(evaluation.total()),
         nodes,
         roots: view.roots.clone(),
-        namespaces: namespaces(view, &order),
+        unreachable_roots: view
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(index, node)| {
+                relations.parents[*index].is_empty() && !roots.contains(node.id.as_str())
+            })
+            .map(|(_, node)| node.id.clone())
+            .collect(),
         order: order
             .iter()
             .map(|&index| view.nodes[index].id.clone())
@@ -604,23 +607,6 @@ impl Relations {
     }
 }
 
-fn namespaces(view: &ArgumentView, order: &[usize]) -> Vec<NamespaceGroup> {
-    let mut groups: Vec<NamespaceGroup> = Vec::new();
-    let mut position: HashMap<&str, usize> = HashMap::new();
-    for &index in order {
-        let node = &view.nodes[index];
-        let group = *position.entry(node.namespace.as_str()).or_insert_with(|| {
-            groups.push(NamespaceGroup {
-                name: node.namespace.clone(),
-                nodes: Vec::new(),
-            });
-            groups.len() - 1
-        });
-        groups[group].nodes.push(node.id.clone());
-    }
-    groups
-}
-
 fn warning_findings(source_map: &SourceMap, warnings: &[Warning]) -> Vec<Finding> {
     let diagnostics = Diagnostics {
         errors: Vec::new(),
@@ -771,19 +757,6 @@ mod tests {
         assert_eq!(
             snapshot.order,
             ["root", "left", "right", "lonely", "shared"]
-        );
-        assert_eq!(
-            snapshot.namespaces,
-            [
-                NamespaceGroup {
-                    name: "a".to_owned(),
-                    nodes: vec!["root".to_owned(), "left".to_owned()],
-                },
-                NamespaceGroup {
-                    name: "b".to_owned(),
-                    nodes: vec!["right".to_owned(), "lonely".to_owned(), "shared".to_owned()],
-                },
-            ]
         );
     }
 
@@ -1022,6 +995,34 @@ mod tests {
         assert_eq!(snapshot.warnings.len(), 1);
         assert_eq!(snapshot.warnings[0].severity, Severity::Warning);
         assert!(snapshot.nodes.iter().any(|node| node.id == "stray"));
+    }
+
+    #[test]
+    fn the_topmost_nodes_no_objective_reaches_are_roots_of_their_own() {
+        // Arrange: an unreachable pair; only its top has no parent.
+        let dir = diamond();
+        fs::write(
+            dir.path().join("argument/c.inka"),
+            block("structure", "stray", &["under"]) + &block("fiat", "under", &[]),
+        )
+        .expect("the stray nodes are written");
+
+        // Act
+        let snapshot = snapshot_of(dir.path());
+
+        // Assert
+        assert_eq!(snapshot.roots, ["root"]);
+        assert_eq!(snapshot.unreachable_roots, ["stray"]);
+        assert_eq!(node(&snapshot, "under").parents, ["stray"]);
+    }
+
+    #[test]
+    fn an_argument_every_objective_reaches_has_no_unreachable_root() {
+        // Arrange & Act
+        let snapshot = snapshot_of(diamond().path());
+
+        // Assert
+        assert_eq!(snapshot.unreachable_roots, Vec::<String>::new());
     }
 
     #[test]

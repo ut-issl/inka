@@ -2,7 +2,7 @@
  * The application shell: one page from the server, two surfaces over it.
  *
  * The review surface walks the review queue one local view at a time; the
- * graph surface shows the whole argument. Both read the same page, so they
+ * graph surface shows the whole argument as cards, explored from its roots. Both read the same page, so they
  * cannot disagree about what the project says.
  *
  * On a server started without an approver the whole application is read-only.
@@ -11,22 +11,15 @@
  * argument, the values, the evidence, or an existing record.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
 import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router'
 
-import { DetailPanel } from './components/DetailPanel'
-import { Legend } from './components/Legend'
-import { NodeList } from './components/NodeList'
 import { PAGE_URL, SESSION_URL } from './config'
 import type { Finding } from './generated/Finding'
 import type { ReviewerSession } from './generated/ReviewerSession'
 import type { Snapshot } from './generated/Snapshot'
-import { GraphCanvas } from './graph/GraphCanvas'
-import { namespaceColors } from './graph/palette'
+import { GraphSurface } from './graph/GraphSurface'
 import { useSession } from './hooks/useSession'
 import { usePage } from './hooks/useView'
-import { resolveFocus, WHOLE_VIEW, type Focus } from './model/focus'
-import { namespacesOf, type ArgumentView } from './model/view'
 import { ReviewSurface } from './review/ReviewSurface'
 
 export function App() {
@@ -65,7 +58,7 @@ export function App() {
               />
             }
           />
-          <Route path="/graph" element={<Viewer view={state.view} />} />
+          <Route path="/graph" element={<GraphSurface snapshot={state.snapshot} nodes={state.view.nodes} />} />
           <Route path="*" element={<Navigate to="/review" replace />} />
         </Routes>
       </div>
@@ -127,55 +120,5 @@ function Findings({ findings }: { findings: readonly Finding[] }) {
         ))}
       </ul>
     </div>
-  )
-}
-
-function Viewer({ view }: { view: ArgumentView }) {
-  const [focus, setFocus] = useState<Focus>(WHOLE_VIEW)
-
-  const sets = useMemo(() => resolveFocus(view, focus), [view, focus])
-  const colors = useMemo(() => namespaceColors(namespacesOf(view)), [view])
-
-  const focusNode = useCallback((id: string) => setFocus({ kind: 'node', id }), [])
-  const focusNamespace = useCallback((name: string) => setFocus({ kind: 'namespace', name }), [])
-  const clearFocus = useCallback(() => setFocus(WHOLE_VIEW), [])
-
-  // Esc clears the focus, as a tap on the empty background does.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') clearFocus()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [clearFocus])
-
-  return (
-    <main className="viewer">
-      <aside className="viewer__list">
-        <NodeList
-          view={view}
-          focus={focus}
-          sets={sets}
-          colors={colors}
-          onFocusNode={focusNode}
-          onFocusNamespace={focusNamespace}
-        />
-      </aside>
-
-      <GraphCanvas
-        view={view}
-        focus={focus}
-        sets={sets}
-        colors={colors}
-        onFocusNode={focusNode}
-        onFocusNamespace={focusNamespace}
-        onClearFocus={clearFocus}
-      />
-
-      <aside className="viewer__side">
-        <Legend />
-        <DetailPanel view={view} focus={focus} sets={sets} />
-      </aside>
-    </main>
   )
 }
