@@ -138,6 +138,7 @@ export function ReviewSurface({ snapshot, nodes, reviewer = null, onReload }: Pr
             <Progress walk={walk} currentId={current.id} />
             <LocalView
               node={current}
+              nodes={nodes}
               reference={(id) => <NodeReference node={nodes.get(id)} id={id} to={reviewPath(id)} />}
               actions={
                 <Link className="button" to={graphPath(current.id)}>

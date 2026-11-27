@@ -12,6 +12,13 @@
  * view. Everything here is on screen without a hover or a click; the one
  * exception is the exact spacing of a description, read in its source.
  *
+ * A child's card also says where the child stands — its status, and when it
+ * is blamed, why — as `inka review` does in the child's frame. The queue
+ * offers a parent whatever state its children are in, and a blocked child is
+ * never offered at all, so without this a reviewer could not tell why a
+ * parent turned up before the claims under it. The status is not contract
+ * content: no approval binds to it, and it is set apart inside the card.
+ *
  * Below the contract content, and set apart from it, comes what only helps
  * to move around: the node's parents, and whatever the surface adds.
  */
@@ -19,20 +26,22 @@
 import type { ReactNode } from 'react'
 
 import type { NodeData } from '../generated/NodeData'
-import { reviewDetail, statusDetail } from '../model/wording'
+import { childStatusDetail, reviewDetail, statusDetail } from '../model/wording'
 import { neutralize } from '../text/neutralize'
 import { Description } from './Description'
 import { ReviewBadge, StatusBadge } from './StatusBadge'
 
 interface Props {
   readonly node: NodeData
+  /** Every node by id, where a child's status is read; a child not found is shown without one. */
+  readonly nodes?: ReadonlyMap<string, NodeData>
   /** Draws a reference to another node; a plain id unless the surface links it. */
   readonly reference?: (id: string) => ReactNode
   /** Further navigation the surface offers from this node, set apart with the parents. */
   readonly actions?: ReactNode
 }
 
-export function LocalView({ node, reference = plainReference, actions }: Props) {
+export function LocalView({ node, nodes, reference = plainReference, actions }: Props) {
   const local = node.local
   const review = node.review
   return (
@@ -76,12 +85,16 @@ export function LocalView({ node, reference = plainReference, actions }: Props) 
                 <li key={child.id} className="local__child">
                   <Comment text={child.comment} />
                   <div className="local__child-card">
-                    <div className="local__child-id">{reference(child.id)}</div>
+                    <div className="local__child-id">
+                      {reference(child.id)}
+                      <ChildStatus child={nodes?.get(child.id)} />
+                    </div>
                     {child.description === null ? (
                       <p className="local__missing">(not defined)</p>
                     ) : (
                       <Description text={child.description} />
                     )}
+                    <ChildStatusDetail child={nodes?.get(child.id)} />
                   </div>
                 </li>
               ))}
@@ -123,6 +136,28 @@ export function LocalView({ node, reference = plainReference, actions }: Props) 
 
 function plainReference(id: string): ReactNode {
   return <span className="reference">{neutralize(id)}</span>
+}
+
+/** A child's status beside its id, spelled out. */
+function ChildStatus({ child }: { child: NodeData | undefined }) {
+  return child ? <StatusBadge status={child.status} /> : null
+}
+
+/**
+ * What a child's status says beyond its name, at the foot of its card and
+ * under a rule: it is where the child stands, not what the child claims.
+ */
+function ChildStatusDetail({ child }: { child: NodeData | undefined }) {
+  const details = child ? childStatusDetail(child) : []
+  if (!child || details.length === 0) return null
+  return (
+    <div className={`local__child-status local__child-status--${child.status.state}`}>
+      <span className="visually-hidden">Status of {neutralize(child.id)}: </span>
+      {details.map((detail) => (
+        <p key={detail}>{neutralize(detail)}</p>
+      ))}
+    </div>
+  )
 }
 
 /** One `key: value` property under the comment attached to it. */
