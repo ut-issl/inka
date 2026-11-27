@@ -50,40 +50,67 @@ export function ReviewSurface({ snapshot, nodes, reviewer = null, onReload }: Pr
   const currentId = params.id ?? walk[0]
   const current = currentId === undefined ? undefined : nodes.get(currentId)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  /**
+   * The decisions this page has had recorded, and the page they were taken
+   * on. Until the server's next answer replaces that page, their targets are
+   * still on screen as if undecided; they take no second decision meanwhile.
+   */
+  const [recorded, setRecorded] = useState<{ on: Snapshot; keys: ReadonlySet<string> } | null>(null)
 
   // What was said about one target is not said about the next.
   const shownId = current?.id
+  /** The target on screen now, for a decision that completes later to compare with. */
+  const shownRef = useRef(shownId)
   useEffect(() => {
+    shownRef.current = shownId
     setOutcome((last) => (last?.kind === 'problem' ? null : last))
   }, [shownId])
 
   const hash = current?.view_hash ?? null
-  const decidable = reviewer !== null && current !== undefined && hash !== null && takesDecision(current.review)
+  const key = current === undefined || hash === null ? null : `${current.id}@${hash}`
+  const alreadyRecorded = recorded !== null && recorded.on === snapshot && key !== null && recorded.keys.has(key)
+  const decidable =
+    reviewer !== null &&
+    current !== undefined &&
+    hash !== null &&
+    takesDecision(current.review) &&
+    !alreadyRecorded
 
   const decide = async (decision: DecisionData) => {
-    if (!reviewer || !current || hash === null) return
+    if (!reviewer || !current || hash === null || key === null) return
+    const target = `${current.mode}:${current.id}`
     const response = await recordDecision(DECISIONS_URL, reviewer, current.id, hash, decision)
+    // The reviewer may have opened another target while the server answered.
+    const stillShown = shownRef.current === current.id
     switch (response.outcome) {
       case 'recorded': {
-        // The target leaves the walk; move on to the one that followed it.
-        const index = walk.indexOf(current.id)
-        const next = walk[index + 1] ?? walk.find((id) => id !== current.id)
-        setOutcome({ kind: 'recorded', message: `Recorded ${decision.label} of ${current.mode}:${current.id}.` })
+        setRecorded((last) => ({
+          on: snapshot,
+          keys: new Set([...(last?.on === snapshot ? last.keys : []), key]),
+        }))
+        setOutcome({ kind: 'recorded', message: `Recorded ${decision.label} of ${target}.` })
         onReload?.()
-        void navigate(next === undefined ? '/review' : reviewPath(next))
+        // The target leaves the walk; move on to the one that followed it —
+        // unless the reviewer has already gone somewhere of their own choosing.
+        if (stillShown) {
+          const index = walk.indexOf(current.id)
+          const next = walk[index + 1] ?? walk.find((id) => id !== current.id)
+          void navigate(next === undefined ? '/review' : reviewPath(next))
+        }
         return
       }
       case 'changed':
         setOutcome({
           kind: 'problem',
-          message:
-            'This target has changed since it was shown, so nothing was recorded. Its current content is now on screen.',
+          message: stillShown
+            ? `${target} has changed since it was shown, so nothing was recorded. Its current content is now on screen.`
+            : `${target} has changed since it was shown, so nothing was recorded.`,
         })
         onReload?.()
         return
       case 'refused':
       case 'failed':
-        setOutcome({ kind: 'problem', message: `Nothing was recorded: ${response.message}` })
+        setOutcome({ kind: 'problem', message: `Nothing was recorded for ${target}: ${response.message}` })
     }
   }
 

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, test, vi } from 'vitest'
@@ -140,7 +140,7 @@ describe('recording a decision', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('has changed since it was shown')
+    expect(await screen.findByRole('alert')).toHaveTextContent('structure:leaf has changed since it was shown')
     expect(onReload).toHaveBeenCalledOnce()
     // Still on the same target, to read what it says now.
     expect(screen.getByRole('heading', { name: 'structure:leaf' })).toBeInTheDocument()
@@ -154,8 +154,74 @@ describe('recording a decision', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was recorded: no block named `leaf`')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Nothing was recorded for structure:leaf: no block named `leaf`',
+    )
     expect(onReload).not.toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'structure:leaf' })).toBeInTheDocument()
+  })
+
+  test('the last target of the walk cannot be decided twice while the page is still the old one', async () => {
+    const user = userEvent.setup()
+    const fetcher = answer({ outcome: 'recorded' })
+    // `root` is last: after it, the walk has nowhere to go but `/review`,
+    // which on the page not yet replaced shows the first target again.
+    renderAt('/review/root')
+    await user.click(screen.getByRole('link', { name: 'Previous' }))
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await screen.findByRole('heading', { name: 'objective:root' })
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    // Both targets are decided; whichever the stale page shows, no control is left.
+    expect(await screen.findByRole('status')).toHaveTextContent('Recorded approve of objective:root.')
+    expect(screen.queryByRole('form', { name: 'Decision' })).toBeNull()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  test('a decided target takes no second decision until the server’s next page replaces this one', async () => {
+    const user = userEvent.setup()
+    const fetcher = answer({ outcome: 'recorded' })
+    renderAt('/review/leaf')
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await screen.findByRole('heading', { name: 'objective:root' })
+    // Back to the decided target, on the same, stale page.
+    await user.click(screen.getByRole('link', { name: 'Previous' }))
+
+    expect(screen.getByRole('heading', { name: 'structure:leaf' })).toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Decision' })).toBeNull()
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+
+  test('a decision that completes after the reviewer moved on does not pull them back', async () => {
+    const user = userEvent.setup()
+    let settle: (response: Response) => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => (settle = resolve))))
+    renderAt('/review/leaf')
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    // While the server answers, the reviewer opens a target of their choosing.
+    const queue = screen.getByRole('navigation', { name: 'Review queue' })
+    await user.click(within(queue).getByRole('link', { name: /structure:vetoed/ }))
+    settle(Response.json({ outcome: 'recorded' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Recorded approve of structure:leaf.')
+    expect(screen.getByRole('heading', { name: 'structure:vetoed' })).toBeInTheDocument()
+  })
+
+  test('a message that arrives on another target says which target it is about', async () => {
+    const user = userEvent.setup()
+    let settle: (response: Response) => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => (settle = resolve))))
+    renderAt('/review/leaf')
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await user.click(screen.getByRole('link', { name: 'Skip' }))
+    settle(Response.json({ outcome: 'changed' }, { status: 409 }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('structure:leaf has changed since it was shown, so nothing was recorded.')
+    expect(alert).not.toHaveTextContent('now on screen')
+    expect(screen.getByRole('heading', { name: 'objective:root' })).toBeInTheDocument()
   })
 })

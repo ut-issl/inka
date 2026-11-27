@@ -72,6 +72,9 @@ const SESSION_PATH: &str = "/api/session";
 /// Path a decision is posted to; routed only on a recording server.
 const DECISIONS_PATH: &str = "/api/decisions";
 
+/// The port a browser leaves out of `Host` and `Origin`.
+const DEFAULT_HTTP_PORT: u16 = 80;
+
 /// Header a decision carries the session token in.
 const TOKEN_HEADER: &str = "x-inka-session";
 
@@ -127,8 +130,9 @@ struct Recording {
 }
 
 impl Recording {
-    /// A recording session on `port`, under a token no earlier run had.
-    fn new(reviewer: &ReviewerOptions, port: u16) -> io::Result<Self> {
+    /// A recording session on the address the server bound, under a token no
+    /// earlier run had.
+    fn new(reviewer: &ReviewerOptions, bound: SocketAddr) -> io::Result<Self> {
         let mut bytes = [0u8; 32];
         getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
         let token = bytes.iter().fold(String::new(), |mut token, byte| {
@@ -140,7 +144,7 @@ impl Recording {
             approver: reviewer.approver.clone(),
             key_id: reviewer.key_id.clone(),
             token,
-            hosts: loopback_hosts(port),
+            hosts: loopback_hosts(bound),
         })
     }
 
@@ -153,12 +157,29 @@ impl Recording {
     }
 }
 
-/// Every spelling of a loopback server on `port` a browser may put in `Host`.
-fn loopback_hosts(port: u16) -> Vec<String> {
-    ["127.0.0.1", "localhost", "[::1]"]
-        .iter()
-        .map(|name| format!("{name}:{port}"))
-        .collect()
+/// Every spelling of a loopback server bound to `bound` that a browser may
+/// put in `Host`: the address it was bound to — any of `127.0.0.0/8` is
+/// loopback, not only `127.0.0.1` — and the usual names for the local machine.
+/// On the default HTTP port a browser leaves the port out, so those spellings
+/// are answered to as well.
+fn loopback_hosts(bound: SocketAddr) -> Vec<String> {
+    let bound_name = match bound.ip() {
+        IpAddr::V4(address) => address.to_string(),
+        IpAddr::V6(address) => format!("[{address}]"),
+    };
+    let mut names = vec![
+        bound_name,
+        "127.0.0.1".to_owned(),
+        "localhost".to_owned(),
+        "[::1]".to_owned(),
+    ];
+    names.dedup();
+    let port = bound.port();
+    let mut hosts: Vec<String> = names.iter().map(|name| format!("{name}:{port}")).collect();
+    if port == DEFAULT_HTTP_PORT {
+        hosts.extend(names);
+    }
+    hosts
 }
 
 /// What every handler reads: the project, and the recording session if any.
@@ -231,7 +252,7 @@ pub fn run(
         // The session needs the port that was actually bound, which `--port 0`
         // only settles here.
         let recording = match &reviewer {
-            Some(reviewer) => Some(Arc::new(Recording::new(reviewer, bound.port())?)),
+            Some(reviewer) => Some(Arc::new(Recording::new(reviewer, bound)?)),
             None => None,
         };
         if let Some(recording) = &recording {
@@ -684,6 +705,11 @@ mod tests {
     const TOKEN: &str = "the-session-token";
     const HOST: &str = "127.0.0.1:8080";
 
+    /// The usual loopback address, on `port`.
+    fn local(port: u16) -> SocketAddr {
+        SocketAddr::from(([127, 0, 0, 1], port))
+    }
+
     /// A server recording as `iwata` over `project_dir`, answering to [`HOST`].
     fn recording(project_dir: &Path) -> Router {
         router(
@@ -693,7 +719,7 @@ mod tests {
                     approver: "iwata".to_owned(),
                     key_id: None,
                     token: TOKEN.to_owned(),
-                    hosts: loopback_hosts(8080),
+                    hosts: loopback_hosts(local(8080)),
                 })),
             },
             Assets::None,
@@ -1013,6 +1039,70 @@ mod tests {
         }
     }
 
+    /// A recording router that was bound to `bound`.
+    fn recording_on(project_dir: &Path, bound: SocketAddr) -> Router {
+        router(
+            App {
+                project_dir: project_dir.to_path_buf(),
+                recording: Some(Arc::new(Recording {
+                    approver: "iwata".to_owned(),
+                    key_id: None,
+                    token: TOKEN.to_owned(),
+                    hosts: loopback_hosts(bound),
+                })),
+            },
+            Assets::None,
+        )
+    }
+
+    /// Whether a decision with these `Host` and `Origin` headers gets past
+    /// the guard; a stale hash is refused later, with 409, not 403.
+    async fn passes_guard(app: Router, host: &str, origin: &str) -> bool {
+        let headers = [("host", host), ("origin", origin), (TOKEN_HEADER, TOKEN)];
+        let response = send(
+            app,
+            Method::POST,
+            DECISIONS_PATH,
+            &headers,
+            Some(&approval("leaf", "sha256:00")),
+        )
+        .await;
+        response.status() != StatusCode::FORBIDDEN
+    }
+
+    #[tokio::test]
+    async fn a_server_bound_to_another_loopback_address_answers_to_that_address() {
+        // Any of 127.0.0.0/8 is loopback, and the operator is told to open
+        // the address that was bound.
+        let dir = project();
+        let app = recording_on(dir.path(), SocketAddr::from(([127, 0, 0, 2], 8080)));
+
+        assert!(passes_guard(app.clone(), "127.0.0.2:8080", "http://127.0.0.2:8080").await);
+        assert!(passes_guard(app.clone(), "localhost:8080", "http://localhost:8080").await);
+        assert!(!passes_guard(app.clone(), "127.0.0.3:8080", "http://127.0.0.3:8080").await);
+        assert!(!passes_guard(app, "evil.example:8080", "http://evil.example:8080").await);
+    }
+
+    #[tokio::test]
+    async fn a_server_on_the_default_port_answers_to_names_without_a_port() {
+        // A browser drops `:80` from both headers.
+        let dir = project();
+        let app = recording_on(dir.path(), local(80));
+
+        assert!(passes_guard(app.clone(), "127.0.0.1", "http://127.0.0.1").await);
+        assert!(passes_guard(app.clone(), "localhost:80", "http://localhost").await);
+        assert!(!passes_guard(app.clone(), "127.0.0.1:8080", "http://127.0.0.1:8080").await);
+        assert!(!passes_guard(app, "evil.example", "http://evil.example").await);
+    }
+
+    #[tokio::test]
+    async fn a_server_on_another_port_does_not_answer_to_names_without_one() {
+        let dir = project();
+        let app = recording_on(dir.path(), local(8080));
+
+        assert!(!passes_guard(app, "127.0.0.1", "http://127.0.0.1").await);
+    }
+
     #[test]
     fn each_run_records_under_a_token_of_its_own() {
         let reviewer = ReviewerOptions {
@@ -1020,8 +1110,8 @@ mod tests {
             key_id: Some("key-1".to_owned()),
         };
 
-        let first = Recording::new(&reviewer, 8080).expect("a session starts");
-        let second = Recording::new(&reviewer, 8080).expect("a session starts");
+        let first = Recording::new(&reviewer, local(8080)).expect("a session starts");
+        let second = Recording::new(&reviewer, local(8080)).expect("a session starts");
 
         assert_eq!(first.token.len(), 64);
         assert_ne!(first.token, second.token);
