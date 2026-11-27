@@ -18,8 +18,9 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    detector). Replaces the built-in `any(1)`.
 2. **Approval-session upgrades.** Diff against the local view the approver last
    approved (requires recovering the prior source); approver-side `until:`
-   enforcement; a TUI (ratatui) if the CLI proves insufficient. The
-   no-subtree-expansion rule holds in any UI.
+   enforcement; a review session in the browser, served by `inka serve`, that
+   presents each target as `inka review` does and records the same record
+   ([Web UI](web-ui.md)). The no-subtree-expansion rule holds in any UI.
 3. **What-if evaluation.** `--forecast <phase>`, `--margin`,
    `--without-approver`, `--as-of`, `--diff-approvals` — all thin wrappers that
    re-run the pure eval with substituted inputs.
@@ -56,13 +57,16 @@ Japanese version: [日本語版](https://www.space.t.u-tokyo.ac.jp/inka/ja/desig
    originating policy); trust clauses on the importing side; portability rules
    (structure approvals travel; fiat must be re-accepted; bind must be re-bound
    and re-approved). Depends on signatures.
-10. **Visualization.** A static single-file HTML export (topology, approval
-    state, staleness; descriptions on click only), layout delegated to an
-    existing JS graph library. Read-only; unreachable from approval flows.
+10. **Visualization.** The graph surface of the [Web UI](web-ui.md): the
+    argument as cards carrying description and evaluation status, explored by
+    expanding and collapsing from the objectives down; layout delegated to an
+    existing JS graph library. The graph itself records nothing — a decision is
+    only ever taken on a node's local view, under the Web UI's recording
+    conditions.
 
 ## Standing technology choices
 
-Hand-written recursive descent (no parser generator); `ratatui` + `crossterm`;
+Hand-written recursive descent (no parser generator);
 `lsp-server` + `lsp-types` (sync); `ed25519-dalek` + `ssh-key`; `ureq` for any
 batch HTTP; `similar` for diffs; `insta` + `proptest` + `cargo-fuzz` for
 testing. Deliberately absent: incremental-computation frameworks (full
