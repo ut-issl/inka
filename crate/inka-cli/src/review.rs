@@ -2,11 +2,12 @@
 //! interactive loop over it, and a non-interactive single-target form.
 //!
 //! The queue is derived in the core by the same validity function `inka eval`
-//! reads, so the two never disagree; this module only loads the inputs,
-//! renders the queue, and writes records. Writing is append-only by
-//! construction: every decision goes through [`approvals::append`], and no
-//! code path here rewrites or deletes an existing line. Timestamps are taken
-//! in this layer and passed into the pure record constructors.
+//! reads, so the two never disagree, and so are the content of a target and
+//! the recording of a decision; this module only loads the inputs, prompts,
+//! and renders. Writing is append-only by construction: every decision goes
+//! through the core's [`record_decision`](core_review::record_decision), and
+//! no code path here rewrites or deletes an existing line. Timestamps are
+//! taken in this layer and passed in.
 //!
 //! An interactive session judges the project as it was loaded: every decision
 //! binds to the hash that was on screen, so an edit made elsewhere while the
@@ -27,16 +28,19 @@ use std::path::Path;
 
 use console::{Alignment, Style, measure_text_width, pad_str};
 use inka_core::approvals::{self, APPROVALS_DIR};
+use inka_core::argument::Argument;
 use inka_core::evidence::EvidenceSet;
-use inka_core::hash::{LocalView, ViewHash};
-use inka_core::record::{Record, RecordFields, Target, Timestamp};
-use inka_core::review::{BlockedReason, QueueItem, QueueState, ReviewQueue, derive_queue};
+use inka_core::local::{ChildrenContent, LocalContent};
+use inka_core::record::Timestamp;
+use inka_core::review::{
+    self as core_review, BlockedReason, QueueItem, QueueState, ReviewQueue, Reviewer, derive_queue,
+};
 use inka_core::source::{Diagnostics, Error, SourceMap};
-use inka_core::view::{ArgumentView, EvidenceKind, Mode, NodeComments, Property, ViewNode};
+use inka_core::view::{ArgumentView, Mode, Property, ViewNode};
 use termtree::{GlyphPalette, Tree};
 
 use crate::check::Outcome;
-use crate::load::{ProjectView, load_project_view};
+use crate::load::load_project_view;
 use crate::render::render;
 
 /// What one `inka review` invocation was asked to do.
@@ -214,10 +218,11 @@ pub fn run(
     color: bool,
 ) -> io::Result<Outcome> {
     let screen = session.screen;
-    let Some(ProjectView {
+    let Some(Argument {
         manifest,
         evidence,
         view,
+        ..
     }) = load_project_view(project_dir, err, color)?
     else {
         return Ok(Outcome::Failed);
@@ -226,8 +231,9 @@ pub fn run(
         Ok(records) => records,
         Err(error) => return fail(&error.to_string(), err, color),
     };
-    let context = RecordContext {
-        project_dir,
+    let approvals_dir = project_dir.join(APPROVALS_DIR);
+    let context = Reviewer {
+        approvals_dir: &approvals_dir,
         approver: &request.approver,
         key_id: request.key_id.as_deref(),
         phase: &manifest.phases.current,
@@ -262,44 +268,49 @@ pub fn run(
     }
 }
 
-/// Everything a recorded decision needs besides the decision itself.
-struct RecordContext<'a> {
-    project_dir: &'a Path,
-    approver: &'a str,
-    key_id: Option<&'a str>,
-    phase: &'a str,
-}
-
 /// Records one decision on one named target, whatever its queue state: an
 /// extra approval or a veto is a judgement too, and counting is eval's job.
 /// Returns the confirmation line, or the failure to report.
 fn single(
-    context: &RecordContext<'_>,
+    context: &Reviewer<'_>,
     view: &ArgumentView,
     evidence: &EvidenceSet,
     target: &str,
     decision: &Decision,
     session: &mut Session<'_>,
 ) -> Result<String, String> {
-    let Some(node) = view.node(target) else {
-        return Err(format!("no block named `{target}` in the argument"));
+    let (label, decision) = match decision {
+        Decision::Approve { comment } => (
+            ReviewLabel::Approve,
+            core_review::Decision::Approve {
+                comment: comment.clone(),
+            },
+        ),
+        Decision::Decline { comment } => (
+            ReviewLabel::Decline,
+            core_review::Decision::Decline {
+                comment: comment.clone(),
+            },
+        ),
     };
-    let current_hash = current_hash(view, node, evidence)?;
-    let (label, comment) = match decision {
-        Decision::Approve { comment } => (ReviewLabel::Approve, comment.clone()),
-        Decision::Decline { comment } => (ReviewLabel::Decline, Some(comment.clone())),
-    };
-    write_record(context, node, current_hash, label, comment, session)?;
+    let timestamp = (session.now)();
+    let record = core_review::decide(context, view, evidence, target, None, decision, timestamp)
+        .map_err(|error| error.to_string())?;
     Ok(format!(
         "{} in {APPROVALS_DIR}/{}.jsonl",
-        recorded_line(label, node, session.screen),
+        recorded_line(
+            label,
+            record.target().kind(),
+            record.target().id(),
+            session.screen
+        ),
         context.approver
     ))
 }
 
 /// Walks the actionable queue one target at a time, reading `a`/`d`/`s`/`q`.
 fn interactive(
-    context: &RecordContext<'_>,
+    context: &Reviewer<'_>,
     view: &ArgumentView,
     queue: &ReviewQueue,
     session: &mut Session<'_>,
@@ -349,9 +360,9 @@ fn interactive(
             Answer::Quit => break,
         };
         if let Some((label, comment)) = decision {
-            match write_record(context, node, item.current_hash, label, comment, session) {
+            match write_record(context, node, item, label, comment, session) {
                 Ok(()) => {
-                    writeln!(out, "{}", recorded_line(label, node, screen))?;
+                    writeln!(out, "{}", recorded_line(label, node.mode, &node.id, screen))?;
                     recorded += 1;
                 }
                 Err(message) => {
@@ -395,13 +406,13 @@ impl ReviewLabel {
 }
 
 /// The confirmation of one recorded decision, the decision in its colour.
-fn recorded_line(label: ReviewLabel, node: &ViewNode, screen: Screen) -> String {
+fn recorded_line(label: ReviewLabel, mode: Mode, id: &str, screen: Screen) -> String {
     format!(
         "{} of {}",
         screen
             .label(label)
             .apply_to(format!("recorded {}", label.name())),
-        screen.target(node.mode, &node.id)
+        screen.target(mode, id)
     )
 }
 
@@ -470,65 +481,25 @@ fn prompt_comment(session: &mut Session<'_>, out: &mut impl Write) -> io::Result
     }
 }
 
-/// Builds and appends one record; the only write path the command has.
+/// Records the reviewer's answer on one queued target, at the hash the
+/// queue showed it with; the only write path the interactive loop has.
 fn write_record(
-    context: &RecordContext<'_>,
+    context: &Reviewer<'_>,
     node: &ViewNode,
-    current_hash: ViewHash,
+    item: &QueueItem,
     label: ReviewLabel,
     comment: Option<String>,
     session: &mut Session<'_>,
 ) -> Result<(), String> {
-    let target = Target::new(node.mode, &node.id).map_err(|error| error.to_string())?;
-    let fields = RecordFields {
-        target,
-        view_hash: current_hash,
-        approver: context.approver.to_owned(),
-        key_id: context.key_id.unwrap_or(context.approver).to_owned(),
-        timestamp: (session.now)(),
-        phase: context.phase.to_owned(),
-        until: None,
-        policy_hash: None,
-    };
-    let record = match label {
-        ReviewLabel::Approve => Record::approve(fields, comment),
-        ReviewLabel::Decline => {
-            Record::decline(fields, comment.expect("a decline carries a comment"))
-        }
-    }
-    .map_err(|error| error.to_string())?;
-    approvals::append(&context.project_dir.join(APPROVALS_DIR), &record)
-        .map_err(|error| error.to_string())
-}
-
-/// The view hash a decision recorded now would name, or why none exists.
-fn current_hash(
-    view: &ArgumentView,
-    node: &ViewNode,
-    evidence: &EvidenceSet,
-) -> Result<ViewHash, String> {
-    let interface = match (node.mode, node.evidence.as_ref()) {
-        (Mode::Bind, Some(reference)) => match reference.kind {
-            EvidenceKind::Veriq => {
-                return Err(format!(
-                    "`{}` is a veriq bind; veriq evidence is not evaluated yet",
-                    node.id
-                ));
-            }
-            EvidenceKind::Test => match evidence.get(&reference.target) {
-                Some(test) => Some(test.interface_hash),
-                None => {
-                    return Err(format!(
-                        "bind `{}` has no imported evidence for `{}`; deliver the evidence first",
-                        node.id, reference.target
-                    ));
-                }
-            },
+    let decision = match label {
+        ReviewLabel::Approve => core_review::Decision::Approve { comment },
+        ReviewLabel::Decline => core_review::Decision::Decline {
+            comment: comment.expect("a decline carries a comment"),
         },
-        _ => None,
     };
-    LocalView::of_node(view, node, interface)
-        .map(|local| local.view_hash())
+    let timestamp = (session.now)();
+    core_review::record_decision(context, node, item.current_hash, decision, timestamp)
+        .map(|_| ())
         .map_err(|error| error.to_string())
 }
 
@@ -684,22 +655,38 @@ fn write_target(
     }
     writeln!(out)?;
 
-    let comments = &node.comments;
-    write_comment(comments.block.as_deref(), screen, out)?;
-    write_description(&node.description, group, screen, out)?;
-    if let Some(reference) = &node.evidence {
-        let property = match reference.kind {
-            EvidenceKind::Test => Property::Test,
-            EvidenceKind::Veriq => Property::Veriq,
-        };
-        let quoted = format!("\"{}\"", reference.target);
-        write_property(comments, property, &quoted, screen, out)?;
+    let content = LocalContent::of(view, node);
+    write_comment(content.comment.as_deref(), screen, out)?;
+    write_description(&content.description, group, screen, out)?;
+    if let Some(evidence) = &content.evidence {
+        let quoted = format!("\"{}\"", evidence.target);
+        write_property(
+            evidence.comment.as_deref(),
+            evidence.property(),
+            &quoted,
+            screen,
+            out,
+        )?;
     }
-    write_children(node, view, screen, out)?;
-    if let Some(deadline) = &node.deadline {
-        write_property(comments, Property::Until, &deadline.until, screen, out)?;
-        if let Some(promote) = deadline.promote {
-            write_property(comments, Property::Promote, promote.name(), screen, out)?;
+    if let Some(children) = &content.children {
+        write_children(children, screen, out)?;
+    }
+    if let Some(deadline) = &content.deadline {
+        write_property(
+            deadline.until_comment.as_deref(),
+            Property::Until,
+            &deadline.until,
+            screen,
+            out,
+        )?;
+        if let Some(promote) = &deadline.promote {
+            write_property(
+                promote.comment.as_deref(),
+                Property::Promote,
+                promote.mode.name(),
+                screen,
+                out,
+            )?;
         }
     }
     writeln!(out)
@@ -815,25 +802,18 @@ fn frame(lines: &[String], title: Option<&str>, kind: Frame, screen: Screen) -> 
 /// with the comment on its entry and then its description, wrapped to the
 /// terminal in a frame that carries its id in the top edge.
 fn write_children(
-    node: &ViewNode,
-    view: &ArgumentView,
+    children: &ChildrenContent,
     screen: Screen,
     out: &mut impl Write,
 ) -> io::Result<()> {
-    if node.children.is_empty() {
-        return Ok(());
-    }
-    let comments = &node.comments;
-    write_comment(property_comment(comments, Property::Children), screen, out)?;
+    write_comment(children.comment.as_deref(), screen, out)?;
 
     // Two columns of indent, three of guide, then the frame's own four.
     let width = screen.width.saturating_sub(2 + 3 + 4);
-    let entries = node.children.iter().map(|child| {
-        let description = view.node(child).map_or("(not defined)", |child_node| {
-            child_node.description.as_str()
-        });
-        let mut lines = comment_lines(comments.children.get(child).map(String::as_str), screen);
-        let id = screen.id().apply_to(sanitize(child)).to_string();
+    let entries = children.entries.iter().map(|child| {
+        let description = child.description.as_deref().unwrap_or("(not defined)");
+        let mut lines = comment_lines(child.comment.as_deref(), screen);
+        let id = screen.id().apply_to(sanitize(&child.id)).to_string();
         lines.extend(frame(
             &wrap(description, width),
             Some(&id),
@@ -853,23 +833,19 @@ fn write_children(
 
 /// One `key: value` property line under the comment attached to it.
 fn write_property(
-    comments: &NodeComments,
+    comment: Option<&str>,
     property: Property,
     value: &str,
     screen: Screen,
     out: &mut impl Write,
 ) -> io::Result<()> {
-    write_comment(property_comment(comments, property), screen, out)?;
+    write_comment(comment, screen, out)?;
     writeln!(
         out,
         "  {} {}",
         screen.key().apply_to(format!("{}:", property.name())),
         sanitize(value)
     )
-}
-
-fn property_comment(comments: &NodeComments, property: Property) -> Option<&str> {
-    comments.properties.get(&property).map(String::as_str)
 }
 
 /// A comment written above the property it is attached to.
@@ -990,7 +966,8 @@ mod tests {
     use std::fs;
     use std::io::Cursor;
 
-    use inka_core::view::Evidence;
+    use inka_core::hash::LocalView;
+    use inka_core::view::{Evidence, EvidenceKind, NodeComments};
 
     /// An uncoloured screen of a fixed width.
     const PLAIN: Screen = Screen {
