@@ -165,3 +165,47 @@ test('a card records nothing: the graph offers no decision and sends no write', 
   await expect(page.locator('input, textarea, form')).toHaveCount(0)
   expect(writes).toEqual([])
 })
+
+test('expanding a second parent of a shared node keeps every child below every parent', async ({ page }) => {
+  await open(page)
+  await card(page, 'momentum_ok').locator('.card__toggle').click()
+  await settled(page)
+  await card(page, 'pointing_ok').locator('.card__toggle').click()
+  await settled(page)
+
+  const all = await boxes(page)
+  expectNoOverlap(all)
+  const byId = new Map(all.map((box) => [box.id, box]))
+  for (const parent of ['momentum_ok', 'pointing_ok']) {
+    for (const child of ['actuator_authority_ok', 'disturbance_model_valid']) {
+      await expect(page.locator(`.react-flow__edge[data-id="${parent}->${child}"]`)).toHaveCount(1)
+      expect(byId.get(child)!.top, `${child} is below ${parent}`).toBeGreaterThanOrEqual(byId.get(parent)!.bottom)
+    }
+  }
+})
+
+test('expanding, collapsing and expanding again in quick succession leaves no card unplaced', async ({ page }) => {
+  await open(page)
+  const toggle = card(page, 'safe_mode_ok').locator('.card__toggle')
+
+  await toggle.click()
+  await toggle.click()
+  await toggle.click()
+  await settled(page)
+
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  expect(await page.locator('.card').count()).toBeGreaterThan(5)
+  // `settled` has already seen every card opaque; none is left at the origin, on top of another.
+  expectNoOverlap(await boxes(page))
+})
+
+test('on a narrow window the toolbar wraps instead of running off the surface', async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 800 })
+  await open(page)
+
+  const overflow = await page
+    .locator('.graph-surface__bar')
+    .evaluate((bar) => bar.scrollWidth - bar.clientWidth)
+
+  expect(overflow).toBeLessThanOrEqual(1)
+})

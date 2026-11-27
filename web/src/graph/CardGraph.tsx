@@ -104,8 +104,17 @@ function Canvas({ nodes, visible, expanded, unreachable, onToggle }: Props) {
   // Once every card on the canvas has been measured, place them.
   useEffect(() => {
     if (!measured || cards.length === 0) return
-    const key = cards.map((card) => `${card.id}:${card.measured?.width}x${card.measured?.height}`).join('|')
-    if (key === laidOut.current) return
+    // Everything the layout is a function of: the cards, their sizes, and the
+    // edges between them. An edge can appear between two cards that were both
+    // already shown, and it constrains where they may go.
+    const key = [
+      ...cards.map((card) => `${card.id}:${card.measured?.width}x${card.measured?.height}`),
+      ...edges.map((edge) => edge.id),
+    ].join('|')
+    // A card that has not been placed yet is waiting, unseen, for a layout —
+    // even when the set of cards has come back to one already laid out.
+    const unplaced = cards.some((card) => card.style?.opacity === 0)
+    if (key === laidOut.current && !unplaced) return
     let live = true
     void layoutCards(
       cards.map((card) => ({ id: card.id, width: card.measured?.width ?? 0, height: card.measured?.height ?? 0 })),
