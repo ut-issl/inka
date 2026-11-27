@@ -21,15 +21,18 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::approvals::{self, APPROVALS_DIR};
 use crate::argument::{Argument, Rejected, load_argument};
 use crate::eval::{BlameReason, EvalError, evaluate};
 use crate::hash::ViewHash;
 use crate::local::LocalContent;
-use crate::record::Record;
-use crate::review::{BlockedReason, QueueState, ReviewQueue, current_hash, derive_queue};
+use crate::record::{Record, Timestamp};
+use crate::review::{
+    self, BlockedReason, DecideError, Decision, QueueState, ReviewQueue, Reviewer, current_hash,
+    derive_queue,
+};
 use crate::source::{DiagnosticRef, Diagnostics, Error, SourceMap, Warning};
 use crate::view::{ArgumentView, Mode, ViewNode};
 
@@ -217,6 +220,118 @@ pub struct Location {
     pub line: u32,
     /// One-based column, counted in bytes.
     pub column: u32,
+}
+
+/// Who the server records decisions as, if it records at all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct Session {
+    /// `None` when the server was started without an approver: it then offers
+    /// no way to record, and the Web UI is read-only throughout.
+    pub reviewer: Option<ReviewerSession>,
+}
+
+/// The identity a recording server was started with. The page shows it and
+/// cannot choose or change it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct ReviewerSession {
+    pub approver: String,
+    pub key_id: String,
+    /// Proof that a request comes from a page this server served for this
+    /// run; sent back with every decision.
+    pub token: String,
+}
+
+/// One decision, as a page asks for it to be recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct DecisionRequest {
+    /// The id of the node the decision is on.
+    pub target: String,
+    /// The view hash of the local view that was on screen. The decision is
+    /// recorded only if this is still the target's current hash.
+    pub view_hash: String,
+    pub decision: DecisionData,
+}
+
+/// The judgement itself.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(tag = "label", rename_all = "snake_case")]
+pub enum DecisionData {
+    /// An approval, with an optional note.
+    Approve { comment: Option<String> },
+    /// A veto; it must say why.
+    Decline { comment: String },
+}
+
+/// What became of a decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum DecisionResponse {
+    /// One record was appended.
+    Recorded,
+    /// The target's content is no longer what was on screen. Nothing was
+    /// written; the page should show the current content.
+    Changed,
+    /// The decision cannot be recorded as asked — an unknown target, a target
+    /// with no hash to name, a decline without a reason. Nothing was written.
+    Refused { message: String },
+    /// The decision was sound but the record could not be stored.
+    Failed { message: String },
+}
+
+/// Records the decision a page asked for, as `inka review` would: through the
+/// same [`review::decide`], into the same file.
+///
+/// The project is read afresh, and the decision is recorded only if the hash
+/// the request names is the target's hash in that reading — so an edit made
+/// while the page was open is never approved unseen. `approver`, `key_id`
+/// and `timestamp` are the caller's: a request cannot name them.
+#[must_use]
+pub fn decide(
+    project_dir: &Path,
+    approver: &str,
+    key_id: Option<&str>,
+    request: DecisionRequest,
+    timestamp: Timestamp,
+) -> DecisionResponse {
+    let refused = |message: String| DecisionResponse::Refused { message };
+    let Ok(expected) = request.view_hash.parse::<ViewHash>() else {
+        return refused(format!("`{}` is not a view hash", request.view_hash));
+    };
+    let Ok(argument) = load_argument(project_dir) else {
+        return refused("the project does not check; nothing can be decided on it".to_owned());
+    };
+    let approvals_dir = project_dir.join(APPROVALS_DIR);
+    let reviewer = Reviewer {
+        approvals_dir: &approvals_dir,
+        approver,
+        key_id,
+        phase: &argument.manifest.phases.current,
+    };
+    let decision = match request.decision {
+        DecisionData::Approve { comment } => Decision::Approve { comment },
+        DecisionData::Decline { comment } => Decision::Decline { comment },
+    };
+    match review::decide(
+        &reviewer,
+        &argument.view,
+        &argument.evidence,
+        &request.target,
+        Some(expected),
+        decision,
+        timestamp,
+    ) {
+        Ok(_) => DecisionResponse::Recorded,
+        Err(DecideError::Changed { .. }) => DecisionResponse::Changed,
+        Err(DecideError::Store(error)) => DecisionResponse::Failed {
+            message: error.to_string(),
+        },
+        Err(error) => refused(error.to_string()),
+    }
 }
 
 /// Reads the project rooted at `project_dir` and answers with its page.
@@ -548,7 +663,7 @@ mod tests {
 
     use ts_rs::TS;
 
-    use crate::review::{Decision, Reviewer, decide};
+    use crate::review::decide as record;
 
     const MANIFEST: &str = "[project]\nname = \"t\"\n\n[phases]\norder = [\"M1\"]\ncurrent = \"M1\"\n\n[values]\nfiles = []\n";
 
@@ -598,7 +713,7 @@ mod tests {
             phase: "M1",
         };
         for target in targets {
-            decide(
+            record(
                 &reviewer,
                 &argument.view,
                 &argument.evidence,
@@ -715,7 +830,7 @@ mod tests {
         let dir = diamond();
         let argument = load_argument(dir.path()).expect("the project loads");
         let approvals_dir = dir.path().join(APPROVALS_DIR);
-        decide(
+        record(
             &Reviewer {
                 approvals_dir: &approvals_dir,
                 approver: "iwata",
@@ -999,6 +1114,131 @@ mod tests {
         assert_eq!(json["findings"][0]["severity"], "error");
     }
 
+    fn request(target: &str, view_hash: &str, decision: DecisionData) -> DecisionRequest {
+        DecisionRequest {
+            target: target.to_owned(),
+            view_hash: view_hash.to_owned(),
+            decision,
+        }
+    }
+
+    fn stamp() -> Timestamp {
+        "2026-09-10T08:30:00Z".parse().expect("a valid timestamp")
+    }
+
+    fn hash_on_screen(dir: &Path, id: &str) -> String {
+        let hash = node(&snapshot_of(dir), id)
+            .view_hash
+            .expect("the node can be decided on");
+        serde_json::to_value(hash)
+            .expect("a hash serializes")
+            .as_str()
+            .expect("a hash is a string")
+            .to_owned()
+    }
+
+    #[test]
+    fn a_decision_naming_the_hash_on_screen_is_recorded_as_the_server_s_reviewer() {
+        // Arrange
+        let dir = diamond();
+        let shown = hash_on_screen(dir.path(), "lonely");
+
+        // Act
+        let response = decide(
+            dir.path(),
+            "iwata",
+            None,
+            request("lonely", &shown, DecisionData::Approve { comment: None }),
+            stamp(),
+        );
+
+        // Assert
+        assert_eq!(response, DecisionResponse::Recorded);
+        let records =
+            approvals::load_dir(&dir.path().join(APPROVALS_DIR)).expect("the store reads");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].approver(), "iwata");
+        assert_eq!(records[0].key_id(), "iwata");
+        assert_eq!(node(&snapshot_of(dir.path()), "lonely").review, None);
+    }
+
+    #[test]
+    fn a_decision_on_content_edited_since_it_was_shown_writes_nothing() {
+        // Arrange: the page showed the leaf, then the leaf was reworded.
+        let dir = diamond();
+        let shown = hash_on_screen(dir.path(), "lonely");
+        let file = dir.path().join("argument/b.inka");
+        let reworded = fs::read_to_string(&file)
+            .expect("the file reads")
+            .replace("lonely holds", "lonely holds, reworded");
+        fs::write(&file, reworded).expect("the file is rewritten");
+
+        // Act
+        let response = decide(
+            dir.path(),
+            "iwata",
+            None,
+            request("lonely", &shown, DecisionData::Approve { comment: None }),
+            stamp(),
+        );
+
+        // Assert
+        assert_eq!(response, DecisionResponse::Changed);
+        assert!(!dir.path().join(APPROVALS_DIR).exists());
+    }
+
+    #[test]
+    fn a_decision_that_cannot_be_recorded_as_asked_is_refused_with_the_reason() {
+        // Arrange
+        let dir = diamond();
+        let shown = hash_on_screen(dir.path(), "lonely");
+        let approve = || DecisionData::Approve { comment: None };
+        let refusal =
+            |request: DecisionRequest| match decide(dir.path(), "iwata", None, request, stamp()) {
+                DecisionResponse::Refused { message } => message,
+                other => panic!("expected a refusal, got {other:?}"),
+            };
+
+        // Act & Assert
+        assert_eq!(
+            refusal(request("absent", &shown, approve())),
+            "no block named `absent` in the argument"
+        );
+        assert!(refusal(request("lonely", "sha256:nope", approve())).contains("not a view hash"));
+        assert!(
+            refusal(request(
+                "lonely",
+                &shown,
+                DecisionData::Decline {
+                    comment: "  ".to_owned()
+                }
+            ))
+            .contains("comment")
+        );
+        assert!(!dir.path().join(APPROVALS_DIR).exists());
+    }
+
+    #[test]
+    fn a_request_is_read_from_the_json_a_page_sends() {
+        // Arrange
+        let json = r#"{"target":"leaf","view_hash":"sha256:00","decision":{"label":"decline","comment":"not yet"}}"#;
+
+        // Act
+        let parsed: DecisionRequest = serde_json::from_str(json).expect("the request parses");
+
+        // Assert
+        assert_eq!(
+            parsed,
+            request(
+                "leaf",
+                "sha256:00",
+                DecisionData::Decline {
+                    comment: "not yet".to_owned()
+                }
+            )
+        );
+    }
+
     /// Where the front end keeps the types generated from this module.
     fn generated_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/src/generated")
@@ -1037,7 +1277,10 @@ mod tests {
             .with_large_int("number");
 
         // Act
-        Page::export_all(&config).expect("the types export");
+        Page::export_all(&config).expect("the page types export");
+        Session::export_all(&config).expect("the session types export");
+        DecisionRequest::export_all(&config).expect("the request types export");
+        DecisionResponse::export_all(&config).expect("the response types export");
         // The generator leaves spaces at line ends; the repository's hooks
         // would strip them and put the files out of date.
         let fresh: BTreeMap<String, String> = typescript_files(fresh_dir.path())

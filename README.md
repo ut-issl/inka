@@ -87,8 +87,8 @@ release binary already carries it.
 
 ### 4. Serve the interactive graph
 
-`serve` hosts the viewer and feeds it the argument. It is strictly read-only: nothing it serves can
-change the argument, approvals, or any other state. Every page load reads the project again, so an
+`serve` hosts the Web UI and feeds it the argument. Started like this it is read-only: nothing it serves
+can change the argument, approvals, or any other state. Every page load reads the project again, so an
 edit or a new approval shows on reload without restarting the server; a project that fails `check`
 is shown as its findings until it is fixed.
 
@@ -100,6 +100,19 @@ Open <http://127.0.0.1:8080>. The whole argument is laid out top-down with the o
 click a node to focus it with its direct parents and children, click a namespace badge or a list
 header to focus that namespace, hover a node for its full description, and press `Esc` to return to
 the whole view.
+
+To review in the browser, start it with an approver:
+
+```console
+inka serve tests/fixtures/dogfood --as iwata
+```
+
+The review surface then offers approve and decline under each target that can take a decision, and a
+decision appends the same record `inka review --as iwata` would, to `approvals/iwata.jsonl`. That is
+the only thing the server can change. Who decisions are recorded as is fixed when the server starts
+(`--key-id` sets the key id, as for `inka review`); a recording server listens on a loopback address
+only and accepts a decision only from its own pages; and a decision is recorded only if the target
+still has the content that was on screen.
 
 Useful flags: `--port` (default 8080), `--host` (loopback by default, so an argument under review is
 not published to the network), and `--assets <DIR>` to serve a bundle from disk instead of the

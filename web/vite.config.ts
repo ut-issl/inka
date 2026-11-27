@@ -15,7 +15,13 @@ const INKA_SERVE = process.env.INKA_SERVE ?? 'http://127.0.0.1:8080'
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: { '/api': INKA_SERVE },
+    proxy: {
+      // A recording `inka serve` answers only requests addressed to it and
+      // only decisions from its own pages. In development the page is this
+      // dev server's, so the proxy speaks for it: it addresses the request to
+      // the real server and names that server as where the request comes from.
+      '/api': { target: INKA_SERVE, changeOrigin: true, headers: { Origin: INKA_SERVE } },
+    },
   },
   // Relative asset URLs: `inka serve` may mount the bundle under a sub-path.
   base: './',

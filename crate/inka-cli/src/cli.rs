@@ -102,7 +102,8 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
-    /// Serve the interactive, read-only graph viewer for a project.
+    /// Serve the Web UI for a project: read-only, or recording decisions
+    /// when started with --as.
     Serve {
         /// Project directory holding `inka.toml`; defaults to the current
         /// directory.
@@ -119,6 +120,14 @@ pub enum Command {
         /// embedded in this binary.
         #[arg(long)]
         assets: Option<PathBuf>,
+        /// Record decisions made in the browser as this approver, appending to
+        /// `approvals/<approver>.jsonl`. Without it the server is read-only.
+        /// A recording server listens on a loopback address only.
+        #[arg(long = "as", value_name = "APPROVER", value_parser = clap::builder::NonEmptyStringValueParser::new())]
+        approver: Option<String>,
+        /// The key id records name; defaults to the approver name.
+        #[arg(long, requires = "approver", value_parser = clap::builder::NonEmptyStringValueParser::new())]
+        key_id: Option<String>,
     },
 }
 

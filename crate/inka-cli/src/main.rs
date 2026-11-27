@@ -56,9 +56,16 @@ fn run(cli: Cli) -> io::Result<Outcome> {
             host,
             port,
             assets,
+            approver,
+            key_id,
         } => {
             let color = color_choice.resolve(no_color, io::stderr().is_terminal());
-            let options = serve::Options { host, port, assets };
+            let options = serve::Options {
+                host,
+                port,
+                assets,
+                reviewer: approver.map(|approver| serve::ReviewerOptions { approver, key_id }),
+            };
             // Unbuffered: the listening address and any warning must reach the
             // operator before the server blocks.
             let mut err = io::stderr().lock();

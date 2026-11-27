@@ -1,12 +1,18 @@
 /**
- * Presentation parameters and the one wiring constant.
+ * Presentation parameters and the wiring constants.
  *
  * Everything here is tuning — spacing, zoom thresholds, animation — except
- * {@link PAGE_URL}, which is where the bundle asks `inka serve` for the page.
+ * the three URLs, which are where the bundle talks to `inka serve`.
  */
 
 /** Endpoint answering with the page, relative to wherever the bundle is mounted. */
 export const PAGE_URL = './api/page'
+
+/** Endpoint saying who the server records decisions as, if it records. */
+export const SESSION_URL = './api/session'
+
+/** Endpoint a decision is posted to; present only on a recording server. */
+export const DECISIONS_URL = './api/decisions'
 
 /** Zoom below which namespace badges are hidden. */
 export const BADGE_MIN_ZOOM = 0.75

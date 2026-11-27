@@ -37,10 +37,16 @@ impl Server {
 
     /// As [`Server::start`], on any project directory.
     fn start_in(project: &Path) -> Self {
+        Self::start_with(project, &[])
+    }
+
+    /// As [`Server::start_in`], with extra arguments.
+    fn start_with(project: &Path, arguments: &[&str]) -> Self {
         let mut process = Command::new(env!("CARGO_BIN_EXE_inka"))
             .arg("serve")
             .arg(project)
             .args(["--port", "0"])
+            .args(arguments)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -210,6 +216,49 @@ fn a_project_that_fails_the_check_is_reported_to_the_operator_at_startup() {
         "{}",
         server.startup
     );
+}
+
+#[test]
+fn a_recording_server_refuses_to_listen_beyond_loopback() {
+    let output = Command::new(env!("CARGO_BIN_EXE_inka"))
+        .arg("serve")
+        .arg(workspace_fixture("aocs"))
+        .args(["--port", "0", "--host", "0.0.0.0", "--as", "iwata"])
+        .output()
+        .expect("the inka binary should run");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("loopback"), "{stderr}");
+    assert!(!stderr.contains("inka serve: http://"), "{stderr}");
+}
+
+#[test]
+fn a_key_id_without_an_approver_is_refused() {
+    let output = Command::new(env!("CARGO_BIN_EXE_inka"))
+        .arg("serve")
+        .arg(workspace_fixture("aocs"))
+        .args(["--port", "0", "--key-id", "key-1"])
+        .output()
+        .expect("the inka binary should run");
+
+    assert!(!output.status.success());
+}
+
+#[test]
+fn a_recording_server_says_who_it_records_as() {
+    // Nothing is decided here, so the fixture is not written to.
+    let server = Server::start_with(&workspace_fixture("aocs"), &["--as", "iwata"]);
+
+    assert!(
+        server.startup.contains("recording decisions as `iwata`"),
+        "{}",
+        server.startup
+    );
+    let (status, body) = server.get("/api/session");
+    assert!(status.contains("200 OK"), "{status}");
+    let session: Value = serde_json::from_str(&body).expect("the session should be JSON");
+    assert_eq!(session["reviewer"]["approver"], "iwata");
 }
 
 #[test]

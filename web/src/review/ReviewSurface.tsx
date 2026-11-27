@@ -8,28 +8,111 @@
  *
  * The order is a recommendation, not a gate: any target can be opened
  * directly. Declined and blocked targets are listed with what resolves them.
+ *
+ * On a server that records, a target that can take a decision gets the
+ * controls to take it, under its local view and nowhere else.
  */
 
-import { useEffect, useRef } from 'react'
-import { Link, useParams } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 
 import { LocalView } from '../components/LocalView'
 import { ReviewBadge } from '../components/StatusBadge'
+import { DECISIONS_URL } from '../config'
+import type { DecisionData } from '../generated/DecisionData'
 import type { NodeData } from '../generated/NodeData'
+import type { ReviewerSession } from '../generated/ReviewerSession'
 import type { Snapshot } from '../generated/Snapshot'
-import { groupHeading, reviewDetail } from '../model/wording'
+import { recordDecision } from '../model/session'
+import { groupHeading, reviewDetail, takesDecision } from '../model/wording'
 import { neutralize } from '../text/neutralize'
+import { DecisionBar } from './DecisionBar'
 
 interface Props {
   readonly snapshot: Snapshot
   readonly nodes: ReadonlyMap<string, NodeData>
+  /** Who the server records as; `null` on a read-only server. */
+  readonly reviewer?: ReviewerSession | null
+  /** Asks the server for the page again, after something was decided. */
+  readonly onReload?: () => void
 }
 
-export function ReviewSurface({ snapshot, nodes }: Props) {
+/** What the last decision came to, when it is worth saying. */
+interface Outcome {
+  readonly kind: 'recorded' | 'problem'
+  readonly message: string
+}
+
+export function ReviewSurface({ snapshot, nodes, reviewer = null, onReload }: Props) {
   const params = useParams()
+  const navigate = useNavigate()
   const walk = snapshot.queue.walk
   const currentId = params.id ?? walk[0]
   const current = currentId === undefined ? undefined : nodes.get(currentId)
+  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  /**
+   * The decisions this page has had recorded, and the page they were taken
+   * on. Until the server's next answer replaces that page, their targets are
+   * still on screen as if undecided; they take no second decision meanwhile.
+   */
+  const [recorded, setRecorded] = useState<{ on: Snapshot; keys: ReadonlySet<string> } | null>(null)
+
+  // What was said about one target is not said about the next.
+  const shownId = current?.id
+  /** The target on screen now, for a decision that completes later to compare with. */
+  const shownRef = useRef(shownId)
+  useEffect(() => {
+    shownRef.current = shownId
+    setOutcome((last) => (last?.kind === 'problem' ? null : last))
+  }, [shownId])
+
+  const hash = current?.view_hash ?? null
+  const key = current === undefined || hash === null ? null : `${current.id}@${hash}`
+  const alreadyRecorded = recorded !== null && recorded.on === snapshot && key !== null && recorded.keys.has(key)
+  const decidable =
+    reviewer !== null &&
+    current !== undefined &&
+    hash !== null &&
+    takesDecision(current.review) &&
+    !alreadyRecorded
+
+  const decide = async (decision: DecisionData) => {
+    if (!reviewer || !current || hash === null || key === null) return
+    const target = `${current.mode}:${current.id}`
+    const response = await recordDecision(DECISIONS_URL, reviewer, current.id, hash, decision)
+    // The reviewer may have opened another target while the server answered.
+    const stillShown = shownRef.current === current.id
+    switch (response.outcome) {
+      case 'recorded': {
+        setRecorded((last) => ({
+          on: snapshot,
+          keys: new Set([...(last?.on === snapshot ? last.keys : []), key]),
+        }))
+        setOutcome({ kind: 'recorded', message: `Recorded ${decision.label} of ${target}.` })
+        onReload?.()
+        // The target leaves the walk; move on to the one that followed it —
+        // unless the reviewer has already gone somewhere of their own choosing.
+        if (stillShown) {
+          const index = walk.indexOf(current.id)
+          const next = walk[index + 1] ?? walk.find((id) => id !== current.id)
+          void navigate(next === undefined ? '/review' : reviewPath(next))
+        }
+        return
+      }
+      case 'changed':
+        setOutcome({
+          kind: 'problem',
+          message: stillShown
+            ? `${target} has changed since it was shown, so nothing was recorded. Its current content is now on screen.`
+            : `${target} has changed since it was shown, so nothing was recorded.`,
+        })
+        onReload?.()
+        return
+      case 'refused':
+      case 'failed':
+        setOutcome({ kind: 'problem', message: `Nothing was recorded for ${target}: ${response.message}` })
+    }
+  }
 
   // A new target is read from its top: the pane does not keep the place the
   // previous one was scrolled to.
@@ -43,10 +126,16 @@ export function ReviewSurface({ snapshot, nodes }: Props) {
     <div className="review">
       <Queue snapshot={snapshot} nodes={nodes} currentId={current?.id} />
       <section ref={main} className="review__main" aria-label="Review target">
+        {outcome ? (
+          <p className={`outcome outcome--${outcome.kind}`} role={outcome.kind === 'problem' ? 'alert' : 'status'}>
+            {neutralize(outcome.message)}
+          </p>
+        ) : null}
         {current ? (
           <>
             <Progress walk={walk} currentId={current.id} />
             <LocalView node={current} reference={(id) => <TargetLink id={id} />} />
+            {decidable ? <DecisionBar key={`${current.id}@${hash}`} reviewer={reviewer} onDecide={decide} /> : null}
           </>
         ) : (
           <Empty requested={params.id} queued={walk.length} />
@@ -70,7 +159,11 @@ function TargetLink({ id }: { id: string }) {
 }
 
 /** The queue as `inka review --list` prints it: one section per state. */
-function Queue({ snapshot, nodes, currentId }: Props & { currentId: string | undefined }) {
+function Queue({
+  snapshot,
+  nodes,
+  currentId,
+}: Pick<Props, 'snapshot' | 'nodes'> & { currentId: string | undefined }) {
   const groups = snapshot.queue.groups
   const total = groups
     .filter((group) => group.state !== 'blocked')
