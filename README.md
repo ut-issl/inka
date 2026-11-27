@@ -160,7 +160,10 @@ inka review --path my-argument --as alice goal --decline --comment "state a real
 ```
 
 Without `--list` or a target, `review` walks the queue interactively. The queue runs from the leaves
-up, one subtree at a time, so a block comes after everything below it. Every decision is appended to
+up, one subtree at a time, so a block comes after everything below it. A block that cannot be
+decided on yet — a bind with no evidence, say — is never offered, so its parent can come up before
+it; the parent shows each direct child with the status `inka eval` gives it, and the reasons when the
+child is blamed. Every decision is appended to
 `approvals/<approver>.jsonl` and nothing is ever rewritten. An approval covers the content it was
 given for, so editing a block makes its approval stale, and its parents' too, since they rest on its
 contract. Each block with a stale approval goes back in the queue.

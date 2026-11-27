@@ -47,6 +47,12 @@ The local view is the unit both surfaces present a node in. It is what an approv
 - The description under judgement is visually set apart from the children's descriptions around it.
 - Nothing deeper is shown, and nothing is expanded in place: a child appears as its description only. Reading
   below a child means navigating to that child's own local view.
+- Each child also says where it stands: its [status](#node-status), and what the status needs said beyond its
+  name — every reason a blamed child fails on, or how many blamed nodes lie below a child that is not
+  established only because of them. The queue offers a parent whatever state its children are in, and a blocked
+  child is never offered at all, so without this a reviewer could not tell why a parent turned up before the
+  claims under it. `inka review` writes the same in the child's frame. The status is not contract content — no
+  approval binds to it — and it is set apart from the child's description.
 - Everything that enters the view hash is on screen without a hover, a click or a scroll inside a nested box:
   no contract content is reachable only through an interaction. The one exception is the exact spacing of a
   description — the whitespace and line breaks that rendering it as Markdown folds — which is read in the
@@ -60,8 +66,9 @@ The local view is the unit both surfaces present a node in. It is what an approv
 - A node that is not established is one of two things, and the two are told apart: *blamed* — it fails through a
   cause of its own, named as `inka eval` names it (no approval, stale approval, declined, `until:` expired,
   evidence missing, evidence failed) — or unestablished only because something below it is.
-- This status is what is shown wherever a node is named with a state: a card, a local view's header, a sidebar
-  entry, a hover preview. It is always spelled out; colour repeats it and never carries it alone.
+- This status is what is shown wherever a node is named with a state: a card, a local view's header, a child in
+  its parent's local view, a sidebar entry, a hover preview. It is always spelled out; colour repeats it and
+  never carries it alone.
 - The count `inka eval` prints — established nodes out of all nodes — is always visible.
 - The review queue's states (unapproved, stale, declined, blocked) are the same validity function read from the
   approver's side, so a node's status and its place in the queue never disagree.

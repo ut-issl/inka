@@ -129,6 +129,7 @@ export function GraphSurface({ snapshot, nodes }: Props) {
             <section className="graph-surface__local" aria-label="Selected node">
           <LocalView
             node={selected}
+            nodes={nodes}
             reference={(id) => <NodeReference node={nodes.get(id)} id={id} to={graphPath(id)} />}
             actions={
               <>

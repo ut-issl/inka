@@ -99,6 +99,34 @@ describe('LocalView', () => {
     expect(screen.getByRole('button', { name: 'Rendered' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  test('says where each child stands, and why a blamed one is blamed', () => {
+    const nodes = new Map(page.nodes.map((candidate) => [candidate.id, candidate]))
+    nodes.set('zeta', {
+      ...nodes.get('zeta')!,
+      status: { state: 'blamed', reasons: [{ cause: 'missing_evidence', target: 'tests/zeta.rs' }] },
+    })
+    nodes.set('alpha', { ...nodes.get('alpha')!, status: { state: 'unestablished' }, blamed_below: 2 })
+
+    render(<LocalView node={parent} nodes={nodes} />)
+
+    const [zeta, alpha] = within(screen.getByRole('region', { name: 'Contract content' })).getAllByRole('listitem')
+    expect(within(zeta!).getByText('blamed')).toBeInTheDocument()
+    expect(within(zeta!).getByText('no imported test evidence provides `tests/zeta.rs`')).toBeInTheDocument()
+    expect(within(alpha!).getByText('not established')).toBeInTheDocument()
+    expect(within(alpha!).getByText('2 nodes below it are blamed')).toBeInTheDocument()
+  })
+
+  test('gives an established child its status and nothing more', () => {
+    const nodes = new Map(page.nodes.map((candidate) => [candidate.id, candidate]))
+    nodes.set('zeta', { ...nodes.get('zeta')!, status: { state: 'established' } })
+
+    render(<LocalView node={parent} nodes={nodes} />)
+
+    const [zeta] = within(screen.getByRole('region', { name: 'Contract content' })).getAllByRole('listitem')
+    expect(within(zeta!).getByText('established')).toBeInTheDocument()
+    expect(zeta!.querySelector('.local__child-status')).toBeNull()
+  })
+
   test('draws a reference to a child the way the surface asks', () => {
     render(<LocalView node={parent} reference={(id) => <a href={`#${id}`}>{id}</a>} />)
 

@@ -9,6 +9,7 @@
 
 import type { BlameReason } from '../generated/BlameReason'
 import type { BlockedReason } from '../generated/BlockedReason'
+import type { NodeData } from '../generated/NodeData'
 import type { ReviewGroup } from '../generated/ReviewGroup'
 import type { ReviewState } from '../generated/ReviewState'
 import type { Status } from '../generated/Status'
@@ -34,6 +35,27 @@ export function statusDetail(status: Status): string[] {
       return status.reasons.map(blameReason)
     case 'unestablished':
       return ['something below it is not established']
+  }
+}
+
+/**
+ * What a child's status says beyond its name where its parent's local view
+ * names it, as `inka review` words it: each reason it is blamed, or how many
+ * of the nodes below it are. Which nodes those are is read in the child's own
+ * local view.
+ */
+export function childStatusDetail(child: NodeData): string[] {
+  switch (child.status.state) {
+    case 'established':
+      return []
+    case 'blamed':
+      return child.status.reasons.map(blameReason)
+    case 'unestablished':
+      return [
+        child.blamed_below === 1
+          ? '1 node below it is blamed'
+          : `${child.blamed_below} nodes below it are blamed`,
+      ]
   }
 }
 

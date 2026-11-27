@@ -16,13 +16,23 @@
 //! the edit.
 //!
 //! Standard output is styled through the `console` crate. A hue means one of
-//! two things: the review state — unapproved, stale, declined, blocked — or,
-//! in blue, a block id. The state is always spelled out too, so the
+//! three things: the review state (unapproved, stale, declined, blocked), the
+//! status `inka eval` gives a child (established, blamed, not established)
+//! or, in blue, a block id. The state is always spelled out too, so the
 //! uncoloured rendering loses nothing. Styling wraps text that has already
 //! been through [`sanitize`]; it is never read from a source file or a
 //! record. Descriptions are wrapped to the terminal by `textwrap`, and the
 //! guides that hang the children under `children:` are drawn by `termtree`.
+//!
+//! A target is the local view its approval binds to, and one thing more: the
+//! frame of each direct child says where that child stands — its status, and
+//! when it is blamed, why. The queue offers a parent whatever state its
+//! children are in, and a child that is blocked never comes up in the walk at
+//! all; without this a reviewer could not tell why a parent turned up before
+//! the claims under it. The status is not part of the local view and no
+//! approval binds to it.
 
+use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
@@ -37,6 +47,7 @@ use inka_core::review::{
 };
 use inka_core::source::{Diagnostics, Error, SourceMap};
 use inka_core::view::{ArgumentView, Mode, Property, ViewNode};
+use inka_core::wire::{self, NodeData, Snapshot, Status};
 use termtree::{GlyphPalette, Tree};
 
 use crate::check::Outcome;
@@ -147,6 +158,15 @@ impl Screen {
         })
     }
 
+    /// The hue of a child's status, the same the web UI gives it.
+    fn status(self, status: &Status) -> Style {
+        self.styled(match status {
+            Status::Established => Style::new().green(),
+            Status::Blamed { .. } => Style::new().red(),
+            Status::Unestablished => Style::new().dim(),
+        })
+    }
+
     fn label(self, label: ReviewLabel) -> Style {
         self.styled(match label {
             ReviewLabel::Approve => Style::new().green(),
@@ -218,15 +238,15 @@ pub fn run(
     color: bool,
 ) -> io::Result<Outcome> {
     let screen = session.screen;
-    let Some(Argument {
+    let Some(argument) = load_project_view(project_dir, err, color)? else {
+        return Ok(Outcome::Failed);
+    };
+    let Argument {
         manifest,
         evidence,
         view,
         ..
-    }) = load_project_view(project_dir, err, color)?
-    else {
-        return Ok(Outcome::Failed);
-    };
+    } = &argument;
     let records = match approvals::load_dir(&project_dir.join(APPROVALS_DIR)) {
         Ok(records) => records,
         Err(error) => return fail(&error.to_string(), err, color),
@@ -241,7 +261,7 @@ pub fn run(
 
     match &request.action {
         Action::Single { target, decision } => {
-            let answer = single(&context, &view, &evidence, target, decision, &mut session);
+            let answer = single(&context, view, evidence, target, decision, &mut session);
             match answer {
                 Ok(line) => {
                     writeln!(out, "{line}")?;
@@ -251,7 +271,7 @@ pub fn run(
             }
         }
         Action::List => {
-            let queue = match derive_queue(&view, &manifest.phases, &records, &evidence) {
+            let queue = match derive_queue(view, &manifest.phases, &records, evidence) {
                 Ok(queue) => queue,
                 Err(error) => return fail(&error.to_string(), err, color),
             };
@@ -259,11 +279,11 @@ pub fn run(
             Ok(Outcome::Ok)
         }
         Action::Interactive => {
-            let queue = match derive_queue(&view, &manifest.phases, &records, &evidence) {
+            let queue = match derive_queue(view, &manifest.phases, &records, evidence) {
                 Ok(queue) => queue,
                 Err(error) => return fail(&error.to_string(), err, color),
             };
-            interactive(&context, &view, &queue, &mut session, out, err, color)
+            interactive(&context, &argument, &queue, &mut session, out, err, color)
         }
     }
 }
@@ -308,10 +328,31 @@ fn single(
     ))
 }
 
+/// Where every node stands, by id: what a child's frame reads its status
+/// from. A node missing from it is drawn without one.
+type Statuses<'a> = HashMap<&'a str, &'a NodeData>;
+
+fn statuses_of(nodes: &[NodeData]) -> Statuses<'_> {
+    nodes.iter().map(|node| (node.id.as_str(), node)).collect()
+}
+
+/// Where every node stands under the records in the store right now: the
+/// snapshot the web UI is served, so the two surfaces say the same of a
+/// child.
+fn standing(argument: &Argument, context: &Reviewer<'_>) -> Result<Snapshot, String> {
+    let records = approvals::load_dir(context.approvals_dir).map_err(|error| error.to_string())?;
+    wire::snapshot(argument, &records).map_err(|error| error.to_string())
+}
+
 /// Walks the actionable queue one target at a time, reading `a`/`d`/`s`/`q`.
+///
+/// The queue and the hash each decision binds to are the ones the session
+/// was loaded with. The statuses shown on a target's children are not: they
+/// are read again after every recorded decision, so a child approved a
+/// moment ago is not still shown as lacking an approval.
 fn interactive(
     context: &Reviewer<'_>,
-    view: &ArgumentView,
+    argument: &Argument,
     queue: &ReviewQueue,
     session: &mut Session<'_>,
     out: &mut impl Write,
@@ -327,6 +368,7 @@ fn interactive(
         );
     }
 
+    let view = &argument.view;
     let screen = session.screen;
     write_sections(queue, &[Group::Declined, Group::Blocked], true, screen, out)?;
     let actionable: Vec<&QueueItem> = queue
@@ -339,6 +381,10 @@ fn interactive(
         return Ok(Outcome::Ok);
     }
 
+    let mut snapshot = match standing(argument, context) {
+        Ok(snapshot) => snapshot,
+        Err(message) => return fail(&message, err, color),
+    };
     let total = actionable.len();
     let mut recorded = 0usize;
     let mut failed = 0usize;
@@ -346,7 +392,8 @@ fn interactive(
         let node = view
             .node(&item.id)
             .expect("the queue names nodes of the same view");
-        write_target(node, item, index + 1, total, view, screen, out)?;
+        let statuses = statuses_of(&snapshot.nodes);
+        write_target(node, item, index + 1, total, view, &statuses, screen, out)?;
         let decision = match prompt_decision(session, out)? {
             Answer::Approve => Some((ReviewLabel::Approve, None)),
             Answer::Decline => {
@@ -364,6 +411,16 @@ fn interactive(
                 Ok(()) => {
                     writeln!(out, "{}", recorded_line(label, node.mode, &node.id, screen))?;
                     recorded += 1;
+                    match standing(argument, context) {
+                        Ok(current) => snapshot = current,
+                        // The decision is kept; only the statuses shown
+                        // from here on are the ones read before it.
+                        Err(message) => {
+                            fail(&message, err, color)?;
+                            err.flush()?;
+                            failed += 1;
+                        }
+                    }
                 }
                 Err(message) => {
                     // Surface the failure next to the prompt it answers, not
@@ -626,16 +683,19 @@ fn section_rows(queue: &ReviewQueue, group: Group, prelude: bool, screen: Screen
 /// includes them the direct children's descriptions, and the deadline, each
 /// with the comment attached to it written above it as `//` lines, the way
 /// the formatter places comments in a source file. Nothing deeper is shown —
-/// the local view is all an approval binds to.
+/// the local view is all an approval binds to. The one addition is each
+/// child's status from `statuses`, which no approval binds to.
 ///
 /// A ruled header as wide as the terminal opens the target, so one target
 /// does not run into the next; a blank line closes it, ahead of the prompt.
+#[allow(clippy::too_many_arguments)]
 fn write_target(
     node: &ViewNode,
     item: &QueueItem,
     position: usize,
     total: usize,
     view: &ArgumentView,
+    statuses: &Statuses<'_>,
     screen: Screen,
     out: &mut impl Write,
 ) -> io::Result<()> {
@@ -669,7 +729,7 @@ fn write_target(
         )?;
     }
     if let Some(children) = &content.children {
-        write_children(children, screen, out)?;
+        write_children(children, statuses, screen, out)?;
     }
     if let Some(deadline) = &content.deadline {
         write_property(
@@ -716,7 +776,7 @@ fn write_description(
 ) -> io::Result<()> {
     // Two columns of indent, then a border and a space on either side.
     let lines = wrap(text, screen.width.saturating_sub(2 + 4));
-    for line in frame(&lines, None, Frame::Subject(group), screen) {
+    for line in frame(&lines, None, &[], Frame::Subject(group), screen) {
         writeln!(out, "  {line}")?;
     }
     Ok(())
@@ -733,14 +793,18 @@ enum Frame {
 }
 
 impl Frame {
-    /// The corners clockwise from the top left, then the horizontal and the
-    /// vertical edge.
-    const fn glyphs(self) -> [char; 6] {
+    /// The corners clockwise from the top left, the horizontal and the
+    /// vertical edge, then the two ends of the rule above a footer.
+    const fn glyphs(self) -> [char; 8] {
         match self {
-            Frame::Subject(_) => ['╔', '╗', '╝', '╚', '═', '║'],
-            Frame::Child => ['╭', '╮', '╯', '╰', '─', '│'],
+            Frame::Subject(_) => ['╔', '╗', '╝', '╚', '═', '║', '╟', '╢'],
+            Frame::Child => ['╭', '╮', '╯', '╰', '─', '│', '├', '┤'],
         }
     }
+
+    /// The line of the rule above a footer: always a light one, so a double
+    /// frame is not cut in two.
+    const RULE: char = '─';
 
     fn style(self, screen: Screen) -> Style {
         match self {
@@ -751,8 +815,15 @@ impl Frame {
 }
 
 /// `lines` in a frame as wide as the longest of them, with `title` — already
-/// styled — set into the top edge when there is one.
-fn frame(lines: &[String], title: Option<&str>, kind: Frame, screen: Screen) -> Vec<String> {
+/// styled — set into the top edge when there is one. A `footer` that is not
+/// empty follows the lines under a rule across the frame.
+fn frame(
+    lines: &[String],
+    title: Option<&str>,
+    footer: &[String],
+    kind: Frame,
+    screen: Screen,
+) -> Vec<String> {
     let [
         top_left,
         top_right,
@@ -760,11 +831,14 @@ fn frame(lines: &[String], title: Option<&str>, kind: Frame, screen: Screen) -> 
         bottom_left,
         horizontal,
         vertical,
+        rule_left,
+        rule_right,
     ] = kind.glyphs();
     let edge = |length: usize| horizontal.to_string().repeat(length);
     let title_width = title.map_or(0, measure_text_width);
     let inner = lines
         .iter()
+        .chain(footer)
         .map(|line| measure_text_width(line))
         // A titled edge needs a dash on either side of ` title `.
         .chain(title.map(|_| title_width + 2))
@@ -781,15 +855,25 @@ fn frame(lines: &[String], title: Option<&str>, kind: Frame, screen: Screen) -> 
             .apply_to(format!("{top_left}{}{top_right}", edge(inner + 2)))
             .to_string(),
     };
-    let mut framed = vec![top];
-    framed.extend(lines.iter().map(|line| {
+    let row = |line: &String| {
         format!(
             "{} {} {}",
             border.apply_to(vertical),
             pad_str(line, inner, Alignment::Left, None),
             border.apply_to(vertical)
         )
-    }));
+    };
+    let mut framed = vec![top];
+    framed.extend(lines.iter().map(row));
+    if !footer.is_empty() {
+        let rule = Frame::RULE.to_string().repeat(inner + 2);
+        framed.push(
+            border
+                .apply_to(format!("{rule_left}{rule}{rule_right}"))
+                .to_string(),
+        );
+        framed.extend(footer.iter().map(row));
+    }
     framed.push(
         border
             .apply_to(format!("{bottom_left}{}{bottom_right}", edge(inner + 2)))
@@ -801,8 +885,14 @@ fn frame(lines: &[String], title: Option<&str>, kind: Frame, screen: Screen) -> 
 /// The `children:` property as a tree: each direct child hangs from a guide
 /// with the comment on its entry and then its description, wrapped to the
 /// terminal in a frame that carries its id in the top edge.
+///
+/// The top edge also carries the child's status, after the id, and what the
+/// status needs said beyond its name stands under a rule at the foot of the
+/// frame: every reason a blamed child fails on, or how many blamed nodes lie
+/// below one that is not established. An established child gets no foot.
 fn write_children(
     children: &ChildrenContent,
+    statuses: &Statuses<'_>,
     screen: Screen,
     out: &mut impl Write,
 ) -> io::Result<()> {
@@ -814,9 +904,22 @@ fn write_children(
         let description = child.description.as_deref().unwrap_or("(not defined)");
         let mut lines = comment_lines(child.comment.as_deref(), screen);
         let id = screen.id().apply_to(sanitize(&child.id)).to_string();
+        let standing = statuses.get(child.id.as_str());
+        let title = match standing {
+            Some(node) => format!(
+                "{id} {} {}",
+                screen.dim().apply_to("──"),
+                screen
+                    .status(&node.status)
+                    .apply_to(status_name(&node.status))
+            ),
+            None => id,
+        };
+        let footer = standing.map_or_else(Vec::new, |node| status_footer(node, width));
         lines.extend(frame(
             &wrap(description, width),
-            Some(&id),
+            Some(&title),
+            &footer,
             Frame::Child,
             screen,
         ));
@@ -902,6 +1005,51 @@ fn sanitize(line: &str) -> String {
 
 fn is_bidi_control(c: char) -> bool {
     matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// A status as `inka eval` and the web UI spell it.
+const fn status_name(status: &Status) -> &'static str {
+    match status {
+        Status::Established => "established",
+        Status::Blamed { .. } => "blamed",
+        Status::Unestablished => "not established",
+    }
+}
+
+/// What a child's status says beyond its name: each reason it is blamed, in
+/// the words of `inka eval`, or how many of the nodes below it are. Which
+/// nodes those are is read in the child's own local view.
+fn status_detail(node: &NodeData) -> Vec<String> {
+    match &node.status {
+        Status::Established => Vec::new(),
+        Status::Blamed { reasons } => reasons.iter().map(ToString::to_string).collect(),
+        Status::Unestablished => vec![match node.blamed_below {
+            1 => "1 node below it is blamed".to_owned(),
+            count => format!("{count} nodes below it are blamed"),
+        }],
+    }
+}
+
+/// The foot of a child's frame: its [`status_detail`] wrapped to `width`.
+/// Several reasons are set apart as a list, each wrapped under its own dash,
+/// so where one ends and the next begins does not depend on the wrapping.
+fn status_footer(node: &NodeData, width: usize) -> Vec<String> {
+    let details = status_detail(node);
+    if let [detail] = details.as_slice() {
+        return wrap(detail, width);
+    }
+    details
+        .iter()
+        .flat_map(|detail| {
+            wrap(detail, width.saturating_sub(2))
+                .into_iter()
+                .enumerate()
+                .map(|(index, line)| {
+                    let lead = if index == 0 { "- " } else { "  " };
+                    format!("{lead}{line}")
+                })
+        })
+        .collect()
 }
 
 /// What a state says beyond its name: who approved an earlier version, or
@@ -1131,9 +1279,11 @@ fiat leaf {
   // one entry per hazard
   children:
   └─ // the only hazard so far
-     ╭─ leaf ────────╮
-     │ checked in CI │
-     ╰───────────────╯
+     ╭─ leaf ── blamed ───────────────────────╮
+     │ checked in CI                          │
+     ├────────────────────────────────────────┤
+     │ no approval covers the current content │
+     ╰────────────────────────────────────────╯
   // revisit at CDR
   //
   // once the model lands
@@ -1184,7 +1334,7 @@ fiat leaf {
         let mut out = Vec::new();
 
         // Act
-        write_target(&node, &item, 1, 1, &view, PLAIN, &mut out)
+        write_target(&node, &item, 1, 1, &view, &Statuses::new(), PLAIN, &mut out)
             .expect("writing to a vec succeeds");
 
         // Assert
@@ -1264,8 +1414,17 @@ fiat leaf {
         let mut out = Vec::new();
 
         // Act
-        write_target(&node, &item, 1, 1, &view, narrow, &mut out)
-            .expect("writing to a vec succeeds");
+        write_target(
+            &node,
+            &item,
+            1,
+            1,
+            &view,
+            &Statuses::new(),
+            narrow,
+            &mut out,
+        )
+        .expect("writing to a vec succeeds");
         let text = String::from_utf8(out).expect("UTF-8");
 
         // Assert
@@ -1379,13 +1538,17 @@ fiat leaf {
   ║ one line of a sixty column terminal                 ║
   ╚═════════════════════════════════════════════════════╝
   children:
-  ├─ ╭─ first ─────────────────────────────────────────────╮
+  ├─ ╭─ first ── blamed ───────────────────────────────────╮
   │  │ the first child also says rather more than a single │
   │  │ line of the terminal can hold                       │
+  │  ├─────────────────────────────────────────────────────┤
+  │  │ no approval covers the current content              │
   │  ╰─────────────────────────────────────────────────────╯
-  └─ ╭─ second ───────────────────────────────────────────╮
+  └─ ╭─ second ── blamed ─────────────────────────────────╮
      │ 評価はコミット済みの入力だけから再現でき、途中で環 │
      │ 境の状態を一切読まないことを前提とする。           │
+     ├────────────────────────────────────────────────────┤
+     │ no approval covers the current content             │
      ╰────────────────────────────────────────────────────╯
 "
             ),
@@ -1395,6 +1558,153 @@ fiat leaf {
             assert!(measure_text_width(line) <= PLAIN.width, "{line}");
             assert_eq!(line.trim_end(), line, "no trailing blanks: {line:?}");
         }
+    }
+
+    #[test]
+    fn a_child_frame_names_its_status_and_every_reason_it_is_blamed() {
+        // Arrange: a root over children that fail in every way there is,
+        // three of them blocked and so never offered as targets themselves.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unestablished");
+
+        // Act: skip all five targets; nothing is written to the fixture.
+        let transcript = run_interactive(&dir, "s\ns\ns\ns\ns\n");
+
+        // Assert: the status follows the id in the top edge and the reasons
+        // stand under a rule, in the words of `inka eval`.
+        let root = transcript
+            .split("objective:root")
+            .nth(1)
+            .expect("the root is the last target");
+        assert!(
+            root.contains(
+                "\
+  ├─ ╭─ tested ── blamed ─────────────────────────╮
+  │  │ checked in CI                              │
+  │  ├────────────────────────────────────────────┤
+  │  │ no imported test evidence provides `tests/ │
+  │  │ hash_props.rs`                             │
+  │  ╰────────────────────────────────────────────╯
+"
+            ),
+            "{transcript}"
+        );
+        assert!(
+            root.contains(
+                "\
+  ├─ ╭─ partial ── blamed ──────────────────────────────╮
+  │  │ every platform is exercised                      │
+  │  ├──────────────────────────────────────────────────┤
+  │  │ - no approval covers the current content         │
+  │  │ - required executions were skipped, cancelled or │
+  │  │   missing: macos, windows                        │
+  │  ╰──────────────────────────────────────────────────╯
+"
+            ),
+            "{transcript}"
+        );
+        assert!(
+            root.contains("declined by sato: the margin calculation omits"),
+            "{transcript}"
+        );
+        for line in root.lines().filter(|line| line.starts_with("  ")) {
+            assert!(measure_text_width(line) <= PLAIN.width, "{line}");
+        }
+    }
+
+    #[test]
+    fn a_child_approved_in_the_session_reads_as_established_under_its_parent() {
+        // Arrange
+        let dir = scenario_project();
+
+        // Act: approve the leaf, then look at its parent.
+        let transcript = run_interactive(dir.path(), "a\ns\ns\n");
+
+        // Assert: an established child gets its status and no foot.
+        assert!(
+            transcript.contains(
+                "\
+  children:
+  └─ ╭─ leaf ── established ─╮
+     │ taken as given        │
+     ╰───────────────────────╯
+"
+            ),
+            "{transcript}"
+        );
+    }
+
+    #[test]
+    fn a_child_failing_only_through_what_is_below_it_says_how_many_are_blamed() {
+        // Arrange
+        let dir = scenario_project();
+
+        // Act: leave the leaf, approve the branch, then look at the root.
+        let transcript = run_interactive(dir.path(), "s\na\ns\n");
+
+        // Assert: the branch has no cause of its own, so it is not blamed;
+        // which node below it is, its own local view says.
+        assert!(
+            transcript.contains(
+                "\
+  children:
+  └─ ╭─ branch ── not established ─╮
+     │ the branch claim            │
+     ├─────────────────────────────┤
+     │ 1 node below it is blamed   │
+     ╰─────────────────────────────╯
+"
+            ),
+            "{transcript}"
+        );
+    }
+
+    #[test]
+    fn colour_repeats_a_child_status_and_never_carries_it_alone() {
+        // Arrange
+        let dir = scenario_project();
+        let request = Request {
+            approver: "alice".to_owned(),
+            key_id: None,
+            action: Action::Interactive,
+        };
+        let mut input = Cursor::new(b"a\ns\ns\n".to_vec());
+        let mut now = || -> Timestamp {
+            "2026-11-01T00:00:00Z"
+                .parse()
+                .expect("the fixed instant parses")
+        };
+        let session = Session {
+            input: &mut input,
+            input_is_tty: true,
+            now: &mut now,
+            screen: Screen {
+                color: true,
+                width: 60,
+            },
+        };
+        let mut out = Vec::new();
+
+        // Act
+        run(
+            dir.path(),
+            &request,
+            session,
+            &mut out,
+            &mut Vec::new(),
+            false,
+        )
+        .expect("writing to vecs succeeds");
+        let coloured = String::from_utf8(out).expect("UTF-8");
+
+        // Assert: green for established, red for blamed, the word in both.
+        assert!(
+            coloured.contains("\u{1b}[32mestablished\u{1b}[0m"),
+            "{coloured:?}"
+        );
+        assert!(
+            coloured.contains("\u{1b}[31mblamed\u{1b}[0m"),
+            "{coloured:?}"
+        );
     }
 
     #[test]

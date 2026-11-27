@@ -155,6 +155,7 @@ overlap, a child is below its parent), never pixels.
 | Control and bidirectional characters neutralized | `text/neutralize.ts` | `neutralize.test.ts` |
 | Queue as `inka review --list`; walk in queue order | `review/ReviewSurface.tsx` | `ReviewSurface.test.tsx` |
 | Status and review state spelled out, never colour alone | `model/wording.ts` | `LocalView.test.tsx` |
+| A child says where it stands, and why when it is blamed | `components/LocalView.tsx` | `LocalView.test.tsx` |
 | Decisions only on a recording server, under a whole local view | `review/ReviewSurface.tsx` | `Decisions.test.tsx` |
 | A decision names the hash on screen; identity is the server's | `model/session.ts` | `session.test.ts`, `serve.rs` |
 | A decline needs a reason; one decision is one append | `review/DecisionBar.tsx` | `recording.spec.ts` |
