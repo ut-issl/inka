@@ -436,11 +436,19 @@ a.reference:hover {
   margin-bottom: 0;
 }
 
+/* A long line wraps: nothing in a description sits behind a scrollbar. */
 .md pre {
   padding: 8px;
   background: var(--surface-soft);
   border-radius: 6px;
-  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.md-title {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 0.9em;
 }
 
 .md-destination {

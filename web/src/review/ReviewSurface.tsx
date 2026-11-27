@@ -10,6 +10,7 @@
  * directly. Declined and blocked targets are listed with what resolves them.
  */
 
+import { useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router'
 
 import { LocalView } from '../components/LocalView'
@@ -30,10 +31,18 @@ export function ReviewSurface({ snapshot, nodes }: Props) {
   const currentId = params.id ?? walk[0]
   const current = currentId === undefined ? undefined : nodes.get(currentId)
 
+  // A new target is read from its top: the pane does not keep the place the
+  // previous one was scrolled to.
+  const main = useRef<HTMLElement>(null)
+  const shownTarget = current?.id
+  useEffect(() => {
+    if (main.current) main.current.scrollTop = 0
+  }, [shownTarget])
+
   return (
     <div className="review">
       <Queue snapshot={snapshot} nodes={nodes} currentId={current?.id} />
-      <section className="review__main" aria-label="Review target">
+      <section ref={main} className="review__main" aria-label="Review target">
         {current ? (
           <>
             <Progress walk={walk} currentId={current.id} />

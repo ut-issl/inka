@@ -45,10 +45,46 @@ describe('Markdown', () => {
     expect(screen.getByText('https://example.com/std')).toBeInTheDocument()
   })
 
-  test('never makes a link out of a script destination', () => {
+  test('never makes a link out of a script destination, and still shows where it pointed', () => {
     const { container } = render(<Markdown text={'[click](javascript:alert(1))'} />)
 
-    expect(container.querySelector('a[href^="javascript"]')).toBeNull()
+    expect(container.querySelector('a')).toBeNull()
+    expect(screen.getByText('click')).toBeInTheDocument()
+    expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument()
+  })
+
+  test('shows a destination that is not followed, such as a local file, as text', () => {
+    const { container } = render(<Markdown text={'[report](file:///tmp/report.pdf)'} />)
+
+    expect(container.querySelector('a')).toBeNull()
+    expect(screen.getByText('file:///tmp/report.pdf')).toBeInTheDocument()
+  })
+
+  test('shows the destination of an image that is not followed, too', () => {
+    render(<Markdown text={'![scan](file:///tmp/scan.png)'} />)
+
+    expect(screen.getByText('file:///tmp/scan.png')).toBeInTheDocument()
+  })
+
+  test('shows the title of a link and of an image as visible text', () => {
+    const { container } = render(
+      <Markdown
+        text={'[report](https://example.com/report "draft, not approved") ![plot](https://example.com/p.png "run 3")'}
+      />,
+    )
+
+    expect(screen.getByText('“draft, not approved”')).toBeInTheDocument()
+    expect(screen.getByText('“run 3”')).toBeInTheDocument()
+    expect(container.querySelector('[title]')).toBeNull()
+  })
+
+  test('neutralizes controls written as character references, which parsing turns into the characters', () => {
+    const { container } = render(<Markdown text={'abc&#x202e;def&#x202c; [x&#x202e;y](https://example.com "t&#x202e;u")'} />)
+
+    expect(container.textContent).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/)
+    expect(container.textContent).toContain('abcdef')
+    expect(screen.getByRole('link')).toHaveTextContent('xy')
+    expect(screen.getByText('“tu”')).toBeInTheDocument()
   })
 
   test('neutralizes control and bidirectional characters before rendering', () => {

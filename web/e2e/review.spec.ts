@@ -25,7 +25,9 @@ test('the whole local view is on screen without any interaction', async ({ page 
   await expect(contract.getByRole('listitem')).toHaveCount(3)
   const clipped = await contract.evaluate((element) =>
     [element, ...element.querySelectorAll('*')].some(
-      (part) => part.scrollHeight > part.clientHeight + 1 && getComputedStyle(part).overflowY !== 'visible',
+      (part) =>
+        (part.scrollHeight > part.clientHeight + 1 && getComputedStyle(part).overflowY !== 'visible') ||
+        (part.scrollWidth > part.clientWidth + 1 && getComputedStyle(part).overflowX !== 'visible'),
     ),
   )
   expect(clipped).toBe(false)
@@ -67,4 +69,17 @@ test('nothing on the review surface can change the argument', async ({ page }) =
 
   expect(writes).toEqual([])
   await expect(page.getByRole('button', { name: /approve|decline/i })).toHaveCount(0)
+})
+
+test('a newly opened target is read from its top, wherever the last one was scrolled to', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 420 })
+  await page.goto('/#/review/aocs_ok')
+  const pane = page.getByRole('region', { name: 'Review target' })
+  await pane.evaluate((element) => element.scrollTo({ top: element.scrollHeight }))
+  expect(await pane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+
+  await page.getByRole('navigation', { name: 'Review queue' }).getByRole('link', { name: /safe_mode_ok/ }).click()
+
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('structure:safe_mode_ok')
+  expect(await pane.evaluate((element) => element.scrollTop)).toBe(0)
 })
